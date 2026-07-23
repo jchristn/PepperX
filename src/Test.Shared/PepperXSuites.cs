@@ -31,7 +31,10 @@ namespace Test.Shared
                     DatabaseExtentSuite.Build(),
                     DatabaseLeaseSuite.Build(),
                     DatabaseEnumerationSuite.Build(),
-                    DatabaseRequestHistorySuite.Build()
+                    DatabaseRequestHistorySuite.Build(),
+                    ObjectLifecycleSuite.Build(),
+                    MultiNodeSemanticsSuite.Build(),
+                    RehydrationSuite.Build()
                 };
             }
         }

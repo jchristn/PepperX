@@ -8,6 +8,8 @@ namespace PepperX.Core.Database.Postgresql.Implementations
     using Npgsql;
     using PepperX.Core.Database.Interfaces;
     using PepperX.Core.Enumeration;
+    using PepperX.Core.Enums;
+    using PepperX.Core.Exceptions;
     using PepperX.Core.Models;
     using PepperX.Core.Responses;
 
@@ -55,7 +57,15 @@ namespace PepperX.Core.Database.Postgresql.Implementations
                 cmd.Parameters.AddWithValue("tb", container.TotalBytes);
                 cmd.Parameters.AddWithValue("cu", Converters.AsUtc(container.CreatedUtc));
                 cmd.Parameters.AddWithValue("lu", Converters.AsUtc(container.LastUpdateUtc));
-                await cmd.ExecuteNonQueryAsync(token).ConfigureAwait(false);
+
+                try
+                {
+                    await cmd.ExecuteNonQueryAsync(token).ConfigureAwait(false);
+                }
+                catch (PostgresException ex) when (ex.SqlState == "23505")
+                {
+                    throw new PepperXException(ApiErrorEnum.Conflict, 409, "Container '" + container.Name + "' already exists.", ex);
+                }
             }
 
             return container;

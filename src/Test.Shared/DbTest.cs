@@ -40,6 +40,40 @@ namespace Test.Shared
         }
 
         /// <summary>
+        /// Build a service-stack test case over the shared database and a fresh storage root, or a skipped
+        /// case when the database is unavailable.
+        /// </summary>
+        /// <param name="suiteId">Suite identifier.</param>
+        /// <param name="caseId">Case identifier.</param>
+        /// <param name="displayName">Display name.</param>
+        /// <param name="body">Case body receiving a wired service stack and a token.</param>
+        /// <param name="mode">Delete coordination mode.</param>
+        /// <returns>A descriptor.</returns>
+        public static TestCaseDescriptor StackCase(string suiteId, string caseId, string displayName, Func<ServiceStack, CancellationToken, Task> body, DeleteCoordinationModeEnum mode = DeleteCoordinationModeEnum.Cluster)
+        {
+            if (!PostgresTestFixture.IsAvailable())
+            {
+                return new TestCaseDescriptor(suiteId, caseId, displayName, _ => Task.CompletedTask,
+                    skip: true, skipReason: "PostgreSQL test database unavailable");
+            }
+
+            return new TestCaseDescriptor(suiteId, caseId, displayName, async ct =>
+            {
+                IMetadataDatabaseDriver driver = await PostgresTestFixture.GetSharedAsync(ct).ConfigureAwait(false);
+                string root = StorageTestHelper.NewRoot();
+                try
+                {
+                    ServiceStack stack = await ServiceStack.CreateAsync(driver, root, mode, null, ct).ConfigureAwait(false);
+                    await body(stack, ct).ConfigureAwait(false);
+                }
+                finally
+                {
+                    StorageTestHelper.Cleanup(root);
+                }
+            });
+        }
+
+        /// <summary>
         /// Generate a unique, valid container name.
         /// </summary>
         /// <returns>Container name.</returns>
