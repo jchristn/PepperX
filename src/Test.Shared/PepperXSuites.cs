@@ -37,7 +37,8 @@ namespace Test.Shared
                     RehydrationSuite.Build(),
                     RestApiSuite.Build(),
                     S3ProtocolSuite.Build(),
-                    RespInteropSuite.Build()
+                    RespInteropSuite.Build(),
+                    WebsocketProtocolSuite.Build()
                 };
             }
         }

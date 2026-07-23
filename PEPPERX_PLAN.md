@@ -780,11 +780,11 @@ Reference: `C:\Code\RedisRespServer\src\Redish.Server` (command handling shape),
 
 Reference: WatsonWebsocket Test.Server; envelope spec §11.5.
 
-- [ ] **P08-01** `WebsocketProtocolHandler`: `WatsonWsServer` on `WebsocketSettings`; client connect/disconnect logging; keepalive; max-message enforcement with a clean 400-style envelope error instead of connection drop where possible.
-- [ ] **P08-02** Envelope models (`WsRequestEnvelope`, `WsResponseEnvelope`, `WsErrorBody`, `WsOperationEnum`) — typed `Body` deserialization per operation (deserialize envelope, then bind `Body` to the operation's request type via the serializer; this two-step is the sanctioned pattern, still no hand-rolled JsonElement walking).
-- [ ] **P08-03** `WebsocketDispatcher`: operation → Core service mapping for every §11.5 operation; per-message `Task.Run` handling (concurrent requests per connection); correlation by `RequestId`; exception → enveloped `ApiErrorEnum` mapping (reuse P05-02 mapper).
-- [ ] **P08-04** Touchstone `WebsocketProtocolSuite` (using `ClientWebSocket`): every operation happy-path; error envelopes (unknown op, malformed JSON, missing RequestId, oversized message); 16 interleaved concurrent requests on one connection correlate correctly; 10MB base64 payload roundtrip byte-identical; server restart mid-connection → client sees close.
-- [ ] **P08-05** Cross-protocol descriptor: WS-written object readable via REST/S3 with metadata intact.
+- [x] **P08-01** `WebsocketProtocolHandler`: `WatsonWsServer` on `WebsocketSettings`; client connect/disconnect logging; keepalive; max-message enforcement with a clean 400-style envelope error instead of connection drop where possible.
+- [x] **P08-02** Envelope models (`WsRequestEnvelope`, `WsResponseEnvelope`, `WsErrorBody`, `WsOperationEnum`) — typed `Body` deserialization per operation (deserialize envelope, then bind `Body` to the operation's request type via the serializer; this two-step is the sanctioned pattern, still no hand-rolled JsonElement walking).
+- [x] **P08-03** `WebsocketDispatcher`: operation → Core service mapping for every §11.5 operation; per-message `Task.Run` handling (concurrent requests per connection); correlation by `RequestId`; exception → enveloped `ApiErrorEnum` mapping (reuse P05-02 mapper).
+- [x] **P08-04** Touchstone `WebsocketProtocolSuite` (using `ClientWebSocket`): every operation happy-path; error envelopes (unknown op, malformed JSON, missing RequestId, oversized message); 16 interleaved concurrent requests on one connection correlate correctly; 10MB base64 payload roundtrip byte-identical; server restart mid-connection → client sees close.
+- [x] **P08-05** Cross-protocol descriptor: WS-written object readable via REST/S3 with metadata intact.
 
 **Conformance gates**: zero-warning build; WS suites green; WEBSOCKETS_API.md envelope + operation reference drafted.
 

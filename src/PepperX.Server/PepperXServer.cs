@@ -12,6 +12,7 @@ namespace PepperX.Server
     using PepperX.Server.Api.Resp;
     using PepperX.Server.Api.Rest;
     using PepperX.Server.Api.S3;
+    using PepperX.Server.Api.Websockets;
     using PepperX.Server.Serialization;
     using PepperX.Server.Services;
     using SyslogLogging;
@@ -43,6 +44,7 @@ namespace PepperX.Server
         private Webserver? _RestServer;
         private S3ProtocolHandler? _S3Handler;
         private RespProtocolHandler? _RespHandler;
+        private WebsocketProtocolHandler? _WsHandler;
 
         #endregion
 
@@ -110,6 +112,13 @@ namespace PepperX.Server
                 _Logging.Info(_Header + "RESP listener started on port " + _Settings.Resp.Port);
             }
 
+            if (_Settings.Websocket.Enabled)
+            {
+                _WsHandler = new WebsocketProtocolHandler(containers, writes, reads, deletes, search, statistics, _Settings.Websocket, _Logging);
+                _WsHandler.Start();
+                _Logging.Info(_Header + "WebSocket listener started on port " + _Settings.Websocket.Port);
+            }
+
             _Logging.Info(_Header + Constants.ProductName + " v" + Constants.ProductVersion + " started (node " + _NodeId + ")");
         }
 
@@ -147,6 +156,7 @@ namespace PepperX.Server
 
             _S3Handler?.Stop();
             _RespHandler?.Stop();
+            _WsHandler?.Stop();
 
             _Janitor?.Dispose();
             _Heartbeat?.Dispose();

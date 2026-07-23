@@ -30,6 +30,9 @@ namespace Test.Shared
         /// <summary>RESP port when RESP is enabled; otherwise zero.</summary>
         public int RespPort { get; }
 
+        /// <summary>WebSocket port when WebSockets are enabled; otherwise zero.</summary>
+        public int WsPort { get; }
+
         #endregion
 
         #region Private-Members
@@ -43,13 +46,14 @@ namespace Test.Shared
 
         #region Constructors-and-Factories
 
-        private RestTestServer(PepperXServer server, HttpClient client, string baseUrl, string? s3ServiceUrl, int respPort, string databaseName, string storageRoot, LoggingModule logging)
+        private RestTestServer(PepperXServer server, HttpClient client, string baseUrl, string? s3ServiceUrl, int respPort, int wsPort, string databaseName, string storageRoot, LoggingModule logging)
         {
             _Server = server;
             Client = client;
             BaseUrl = baseUrl;
             S3ServiceUrl = s3ServiceUrl;
             RespPort = respPort;
+            WsPort = wsPort;
             _DatabaseName = databaseName;
             _StorageRoot = storageRoot;
             _Logging = logging;
@@ -66,7 +70,7 @@ namespace Test.Shared
         /// <returns>A running server handle.</returns>
         public static async Task<RestTestServer> StartAsync(CancellationToken token = default)
         {
-            return await StartAsync(false, false, token).ConfigureAwait(false);
+            return await StartAsync(false, false, false, token).ConfigureAwait(false);
         }
 
         /// <summary>
@@ -78,11 +82,25 @@ namespace Test.Shared
         /// <returns>A running server handle.</returns>
         public static async Task<RestTestServer> StartAsync(bool enableS3, bool enableResp, CancellationToken token = default)
         {
+            return await StartAsync(enableS3, enableResp, false, token).ConfigureAwait(false);
+        }
+
+        /// <summary>
+        /// Start a fresh in-process server, optionally enabling the S3, RESP, and WebSocket listeners.
+        /// </summary>
+        /// <param name="enableS3">Whether to enable the S3 listener.</param>
+        /// <param name="enableResp">Whether to enable the RESP listener.</param>
+        /// <param name="enableWs">Whether to enable the WebSocket listener.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>A running server handle.</returns>
+        public static async Task<RestTestServer> StartAsync(bool enableS3, bool enableResp, bool enableWs, CancellationToken token = default)
+        {
             string dbName = await PostgresTestFixture.CreateDatabaseAsync(token).ConfigureAwait(false);
             string root = StorageTestHelper.NewRoot();
             int port = FreePort();
             int s3Port = enableS3 ? FreePort() : 0;
             int respPort = enableResp ? FreePort() : 0;
+            int wsPort = enableWs ? FreePort() : 0;
 
             PepperXSettings settings = new PepperXSettings();
             settings.Database = TestEnvironment.SettingsFor(dbName);
@@ -94,7 +112,9 @@ namespace Test.Shared
             if (enableS3) settings.S3.Port = s3Port;
             settings.Resp.Enabled = enableResp;
             if (enableResp) settings.Resp.Port = respPort;
-            settings.Websocket.Enabled = false;
+            settings.Websocket.Enabled = enableWs;
+            settings.Websocket.Hostname = "localhost";
+            if (enableWs) settings.Websocket.Port = wsPort;
             settings.Mcp.Enabled = false;
             settings.Cluster.HeartbeatIntervalSeconds = 60;
             settings.Cluster.JanitorIntervalSeconds = 3600;
@@ -108,7 +128,7 @@ namespace Test.Shared
             HttpClient client = new HttpClient { BaseAddress = new Uri(baseUrl), Timeout = TimeSpan.FromSeconds(30) };
             string? s3Url = enableS3 ? "http://localhost:" + s3Port : null;
 
-            return new RestTestServer(server, client, baseUrl, s3Url, respPort, dbName, root, logging);
+            return new RestTestServer(server, client, baseUrl, s3Url, respPort, wsPort, dbName, root, logging);
         }
 
         /// <summary>
