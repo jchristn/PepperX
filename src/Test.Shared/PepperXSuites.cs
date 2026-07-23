@@ -23,7 +23,9 @@ namespace Test.Shared
                     ModelValidationSuite.Build(),
                     EnumerationQuerySuite.Build(),
                     SerializationSuite.Build(),
-                    SettingsSuite.Build()
+                    SettingsSuite.Build(),
+                    ExtentFormatSuite.Build(),
+                    DiskStorageDriverSuite.Build()
                 };
             }
         }
