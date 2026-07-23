@@ -1,0 +1,58 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pepperx"
+version = "1.0.0"
+description = "Client SDK for PepperX, a high-performance key-value store with rich metadata."
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+authors = [{ name = "Joel Christner" }]
+keywords = ["pepperx", "key-value", "storage", "sdk", "client"]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Intended Audience :: Developers",
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3",
+  "Topic :: Database",
+]
+dependencies = [
+  "httpx>=0.24",
+  "websockets>=11.0",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=7.4",
+  "pytest-asyncio>=0.21",
+  "ruff>=0.1",
+  "mypy>=1.5",
+]
+
+[project.urls]
+Homepage = "https://github.com/jchristn/pepperx"
+Repository = "https://github.com/jchristn/pepperx"
+
+[tool.setuptools.packages.find]
+include = ["pepperx*"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py39"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B"]
+
+[tool.mypy]
+python_version = "3.9"
+warn_unused_ignores = true
+disallow_untyped_defs = true
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+markers = [
+  "live: tests that require a running PepperX node",
+]

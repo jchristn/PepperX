@@ -145,8 +145,26 @@ namespace PepperX.Server.Api.Rest
                 Dictionary<string, string>? tags = RouteHelpers.ParseTagsHeader(request);
                 object? metadataObject = RouteHelpers.ParseObjectHeader(request);
 
-                Stream payload = request.Http.Request.Data ?? Stream.Null;
-                ObjectWriteResponse response = await _Writes.WriteAsync(container, key, payload, contentType, labels, tags, metadataObject, noOverwrite, request.CancellationToken).ConfigureAwait(false);
+                // A request that declares a length streams straight through without buffering. A chunked
+                // upload (a client streaming a body of unknown length) is decoded by the web server instead:
+                // its framing and the connection's read position are owned by the server's parser, and
+                // consuming the socket directly leaves the connection unusable for the next request.
+                // Chunked uploads are therefore materialized, and are bounded by the same size limits.
+                ObjectWriteResponse response;
+                if (request.Http.Request.ChunkedTransfer)
+                {
+                    byte[] decoded = request.Http.Request.DataAsBytes ?? Array.Empty<byte>();
+                    using (MemoryStream buffered = new MemoryStream(decoded, false))
+                    {
+                        response = await _Writes.WriteAsync(container, key, buffered, contentType, labels, tags, metadataObject, noOverwrite, request.CancellationToken).ConfigureAwait(false);
+                    }
+                }
+                else
+                {
+                    Stream payload = request.Http.Request.Data ?? Stream.Null;
+                    response = await _Writes.WriteAsync(container, key, payload, contentType, labels, tags, metadataObject, noOverwrite, request.CancellationToken).ConfigureAwait(false);
+                }
+
                 request.Http.Response.StatusCode = 201;
                 return response;
             });
