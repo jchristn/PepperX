@@ -27,6 +27,11 @@ namespace PepperX.Sdk.ConsoleApp
             string wsUrl = Environment.GetEnvironmentVariable("PEPPERX_WS_URL") ?? "ws://127.0.0.1:8002/";
             string container = "sdkdemo" + Guid.NewGuid().ToString("N").Substring(0, 12);
 
+            if (args.Length > 0 && String.Equals(args[0], "crosscheck", StringComparison.OrdinalIgnoreCase))
+            {
+                return await CrossCheck.RunAsync(restUrl).ConfigureAwait(false);
+            }
+
             Console.WriteLine("PepperX C# SDK walkthrough");
             Console.WriteLine("  REST      : " + restUrl);
             Console.WriteLine("  WebSockets: " + wsUrl);

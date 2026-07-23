@@ -843,10 +843,10 @@ Reference: `REPOSITORY_REQUIREMENTS.md` §7 (sdk/{language} + test harness + REA
 - [x] **P12-02** `sdk/csharp` Test.Automated (Touchstone) + `Sdk.ConsoleApp` exercising every client method against a live local node (env `PEPPERX_URL` default `http://localhost:8000`); README.md with install/usage/samples for both clients.
 - [x] **P12-03** `sdk/python`: `pepperx` package (httpx sync + async `PepperXRestClient`; `websockets`-based `PepperXWebsocketClient`; dataclass/typed models with full type hints mirroring the wire contracts; streaming upload/download; exceptions mirroring ApiErrorEnum). pyproject.toml, ruff/mypy clean.
 - [x] **P12-04** `sdk/python` tests (pytest against live node, marker-gated) + `examples/console.py` exerciser + README.md.
-- [ ] **P12-05** `sdk/js`: `@pepperx/sdk` TypeScript package (fetch-based `PepperXRestClient`, `ws`/browser-WebSocket `PepperXWebsocketClient`, full `.d.ts` typed models, stream support via Web Streams, ESM+CJS build via tsup or plain tsc dual build). No axios.
-- [ ] **P12-06** `sdk/js` tests (vitest against live node, env-gated) + `examples/console.mjs` exerciser + README.md.
-- [ ] **P12-07** Cross-SDK contract check: one script per SDK writes a canonical object (labels/tags/object/binary payload) and each other SDK reads + asserts it (rotation matrix recorded in annotation).
-- [ ] **P12-08** `sdk/README.md` index describing the three SDKs + pointing S3/RESP users at standard AWS/Redis clients (D6).
+- [x] **P12-05** `sdk/js`: `@pepperx/sdk` TypeScript package (fetch-based `PepperXRestClient`, `ws`/browser-WebSocket `PepperXWebsocketClient`, full `.d.ts` typed models, stream support via Web Streams, ESM+CJS build via tsup or plain tsc dual build). No axios.
+- [x] **P12-05** `sdk/js` tests (vitest against live node, env-gated) + `examples/console.mjs` exerciser + README.md.
+- [x] **P12-05** Cross-SDK contract check: one script per SDK writes a canonical object (labels/tags/object/binary payload) and each other SDK reads + asserts it (rotation matrix recorded in annotation).
+- [x] **P12-05** `sdk/README.md` index describing the three SDKs + pointing S3/RESP users at standard AWS/Redis clients (D6).
 
 **Conformance gates**: all three SDK test harnesses green against a locally running node; consoles run clean; each SDK README accurate; C# SDK zero-warning build.
 

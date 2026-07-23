@@ -1,0 +1,47 @@
+{
+  "name": "@pepperx/sdk",
+  "version": "1.0.0",
+  "description": "Client SDK for PepperX, a high-performance key-value store with rich metadata.",
+  "license": "MIT",
+  "author": "Joel Christner",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "keywords": [
+    "pepperx",
+    "key-value",
+    "storage",
+    "sdk",
+    "client"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "lint": "tsc -p tsconfig.json --noEmit",
+    "example": "node --experimental-strip-types examples/console.ts"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/ws": "^8.5.12",
+    "typescript": "^5.6.0",
+    "vitest": "^2.1.0",
+    "ws": "^8.18.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jchristn/pepperx"
+  }
+}
