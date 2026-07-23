@@ -50,7 +50,12 @@ namespace Test.Shared
                 Port = Port,
                 DatabaseName = databaseName,
                 Username = User,
-                Password = Password
+                Password = Password,
+
+                // Several drivers (the shared suite driver, the in-process server, and per-test isolated
+                // databases) run concurrently against one test instance; keep each pool small so the tests
+                // stay well inside the server's connection limit.
+                MaxPoolSize = 15
             };
         }
 

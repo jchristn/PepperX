@@ -14,7 +14,7 @@ namespace Test.Shared.Suites
     /// </summary>
     public static class McpProtocolSuite
     {
-        private static RestTestServer? _Server;
+        private static readonly SemaphoreSlim _McpGate = new SemaphoreSlim(1, 1);
         private static HttpClient? _Http;
         private static string? _SessionId;
 
@@ -83,27 +83,59 @@ namespace Test.Shared.Suites
                         string payload = Convert.ToBase64String(Encoding.UTF8.GetBytes("mcp-cross"));
                         await CallToolAsync("pepperx_object_write", "{\"Container\":\"" + container + "\",\"Key\":\"shared\",\"DataBase64\":\"" + payload + "\"}", ct);
 
-                        HttpResponseMessage read = await _Server!.Client.GetAsync("/v1.0/containers/" + container + "/object?key=shared", ct);
+                        HttpResponseMessage read = await (await SharedServer.GetAsync(ct)).Client.GetAsync("/v1.0/containers/" + container + "/object?key=shared", ct);
                         Check.Equal("mcp-cross", await read.Content.ReadAsStringAsync(ct), "MCP value read via REST");
                     })
-                },
-                beforeSuiteAsync: async ct =>
-                {
-                    _Server = await RestTestServer.StartAsync(false, false, false, true, ct).ConfigureAwait(false);
-                    _Http = new HttpClient { BaseAddress = new Uri("http://localhost:" + _Server.McpHttpPort), Timeout = TimeSpan.FromSeconds(30) };
-                    await InitializeAsync(ct).ConfigureAwait(false);
-                },
-                afterSuiteAsync: async ct =>
-                {
-                    _Http?.Dispose();
-                    _Http = null;
-                    _SessionId = null;
-                    if (_Server != null)
-                    {
-                        await _Server.DisposeAsync().ConfigureAwait(false);
-                        _Server = null;
-                    }
                 });
+        }
+
+        /// <summary>
+        /// Write an object through the MCP tool surface (used by the protocol parity suite).
+        /// </summary>
+        /// <param name="container">Container name.</param>
+        /// <param name="key">Object key.</param>
+        /// <param name="payload">Payload text.</param>
+        /// <param name="ct">Cancellation token.</param>
+        /// <returns>The raw tool-call response.</returns>
+        public static Task<string> WriteObjectAsync(string container, string key, string payload, CancellationToken ct)
+        {
+            string base64 = Convert.ToBase64String(Encoding.UTF8.GetBytes(payload));
+            return CallToolAsync("pepperx_object_write", "{\"Container\":\"" + container + "\",\"Key\":\"" + key + "\",\"ContentType\":\"text/plain\",\"DataBase64\":\"" + base64 + "\"}", ct);
+        }
+
+        /// <summary>
+        /// Read an object through the MCP tool surface (used by the protocol parity suite).
+        /// </summary>
+        /// <param name="container">Container name.</param>
+        /// <param name="key">Object key.</param>
+        /// <param name="ct">Cancellation token.</param>
+        /// <returns>The raw tool-call response.</returns>
+        public static Task<string> ReadObjectAsync(string container, string key, CancellationToken ct)
+        {
+            return CallToolAsync("pepperx_object_read", "{\"Container\":\"" + container + "\",\"Key\":\"" + key + "\"}", ct);
+        }
+
+        private static async Task<HttpClient> HttpAsync(CancellationToken ct)
+        {
+            if (_Http != null) return _Http;
+
+            await _McpGate.WaitAsync(ct).ConfigureAwait(false);
+            try
+            {
+                if (_Http == null)
+                {
+                    RestTestServer server = await SharedServer.GetAsync(ct).ConfigureAwait(false);
+                    HttpClient client = new HttpClient { BaseAddress = new Uri("http://localhost:" + server.McpHttpPort), Timeout = TimeSpan.FromSeconds(30) };
+                    _Http = client;
+                    await InitializeAsync(ct).ConfigureAwait(false);
+                }
+            }
+            finally
+            {
+                _McpGate.Release();
+            }
+
+            return _Http;
         }
 
         private static async Task InitializeAsync(CancellationToken ct)
@@ -122,9 +154,10 @@ namespace Test.Shared.Suites
 
         private static async Task<string> RpcAsync(string method, string paramsJson, CancellationToken ct)
         {
+            HttpClient http = await HttpAsync(ct).ConfigureAwait(false);
             string payload = "{\"jsonrpc\":\"2.0\",\"id\":" + Random.Shared.Next(2, 100000) + ",\"method\":\"" + method + "\",\"params\":" + paramsJson + "}";
             using (HttpRequestMessage request = NewRequest(payload))
-            using (HttpResponseMessage response = await _Http!.SendAsync(request, ct).ConfigureAwait(false))
+            using (HttpResponseMessage response = await http.SendAsync(request, ct).ConfigureAwait(false))
             {
                 return await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
             }

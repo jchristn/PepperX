@@ -34,6 +34,27 @@ that sits in front of it.
 | `docker/` | Compose files, Dockerfiles, and the resettable factory environment |
 | `memory/` | Durable project orientation notes ([overview](memory/pepperx-overview.md)) |
 
+## Testing
+
+Tests need a PostgreSQL instance. Start the dockerized one first:
+
+```bash
+docker compose -f docker/compose.test.yaml up -d --wait
+```
+
+Then run any of the four runners — they all execute the same Touchstone descriptors:
+
+```bash
+dotnet run --project src/Test.Automated                      # console runner
+dotnet run --project src/Test.Automated -- --results out.json # + JSON export
+dotnet test src/Test.Xunit                                    # xUnit (fact + per-descriptor theories)
+dotnet test src/Test.Nunit                                    # NUnit (fact + per-descriptor cases)
+```
+
+Suites that need a database are skipped (not failed) when PostgreSQL is unreachable. Connection details
+can be overridden with `PEPPERX_TEST_DB_HOST`, `PEPPERX_TEST_DB_PORT`, `PEPPERX_TEST_DB_USER`,
+`PEPPERX_TEST_DB_PASSWORD`, and `PEPPERX_TEST_DB_NAME`.
+
 ## Documentation
 
 - [`PEPPERX_PLAN.md`](PEPPERX_PLAN.md) — the authoritative implementation plan

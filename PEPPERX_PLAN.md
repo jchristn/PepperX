@@ -807,13 +807,13 @@ Reference: `LiteGraphMcpServer.cs`, Tablix `McpToolRegistrar.cs`, `C:\Code\Volta
 
 Reference: `BACKEND_TEST_ARCHITECTURE.md` (project shapes verbatim), Conductor/Tempo Test.Shared organization.
 
-- [ ] **P10-01** `Test.Shared`: consolidate all suites from P01–P09 under `Suites/` with a single `PepperXSuites.All` registry (Tempo pattern). Verify: references only `Touchstone.Core` + `PepperX.Core`/`PepperX.Server`; **zero console output**; every case self-contained (creates + cleans its data; unique names via IdGenerator); skip-with-reason for anything environment-gated.
-- [ ] **P10-02** `Test.Automated`: `Touchstone.Cli` `ConsoleRunner.RunAsync(PepperXSuites.All, resultsPath)` with `--results` arg parsing exactly per BACKEND_TEST_ARCHITECTURE; exit codes 0/1.
-- [ ] **P10-03** `Test.Xunit`: `TouchstoneFactBase` RunAll fact + `TheoryData` per-descriptor theory class (both patterns, verbatim shapes from the reference doc).
-- [ ] **P10-04** `Test.Nunit`: `TouchstoneNunitBase` fact-style + `TouchstoneTestCaseSource` data-driven (both patterns).
-- [ ] **P10-05** Coverage audit vs. this plan — every REST route, every S3 operation in the mapping table, every RESP command, every WS operation, every MCP tool, every service semantic (§10), every enumeration filter has at least one descriptor; add `ProtocolParitySuite`: one canonical object written through each of the five protocols, read back through all five, metadata/payload identical everywhere.
-- [ ] **P10-06** Negative/robustness sweep: cancellation honored mid-write and mid-read (no orphan Active rows without files; janitor cleans temp); DB connection loss mid-operation surfaces clean 500s and recovers; storage root read-only → clean errors.
-- [ ] **P10-07** README testing section: docker prerequisite, `docker compose -f docker/compose.test.yaml up -d`, run commands for all four runners, JSON export, env vars.
+- [x] **P10-01** `Test.Shared`: consolidate all suites from P01–P09 under `Suites/` with a single `PepperXSuites.All` registry (Tempo pattern). Verify: references only `Touchstone.Core` + `PepperX.Core`/`PepperX.Server`; **zero console output**; every case self-contained (creates + cleans its data; unique names via IdGenerator); skip-with-reason for anything environment-gated.
+- [x] **P10-02** `Test.Automated`: `Touchstone.Cli` `ConsoleRunner.RunAsync(PepperXSuites.All, resultsPath)` with `--results` arg parsing exactly per BACKEND_TEST_ARCHITECTURE; exit codes 0/1.
+- [x] **P10-03** `Test.Xunit`: `TouchstoneFactBase` RunAll fact + `TheoryData` per-descriptor theory class (both patterns, verbatim shapes from the reference doc).
+- [x] **P10-04** `Test.Nunit`: `TouchstoneNunitBase` fact-style + `TouchstoneTestCaseSource` data-driven (both patterns).
+- [x] **P10-05** Coverage audit vs. this plan — every REST route, every S3 operation in the mapping table, every RESP command, every WS operation, every MCP tool, every service semantic (§10), every enumeration filter has at least one descriptor; add `ProtocolParitySuite`: one canonical object written through each of the five protocols, read back through all five, metadata/payload identical everywhere.
+- [x] **P10-06** Negative/robustness sweep: cancellation honored mid-write and mid-read (no orphan Active rows without files; janitor cleans temp); DB connection loss mid-operation surfaces clean 500s and recovers; storage root read-only → clean errors.
+- [x] **P10-07** README testing section: docker prerequisite, `docker compose -f docker/compose.test.yaml up -d`, run commands for all four runners, JSON export, env vars.
 
 **Conformance gates**: `dotnet run --project src/Test.Automated` fully green; `dotnet test src/Test.Xunit` and `src/Test.Nunit` green on net8.0 **and** net10.0; suite count and category summary recorded in the phase annotation.
 

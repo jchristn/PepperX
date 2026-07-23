@@ -105,8 +105,10 @@ namespace Test.Shared.Suites
 
                         RequestHistoryEntry old = new RequestHistoryEntry { Method = "GET", Path = marker + "old", Url = "u", StatusCode = 200, DurationMs = 1, CreatedUtc = DateTime.UtcNow.AddDays(-40) };
                         await driver.RequestHistory.CreateAsync(old, ct);
-                        int pruned = await driver.RequestHistory.PruneAsync(DateTime.UtcNow.AddDays(-30), ct);
-                        Check.True(pruned >= 1, "prune removed old entry");
+                        await driver.RequestHistory.PruneAsync(DateTime.UtcNow.AddDays(-30), ct);
+                        // Pruning is global, so a concurrent run may have removed this row first; assert the
+                        // row is gone rather than asserting on this call's delete count.
+                        Check.True(await driver.RequestHistory.ReadAsync(old.Id, ct) == null, "old entry pruned");
                     })
                 });
         }

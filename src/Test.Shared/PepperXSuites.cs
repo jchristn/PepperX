@@ -39,7 +39,9 @@ namespace Test.Shared
                     S3ProtocolSuite.Build(),
                     RespInteropSuite.Build(),
                     WebsocketProtocolSuite.Build(),
-                    McpProtocolSuite.Build()
+                    McpProtocolSuite.Build(),
+                    ProtocolParitySuite.Build(),
+                    RobustnessSuite.Build()
                 };
             }
         }

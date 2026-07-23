@@ -15,7 +15,6 @@ namespace Test.Shared.Suites
     /// </summary>
     public static class WebsocketProtocolSuite
     {
-        private static RestTestServer? _Server;
         private static readonly PepperXSerializer _Serializer = new PepperXSerializer();
 
         /// <summary>
@@ -109,28 +108,17 @@ namespace Test.Shared.Suites
                             await SendReceiveAsync(ws, new { RequestId = "w", Operation = "ObjectWrite", Container = container, Key = "shared", Body = new { DataBase64 = payload } }, ct);
                         }
 
-                        System.Net.Http.HttpResponseMessage read = await _Server!.Client.GetAsync("/v1.0/containers/" + container + "/object?key=shared", ct);
+                        System.Net.Http.HttpResponseMessage read = await (await SharedServer.GetAsync(ct)).Client.GetAsync("/v1.0/containers/" + container + "/object?key=shared", ct);
                         Check.Equal("ws-cross", await read.Content.ReadAsStringAsync(ct), "WS value read via REST");
                     })
-                },
-                beforeSuiteAsync: async ct =>
-                {
-                    _Server = await RestTestServer.StartAsync(false, false, true, ct).ConfigureAwait(false);
-                },
-                afterSuiteAsync: async ct =>
-                {
-                    if (_Server != null)
-                    {
-                        await _Server.DisposeAsync().ConfigureAwait(false);
-                        _Server = null;
-                    }
                 });
         }
 
         private static async Task<ClientWebSocket> ConnectAsync(CancellationToken ct)
         {
+            RestTestServer server = await SharedServer.GetAsync(ct).ConfigureAwait(false);
             ClientWebSocket ws = new ClientWebSocket();
-            await ws.ConnectAsync(new Uri("ws://localhost:" + _Server!.WsPort + "/"), ct).ConfigureAwait(false);
+            await ws.ConnectAsync(new Uri("ws://localhost:" + server.WsPort + "/"), ct).ConfigureAwait(false);
             return ws;
         }
 
