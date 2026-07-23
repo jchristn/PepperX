@@ -634,14 +634,14 @@ Recommended order: P00 → P01 → P02 → P03 → P04 → P05 → (P06, P07, P0
 
 ## Phase 00 — Repository Scaffold & Housekeeping
 
-- [ ] **P00-01** Create the repository layout from §5 (empty projects + solution). `dotnet new` the seven `src/` projects; add all to `src/PepperX.sln`.
-- [ ] **P00-02** Set common csproj properties on every C# project: `net8.0;net10.0`, `Nullable=enable`, `ImplicitUsings=disable`, `TreatWarningsAsErrors=true`, `GenerateDocumentationFile=true` (Core, Server, Sdk).
-- [ ] **P00-03** Add `.gitignore` (dotnet + node + IDE + logs + data dirs) and `.dockerignore` (bin/obj/node_modules/dist/data/logs/artifacts).
-- [ ] **P00-04** Add `LICENSE.md` (MIT, © 2026 Joel Christner).
-- [ ] **P00-05** Stub root docs so the files exist and links resolve: `README.md`, `DOCKERHUB_README.md`, `CHANGELOG.md` (v1.0.0 Unreleased section), `REST_API.md`, `S3_API.md`, `RESP_API.md`, `WEBSOCKETS_API.md`, `MCP_API.md`. (Full content in P15.)
-- [ ] **P00-06** Add `assets/` with logo placeholder (logo.png, logo.ico, favicon.ico) — replace with real art before release.
-- [ ] **P00-07** Add default `pepperx.json` matching §12.
-- [ ] **P00-08** `git init`, initial commit.
+- [x] **P00-01** Create the repository layout from §5 (empty projects + solution). `dotnet new` the seven `src/` projects; add all to `src/PepperX.sln`.
+- [x] **P00-02** Set common csproj properties on every C# project: `net8.0;net10.0`, `Nullable=enable`, `ImplicitUsings=disable`, `TreatWarningsAsErrors=true`, `GenerateDocumentationFile=true` (Core, Server, Sdk).
+- [x] **P00-03** Add `.gitignore` (dotnet + node + IDE + logs + data dirs) and `.dockerignore` (bin/obj/node_modules/dist/data/logs/artifacts).
+- [x] **P00-04** Add `LICENSE.md` (MIT, © 2026 Joel Christner).
+- [x] **P00-05** Stub root docs so the files exist and links resolve: `README.md`, `DOCKERHUB_README.md`, `CHANGELOG.md` (v1.0.0 Unreleased section), `REST_API.md`, `S3_API.md`, `RESP_API.md`, `WEBSOCKETS_API.md`, `MCP_API.md`. (Full content in P15.)
+- [x] **P00-06** Add `assets/` with logo placeholder (logo.png, logo.ico, favicon.ico) — replace with real art before release.
+- [x] **P00-07** Add default `pepperx.json` matching §12.
+- [x] **P00-08** `git init`, initial commit.
 
 **Conformance gates**: `dotnet build src/PepperX.sln` succeeds with zero warnings; repo root matches `REPOSITORY_REQUIREMENTS.md` file list.
 
@@ -651,17 +651,17 @@ Recommended order: P00 → P01 → P02 → P03 → P04 → P05 → (P06, P07, P0
 
 Reference: `BACKEND_ARCHITECTURE.md` model/IdGenerator examples; `C:\Code\Constellation\constellation\src\Constellation.Core\Serialization\StrictEnumConverterFactory.cs`.
 
-- [ ] **P01-01** `Constants.cs`: product name/version, ID prefixes (§8.1), default ports, JSON content type, logo ASCII art (console banner), header strings (`x-pepperx-*`).
-- [ ] **P01-02** `Helpers/IdGenerator.cs`: PrettyId K-sortable, length 24; one method per entity (`GenerateContainerId`, `GenerateExtentId`, `GenerateNodeId`, `GenerateLeaseId`, `GenerateRequestHistoryId`).
-- [ ] **P01-03** `Helpers/HashHelper.cs`: streaming SHA-256 (hash-while-copying to a destination stream, returns hex), constant-time-safe hex compare not required (no secrets).
-- [ ] **P01-04** Enums (one file each): `ExtentStateEnum` (`Active`, `Deleting`), `DatabaseTypeEnum` (`Postgresql`), `StorageDriverTypeEnum` (`Disk`), `DeleteCoordinationModeEnum` (`Cluster`, `Local`), `EnumerationOrderEnum`, `ApiErrorEnum` (`BadRequest`, `NotFound`, `Conflict`, `NotEmpty`, `TooLarge`, `Deleting`, `InternalError`, `NotImplemented`), `RehydrationModeEnum` (`Verify`, `Repair`, `Rebuild`).
-- [ ] **P01-05** Models (validation-backed properties per §6 rule 7): `Container` (Id, Name [1–255, charset validated: letters/digits/dot/dash/underscore, lowercase enforced for S3 compat], Tags, ObjectCount, TotalBytes, CreatedUtc, LastUpdateUtc), `Extent` (all §8.2 columns), `ObjectMetadata` (response-facing merged view incl. Labels/Tags/Object), `NodeRecord`, `ReadLease`, `RequestHistoryEntry` (per BACKEND_ARCHITECTURE minus tenant fields).
-- [ ] **P01-06** Enumeration: `EnumerationOrderEnum`, `EnumerationQuery` (with `FromQueryString(NameValueCollection)` + `Validate(out string)`, clamps, label/tag parsing — mirror HnswLite), `EnumerationResult<T>` (mirror LiteGraph).
-- [ ] **P01-07** Requests: `ContainerCreateRequest`, `WriteObjectRequest`, `UpdateMetadataRequest`, `RehydrationRequest`, `RequestHistoryFilter` (typed — never `Dictionary<string,string>`).
-- [ ] **P01-08** Responses: `ApiErrorResponse`, `ContainerResponse`, `ObjectWriteResponse`, `StatisticsResponse` (+ `ContainerStatistics`), `NodeResponse`, `RehydrationReport`, `RequestHistoryPage`, `RequestHistorySummary` (+ `RequestHistoryBucket` — server fills empty buckets, per BACKEND_ARCHITECTURE).
-- [ ] **P01-09** Settings classes per §12 (one per file: `PepperXSettings`, `LoggingSettings`, `DatabaseSettings`, `StorageSettings`, `DiskStorageSettings`, `ClusterSettings`, `RestSettings`, `S3Settings`, `RespSettings`, `WebsocketSettings`, `McpSettings`, `RequestHistorySettings`) with clamps + XML-documented defaults/ranges; `SettingsManager` (load file → env overrides → validate; creates default file if missing).
-- [ ] **P01-10** Serialization: `PepperXSerializer` implementing Watson's `ISerializationHelper` over `SerializationHelper`, camel-case-insensitive read, ISO-8601 UTC, `StrictEnumConverterFactory`. The metadata `Object` property is typed `object?` and round-trips arbitrary JSON — this is the single sanctioned schemaless surface (§6 rule 16).
-- [ ] **P01-11** Custom exceptions: `PepperXException` base + `ContainerNotFoundException`, `ObjectNotFoundException`, `ObjectAlreadyExistsException`, `ContainerNotEmptyException`, `ObjectTooLargeException`, `ConcurrentModificationException`, `ExtentCorruptException`.
+- [x] **P01-01** `Constants.cs`: product name/version, ID prefixes (§8.1), default ports, JSON content type, logo ASCII art (console banner), header strings (`x-pepperx-*`).
+- [x] **P01-02** `Helpers/IdGenerator.cs`: PrettyId K-sortable, length 24; one method per entity (`GenerateContainerId`, `GenerateExtentId`, `GenerateNodeId`, `GenerateLeaseId`, `GenerateRequestHistoryId`).
+- [x] **P01-03** `Helpers/HashHelper.cs`: streaming SHA-256 (hash-while-copying to a destination stream, returns hex), constant-time-safe hex compare not required (no secrets).
+- [x] **P01-04** Enums (one file each): `ExtentStateEnum` (`Active`, `Deleting`), `DatabaseTypeEnum` (`Postgresql`), `StorageDriverTypeEnum` (`Disk`), `DeleteCoordinationModeEnum` (`Cluster`, `Local`), `EnumerationOrderEnum`, `ApiErrorEnum` (`BadRequest`, `NotFound`, `Conflict`, `NotEmpty`, `TooLarge`, `Deleting`, `InternalError`, `NotImplemented`), `RehydrationModeEnum` (`Verify`, `Repair`, `Rebuild`).
+- [x] **P01-05** Models (validation-backed properties per §6 rule 7): `Container` (Id, Name [1–255, charset validated: letters/digits/dot/dash/underscore, lowercase enforced for S3 compat], Tags, ObjectCount, TotalBytes, CreatedUtc, LastUpdateUtc), `Extent` (all §8.2 columns), `ObjectMetadata` (response-facing merged view incl. Labels/Tags/Object), `NodeRecord`, `ReadLease`, `RequestHistoryEntry` (per BACKEND_ARCHITECTURE minus tenant fields).
+- [x] **P01-06** Enumeration: `EnumerationOrderEnum`, `EnumerationQuery` (with `FromQueryString(NameValueCollection)` + `Validate(out string)`, clamps, label/tag parsing — mirror HnswLite), `EnumerationResult<T>` (mirror LiteGraph).
+- [x] **P01-07** Requests: `ContainerCreateRequest`, `WriteObjectRequest`, `UpdateMetadataRequest`, `RehydrationRequest`, `RequestHistoryFilter` (typed — never `Dictionary<string,string>`).
+- [x] **P01-08** Responses: `ApiErrorResponse`, `ContainerResponse`, `ObjectWriteResponse`, `StatisticsResponse` (+ `ContainerStatistics`), `NodeResponse`, `RehydrationReport`, `RequestHistoryPage`, `RequestHistorySummary` (+ `RequestHistoryBucket` — server fills empty buckets, per BACKEND_ARCHITECTURE).
+- [x] **P01-09** Settings classes per §12 (one per file: `PepperXSettings`, `LoggingSettings`, `DatabaseSettings`, `StorageSettings`, `DiskStorageSettings`, `ClusterSettings`, `RestSettings`, `S3Settings`, `RespSettings`, `WebsocketSettings`, `McpSettings`, `RequestHistorySettings`) with clamps + XML-documented defaults/ranges; `SettingsManager` (load file → env overrides → validate; creates default file if missing).
+- [x] **P01-10** Serialization: `PepperXSerializer` implementing Watson's `ISerializationHelper` over `SerializationHelper`, camel-case-insensitive read, ISO-8601 UTC, `StrictEnumConverterFactory`. The metadata `Object` property is typed `object?` and round-trips arbitrary JSON — this is the single sanctioned schemaless surface (§6 rule 16).
+- [x] **P01-11** Custom exceptions: `PepperXException` base + `ContainerNotFoundException`, `ObjectNotFoundException`, `ObjectAlreadyExistsException`, `ContainerNotEmptyException`, `ObjectTooLargeException`, `ConcurrentModificationException`, `ExtentCorruptException`.
 
 **Conformance gates**: zero-warning build; spot-audit 5 files against §6 checklist; model validation behavior covered by first Touchstone descriptors (seed `Test.Shared` with `IdentifierSuite` + `ModelValidationSuite` + `EnumerationQuerySuite` now).
 

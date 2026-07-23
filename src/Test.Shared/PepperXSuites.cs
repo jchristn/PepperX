@@ -1,6 +1,7 @@
 namespace Test.Shared
 {
     using System.Collections.Generic;
+    using Test.Shared.Suites;
     using Touchstone.Core;
 
     /// <summary>
@@ -16,7 +17,14 @@ namespace Test.Shared
         {
             get
             {
-                return new List<TestSuiteDescriptor>();
+                return new List<TestSuiteDescriptor>
+                {
+                    IdentifierSuite.Build(),
+                    ModelValidationSuite.Build(),
+                    EnumerationQuerySuite.Build(),
+                    SerializationSuite.Build(),
+                    SettingsSuite.Build()
+                };
             }
         }
     }
