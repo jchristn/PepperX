@@ -75,13 +75,22 @@ namespace PepperX.Core.Services
 
             response.DatabaseSizeBytes = await _Db.GetDatabaseSizeBytesAsync(token).ConfigureAwait(false);
 
+            response.Nodes = await GetNodesAsync(token).ConfigureAwait(false);
+            return response;
+        }
+
+        /// <summary>
+        /// List cluster nodes with liveness.
+        /// </summary>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>Node responses.</returns>
+        public async Task<List<NodeResponse>> GetNodesAsync(CancellationToken token = default)
+        {
             IReadOnlyList<NodeRecord> nodes = await _Db.Nodes.ListAsync(token).ConfigureAwait(false);
             DateTime now = DateTime.UtcNow;
             List<NodeResponse> nodeResponses = new List<NodeResponse>();
             foreach (NodeRecord node in nodes) nodeResponses.Add(NodeResponse.FromModel(node, _Cluster.NodeDeadAfterSeconds, now));
-            response.Nodes = nodeResponses;
-
-            return response;
+            return nodeResponses;
         }
 
         #endregion

@@ -84,7 +84,7 @@
     "MaxResponseBodyBytes": 65536,
     "RetentionDays": 30,
     "ExcludeBodyPaths": [
-      "/v1.0/containers/*/objects/*"
+      "/v1.0/containers/*/object*"
     ]
   }
 }

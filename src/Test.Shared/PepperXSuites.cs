@@ -34,7 +34,8 @@ namespace Test.Shared
                     DatabaseRequestHistorySuite.Build(),
                     ObjectLifecycleSuite.Build(),
                     MultiNodeSemanticsSuite.Build(),
-                    RehydrationSuite.Build()
+                    RehydrationSuite.Build(),
+                    RestApiSuite.Build()
                 };
             }
         }

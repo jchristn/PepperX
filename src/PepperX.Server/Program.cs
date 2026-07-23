@@ -1,9 +1,9 @@
 namespace PepperX.Server
 {
-    using System;
+    using System.Threading.Tasks;
 
     /// <summary>
-    /// Application entry point. Kept thin per the backend architecture reference; orchestration lives in the server host.
+    /// Application entry point. Kept thin; composition and lifecycle live in the bootstrapper and server host.
     /// </summary>
     public static class Program
     {
@@ -12,11 +12,9 @@ namespace PepperX.Server
         /// </summary>
         /// <param name="args">Command-line arguments.</param>
         /// <returns>Process exit code.</returns>
-        public static int Main(string[] args)
+        public static async Task<int> Main(string[] args)
         {
-            // The full bootstrapper and PepperXServer are wired in Phase 05.
-            Console.WriteLine("PepperX server host bootstrap is not yet wired (Phase 05).");
-            return 0;
+            return await Bootstrapper.RunAsync(args).ConfigureAwait(false);
         }
     }
 }
