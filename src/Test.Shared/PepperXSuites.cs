@@ -25,7 +25,13 @@ namespace Test.Shared
                     SerializationSuite.Build(),
                     SettingsSuite.Build(),
                     ExtentFormatSuite.Build(),
-                    DiskStorageDriverSuite.Build()
+                    DiskStorageDriverSuite.Build(),
+                    DatabaseMigrationSuite.Build(),
+                    DatabaseContainerSuite.Build(),
+                    DatabaseExtentSuite.Build(),
+                    DatabaseLeaseSuite.Build(),
+                    DatabaseEnumerationSuite.Build(),
+                    DatabaseRequestHistorySuite.Build()
                 };
             }
         }
