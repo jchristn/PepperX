@@ -10,6 +10,7 @@ namespace PepperX.Server
     using PepperX.Core.Settings;
     using PepperX.Core.Storage.Disk;
     using PepperX.Server.Api.Rest;
+    using PepperX.Server.Api.S3;
     using PepperX.Server.Serialization;
     using PepperX.Server.Services;
     using SyslogLogging;
@@ -39,6 +40,7 @@ namespace PepperX.Server
         private JanitorService? _Janitor;
         private RequestHistoryCaptureService? _Capture;
         private Webserver? _RestServer;
+        private S3ProtocolHandler? _S3Handler;
 
         #endregion
 
@@ -92,6 +94,13 @@ namespace PepperX.Server
 
             if (_Settings.Rest.Enabled) StartRest(containers, writes, reads, deletes, search, statistics, rehydration);
 
+            if (_Settings.S3.Enabled)
+            {
+                _S3Handler = new S3ProtocolHandler(containers, writes, reads, deletes, search, _Db, _Settings.S3, _Logging);
+                _S3Handler.Start();
+                _Logging.Info(_Header + "S3 listener started on port " + _Settings.S3.Port);
+            }
+
             _Logging.Info(_Header + Constants.ProductName + " v" + Constants.ProductVersion + " started (node " + _NodeId + ")");
         }
 
@@ -126,6 +135,8 @@ namespace PepperX.Server
 
             try { _RestServer?.Stop(); } catch (Exception) { }
             _RestServer?.Dispose();
+
+            _S3Handler?.Stop();
 
             _Janitor?.Dispose();
             _Heartbeat?.Dispose();

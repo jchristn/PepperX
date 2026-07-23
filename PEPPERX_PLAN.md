@@ -748,12 +748,12 @@ Reference: `RecallDbServer.cs` (hosting, hooks, OpenAPI config, fluent route met
 
 Reference: S3Server callback surface (`C:\Code\Less3\S3Server-7.0\src\S3Server\Callbacks\*.cs`), Less3 server as the worked example; mapping table §11.3.
 
-- [ ] **P06-01** `S3ProtocolHandler`: construct `S3Server` on `S3Settings`; wire `Service.IsAnonymousRequestAllowed` (true per settings) + `Service.GetSecretKey` (static keypair); lifecycle start/stop.
-- [ ] **P06-02** `S3ServiceCallbacks` (ListBuckets), `S3BucketCallbacks` (Write/Delete/Exists/Read incl. prefix/marker/delimiter/common-prefixes/max-keys, Read/Write/DeleteTagging, ReadLocation), `S3ObjectCallbacks` (Write incl. `x-amz-tagging` parse, Read, ReadRange, Exists, Delete, DeleteMultiple, Read/Write/DeleteTagging via D9 rewrite) — all thin adapters over Core services; streamed bodies both directions.
-- [ ] **P06-03** `S3ErrorMapper`: core exceptions → `S3Exception` codes per §11.3; unmapped → `InternalError` with logged detail.
-- [ ] **P06-04** Container-name compatibility: S3 bucket naming rules enforced by the shared `Container.Name` validation (P01-05) — verify parity; document any REST-created names that are not S3-addressable (should be none given shared validation).
-- [ ] **P06-05** Touchstone `S3ProtocolSuite` using **AWSSDK.S3** client (path-style, custom endpoint, static creds → exercises signed path; plus one raw anonymous `HttpClient` case): bucket create/list/head/delete + BucketNotEmpty, bucket tagging CRUD, PutObject/GetObject (binary fidelity), HeadObject, range GET (206), DeleteObject, DeleteObjects multi, object tagging CRUD (verify rewrite preserved payload + labels), NoSuchBucket/NoSuchKey error codes, multipart initiate → `NotImplemented`.
-- [ ] **P06-06** Cross-protocol descriptor: object written via S3 is readable via native REST with tags intact, and vice versa.
+- [x] **P06-01** `S3ProtocolHandler`: construct `S3Server` on `S3Settings`; wire `Service.IsAnonymousRequestAllowed` (true per settings) + `Service.GetSecretKey` (static keypair); lifecycle start/stop.
+- [x] **P06-02** `S3ServiceCallbacks` (ListBuckets), `S3BucketCallbacks` (Write/Delete/Exists/Read incl. prefix/marker/delimiter/common-prefixes/max-keys, Read/Write/DeleteTagging, ReadLocation), `S3ObjectCallbacks` (Write incl. `x-amz-tagging` parse, Read, ReadRange, Exists, Delete, DeleteMultiple, Read/Write/DeleteTagging via D9 rewrite) — all thin adapters over Core services; streamed bodies both directions.
+- [x] **P06-03** `S3ErrorMapper`: core exceptions → `S3Exception` codes per §11.3; unmapped → `InternalError` with logged detail.
+- [x] **P06-04** Container-name compatibility: S3 bucket naming rules enforced by the shared `Container.Name` validation (P01-05) — verify parity; document any REST-created names that are not S3-addressable (should be none given shared validation).
+- [x] **P06-05** Touchstone `S3ProtocolSuite` using **AWSSDK.S3** client (path-style, custom endpoint, static creds → exercises signed path; plus one raw anonymous `HttpClient` case): bucket create/list/head/delete + BucketNotEmpty, bucket tagging CRUD, PutObject/GetObject (binary fidelity), HeadObject, range GET (206), DeleteObject, DeleteObjects multi, object tagging CRUD (verify rewrite preserved payload + labels), NoSuchBucket/NoSuchKey error codes, multipart initiate → `NotImplemented`.
+- [x] **P06-06** Cross-protocol descriptor: object written via S3 is readable via native REST with tags intact, and vice versa.
 
 **Conformance gates**: zero-warning build; S3 suites green; `S3_API.md` skeleton updated with the exact supported/unsupported operation matrix.
 
