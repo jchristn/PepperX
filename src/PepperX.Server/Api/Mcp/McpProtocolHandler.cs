@@ -76,7 +76,7 @@ namespace PepperX.Server.Api.Mcp
         public void Start()
         {
             _Cts = new CancellationTokenSource();
-            _Http = new McpHttpServer("localhost", _Settings.HttpPort, "/rpc", "/events", true, "/mcp");
+            _Http = new McpHttpServer(_Settings.Hostname, _Settings.HttpPort, "/rpc", "/events", true, "/mcp");
             _Tcp = new McpTcpServer(IPAddress.Loopback, _Settings.TcpPort, true);
             _Http.ServerName = Constants.ProductName;
             _Tcp.ServerName = Constants.ProductName;

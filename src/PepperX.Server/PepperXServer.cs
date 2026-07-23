@@ -182,6 +182,11 @@ namespace PepperX.Server
         private void StartRest(ContainerService containers, ObjectWriteService writes, ObjectReadService reads, ObjectDeleteService deletes, SearchService search, StatisticsService statistics, RehydrationService rehydration)
         {
             WebserverSettings webserverSettings = new WebserverSettings(_Settings.Rest.Hostname, _Settings.Rest.Port, _Settings.Rest.Ssl);
+
+            // Without keep-alive the server closes the TCP connection after every response, forcing clients to
+            // reconnect per request. That dominates latency on a data-plane API, so it is enabled here.
+            webserverSettings.IO.EnableKeepAlive = true;
+
             _RestServer = new Webserver(webserverSettings, DefaultRouteAsync);
             _RestServer.Serializer = new PepperXWatsonSerializer();
 

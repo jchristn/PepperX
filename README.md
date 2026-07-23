@@ -55,6 +55,32 @@ Suites that need a database are skipped (not failed) when PostgreSQL is unreacha
 can be overridden with `PEPPERX_TEST_DB_HOST`, `PEPPERX_TEST_DB_PORT`, `PEPPERX_TEST_DB_USER`,
 `PEPPERX_TEST_DB_PASSWORD`, and `PEPPERX_TEST_DB_NAME`.
 
+## Performance
+
+`Test.Performance` starts an in-process node (or targets a running one with `--target`) and runs a
+gauntlet of workloads, printing throughput and latency percentiles:
+
+```bash
+dotnet run --project src/Test.Performance -c Release
+dotnet run --project src/Test.Performance -c Release -- \
+  --duration 10 --concurrency 32 --object-size 65536 --results perf.json
+dotnet run --project src/Test.Performance -c Release -- --workload read-heavy,search
+```
+
+Workloads: `write-small`, `read-heavy`, `mixed`, `search`, `replace-churn`, `delete-churn`, `s3-ops`,
+`resp-ops`. The harness exits non-zero when the error rate exceeds one percent.
+
+Indicative single-node numbers (developer laptop, 16 workers, 4 KiB objects, dockerized PostgreSQL —
+your hardware will differ):
+
+| Workload | Ops/s | p95 |
+|---|---:|---:|
+| read-heavy | ~870 | 31 ms |
+| search (label + tag filter) | ~580 | 36 ms |
+| mixed (70r/20w/10 search) | ~580 | 93 ms |
+| replace-churn (16 writers, one key) | ~180 | 128 ms |
+| write-small | ~160 | 145 ms |
+
 ## Documentation
 
 - [`PEPPERX_PLAN.md`](PEPPERX_PLAN.md) — the authoritative implementation plan

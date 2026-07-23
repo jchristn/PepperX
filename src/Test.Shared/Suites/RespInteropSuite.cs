@@ -116,7 +116,7 @@ namespace Test.Shared.Suites
                 if (_Redis == null)
                 {
                     RestTestServer server = await SharedServer.GetAsync(ct).ConfigureAwait(false);
-                    ConfigurationOptions options = ConfigurationOptions.Parse("localhost:" + server.RespPort);
+                    ConfigurationOptions options = ConfigurationOptions.Parse("127.0.0.1:" + server.RespPort);
                     options.AbortOnConnectFail = false;
                     options.ConnectTimeout = 15000;
                     _Redis = await ConnectionMultiplexer.ConnectAsync(options).ConfigureAwait(false);

@@ -125,17 +125,18 @@ namespace Test.Shared
             PepperXSettings settings = new PepperXSettings();
             settings.Database = TestEnvironment.SettingsFor(dbName);
             settings.Storage.Disk.RootDirectory = root;
-            settings.Rest.Hostname = "localhost";
+            settings.Rest.Hostname = "127.0.0.1";
             settings.Rest.Port = port;
             settings.S3.Enabled = enableS3;
-            settings.S3.Hostname = "localhost";
+            settings.S3.Hostname = "127.0.0.1";
             if (enableS3) settings.S3.Port = s3Port;
             settings.Resp.Enabled = enableResp;
             if (enableResp) settings.Resp.Port = respPort;
             settings.Websocket.Enabled = enableWs;
-            settings.Websocket.Hostname = "localhost";
+            settings.Websocket.Hostname = "127.0.0.1";
             if (enableWs) settings.Websocket.Port = wsPort;
             settings.Mcp.Enabled = enableMcp;
+            settings.Mcp.Hostname = "127.0.0.1";
             if (enableMcp)
             {
                 settings.Mcp.HttpPort = mcpHttpPort;
@@ -149,9 +150,9 @@ namespace Test.Shared
             PepperXServer server = new PepperXServer(settings, logging);
             await server.StartAsync(token).ConfigureAwait(false);
 
-            string baseUrl = "http://localhost:" + port;
+            string baseUrl = "http://127.0.0.1:" + port;
             HttpClient client = new HttpClient { BaseAddress = new Uri(baseUrl), Timeout = TimeSpan.FromSeconds(30) };
-            string? s3Url = enableS3 ? "http://localhost:" + s3Port : null;
+            string? s3Url = enableS3 ? "http://127.0.0.1:" + s3Port : null;
 
             return new RestTestServer(server, client, baseUrl, s3Url, respPort, wsPort, mcpHttpPort, dbName, root, logging);
         }

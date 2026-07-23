@@ -15,6 +15,23 @@ namespace PepperX.Core.Settings
         public bool Enabled { get; set; } = true;
 
         /// <summary>
+        /// Host name the Streamable HTTP listener binds. Clients must address the server by this name, so it
+        /// must match how callers reach the node. Default "localhost".
+        /// </summary>
+        public string Hostname
+        {
+            get
+            {
+                return _Hostname;
+            }
+            set
+            {
+                if (String.IsNullOrWhiteSpace(value)) throw new ArgumentNullException(nameof(Hostname));
+                _Hostname = value;
+            }
+        }
+
+        /// <summary>
         /// Streamable HTTP listen port. Clamped to the range 1 to 65535. Default 8003.
         /// </summary>
         public int HttpPort
@@ -64,6 +81,7 @@ namespace PepperX.Core.Settings
 
         #region Private-Members
 
+        private string _Hostname = "localhost";
         private int _HttpPort = 8003;
         private int _TcpPort = 8004;
         private int _MaxInlineBytes = 8388608;

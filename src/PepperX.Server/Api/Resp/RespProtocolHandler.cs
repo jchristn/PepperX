@@ -8,6 +8,7 @@ namespace PepperX.Server.Api.Resp
     using System.Net.Sockets;
     using System.Text;
     using System.Threading;
+    using System.Threading.Channels;
     using System.Threading.Tasks;
     using PepperX.Core;
     using PepperX.Core.Database;
@@ -39,6 +40,8 @@ namespace PepperX.Server.Api.Resp
 
         private readonly ConcurrentDictionary<Guid, RespConnectionState> _States = new ConcurrentDictionary<Guid, RespConnectionState>();
         private readonly ConcurrentDictionary<string, SemaphoreSlim> _KeyLocks = new ConcurrentDictionary<string, SemaphoreSlim>();
+        private readonly ConcurrentDictionary<Guid, Channel<List<string>>> _Queues = new ConcurrentDictionary<Guid, Channel<List<string>>>();
+        private readonly ConcurrentDictionary<string, bool> _KnownContainers = new ConcurrentDictionary<string, bool>();
 
         private RespListener? _Listener;
         private RespInterface? _Interface;
@@ -83,11 +86,21 @@ namespace PepperX.Server.Api.Resp
             _Listener = new RespListener(_Settings.Port);
             _Interface = new RespInterface(_Listener);
 
-            _Interface.ClientConnectedAction = args => _States[args.GUID] = new RespConnectionState();
-            _Interface.ClientDisconnectedAction = args => _States.TryRemove(args.GUID, out _);
+            _Interface.ClientConnectedAction = args =>
+            {
+                _States[args.GUID] = new RespConnectionState();
+                StartQueue(args.GUID);
+            };
+
+            _Interface.ClientDisconnectedAction = args =>
+            {
+                _States.TryRemove(args.GUID, out _);
+                if (_Queues.TryRemove(args.GUID, out Channel<List<string>>? queue)) queue.Writer.TryComplete();
+            };
+
             _Interface.ArrayHandler = e =>
             {
-                DispatchSync(e);
+                Enqueue(e);
                 return null!;
             };
 
@@ -110,27 +123,57 @@ namespace PepperX.Server.Api.Resp
 
         #region Private-Methods-Dispatch
 
-        private void DispatchSync(RespDataReceivedEventArgs e)
+        private Channel<List<string>> StartQueue(Guid clientGuid)
         {
-            RespConnectionState state = _States.GetOrAdd(e.ClientGUID, _ => new RespConnectionState());
+            return _Queues.GetOrAdd(clientGuid, guid =>
+            {
+                Channel<List<string>> channel = Channel.CreateUnbounded<List<string>>(new UnboundedChannelOptions
+                {
+                    SingleReader = true,
+                    SingleWriter = false
+                });
+
+                _ = Task.Run(() => PumpAsync(guid, channel));
+                return channel;
+            });
+        }
+
+        private void Enqueue(RespDataReceivedEventArgs e)
+        {
             List<string> args = ExtractArgs(e.Value);
             if (args.Count == 0) return;
 
-            byte[] response;
-            try
-            {
-                response = DispatchAsync(args, state).GetAwaiter().GetResult();
-            }
-            catch (PepperXException ex)
-            {
-                response = RespWire.Error("ERR " + ex.Message);
-            }
-            catch (Exception ex)
-            {
-                response = RespWire.Error("ERR " + ex.Message);
-            }
+            // Commands are queued and executed by one pump per connection: the listener's read loop is never
+            // blocked by database or storage work, while replies still leave in the order the commands
+            // arrived, as the protocol requires.
+            StartQueue(e.ClientGUID).Writer.TryWrite(args);
+        }
 
-            SendToClient(e.ClientGUID, response);
+        private async Task PumpAsync(Guid clientGuid, Channel<List<string>> channel)
+        {
+            while (await channel.Reader.WaitToReadAsync().ConfigureAwait(false))
+            {
+                while (channel.Reader.TryRead(out List<string>? args))
+                {
+                    RespConnectionState state = _States.GetOrAdd(clientGuid, _ => new RespConnectionState());
+
+                    byte[] response;
+                    try
+                    {
+                        response = await DispatchAsync(args, state).ConfigureAwait(false);
+                    }
+                    catch (PepperXException ex)
+                    {
+                        response = RespWire.Error("ERR " + ex.Message);
+                    }
+                    catch (Exception ex)
+                    {
+                        response = RespWire.Error("ERR " + ex.Message);
+                    }
+
+                    SendToClient(clientGuid, response);
+                }
+            }
         }
 
         private async Task<byte[]> DispatchAsync(List<string> args, RespConnectionState state)
@@ -474,15 +517,24 @@ namespace PepperX.Server.Api.Resp
         private async Task EnsureContainerAsync(RespConnectionState state, CancellationToken ct)
         {
             string name = ContainerName(state);
-            if (await _Containers.ExistsAsync(name, ct).ConfigureAwait(false)) return;
-            try
+
+            // The mapped container is created once per database index; caching that avoids a database
+            // round trip on every write.
+            if (_KnownContainers.ContainsKey(name)) return;
+
+            if (!await _Containers.ExistsAsync(name, ct).ConfigureAwait(false))
             {
-                await _Containers.CreateAsync(new ContainerCreateRequest { Name = name }, ct).ConfigureAwait(false);
+                try
+                {
+                    await _Containers.CreateAsync(new ContainerCreateRequest { Name = name }, ct).ConfigureAwait(false);
+                }
+                catch (PepperXException)
+                {
+                    // Concurrent creation; ignore.
+                }
             }
-            catch (PepperXException)
-            {
-                // Concurrent creation; ignore.
-            }
+
+            _KnownContainers[name] = true;
         }
 
         private async Task<byte[]?> ReadValueAsync(RespConnectionState state, string key, CancellationToken ct)
@@ -626,6 +678,10 @@ namespace PepperX.Server.Api.Resp
                 ClientInfo? info = _Listener?.RetrieveClientByGuid(clientGuid);
                 TcpClient? client = info?.TcpClient;
                 if (client == null || !client.Connected) return;
+
+                // Small RESP replies interact badly with Nagle's algorithm plus delayed ACK, which stalls
+                // request/response traffic by roughly 200ms per operation.
+                if (!client.NoDelay) client.NoDelay = true;
 
                 NetworkStream stream = client.GetStream();
                 lock (client)

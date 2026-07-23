@@ -118,7 +118,7 @@ namespace Test.Shared.Suites
         {
             RestTestServer server = await SharedServer.GetAsync(ct).ConfigureAwait(false);
             ClientWebSocket ws = new ClientWebSocket();
-            await ws.ConnectAsync(new Uri("ws://localhost:" + server.WsPort + "/"), ct).ConfigureAwait(false);
+            await ws.ConnectAsync(new Uri("ws://127.0.0.1:" + server.WsPort + "/"), ct).ConfigureAwait(false);
             return ws;
         }
 

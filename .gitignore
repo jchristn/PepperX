@@ -47,3 +47,4 @@ Thumbs.db
 *.local.json
 .env
 .env.*
+perf-baseline.json

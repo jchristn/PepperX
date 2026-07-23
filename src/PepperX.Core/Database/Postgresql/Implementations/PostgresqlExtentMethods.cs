@@ -168,6 +168,17 @@ namespace PepperX.Core.Database.Postgresql.Implementations
             {
                 try
                 {
+                    // Serialize concurrent replaces of the same key cluster-wide. Without this, simultaneous
+                    // writers collide on the partial unique index and an unconditional overwrite could fail
+                    // even though last-writer-wins is the expected semantic for PUT and SET.
+                    await using (NpgsqlCommand advisory = new NpgsqlCommand(
+                        "SELECT pg_advisory_xact_lock(hashtext(@cid || E'\\n' || @key));", connection, tx))
+                    {
+                        advisory.Parameters.AddWithValue("cid", newExtent.ContainerId);
+                        advisory.Parameters.AddWithValue("key", newExtent.Key);
+                        await advisory.ExecuteNonQueryAsync(token).ConfigureAwait(false);
+                    }
+
                     string? oldId = null;
                     long oldSize = 0;
 

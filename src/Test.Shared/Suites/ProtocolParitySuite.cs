@@ -72,7 +72,7 @@ namespace Test.Shared.Suites
                         RestTestServer server = await SharedServer.GetAsync(ct);
                         using (ClientWebSocket ws = new ClientWebSocket())
                         {
-                            await ws.ConnectAsync(new Uri("ws://localhost:" + server.WsPort + "/"), ct);
+                            await ws.ConnectAsync(new Uri("ws://127.0.0.1:" + server.WsPort + "/"), ct);
                             string body = _Serializer.SerializeJson(new
                             {
                                 RequestId = "p",
@@ -104,7 +104,7 @@ namespace Test.Shared.Suites
                         RestTestServer server = await SharedServer.GetAsync(ct);
                         string key = "parity-resp-" + Guid.NewGuid().ToString("N");
 
-                        ConfigurationOptions options = ConfigurationOptions.Parse("localhost:" + server.RespPort);
+                        ConfigurationOptions options = ConfigurationOptions.Parse("127.0.0.1:" + server.RespPort);
                         options.AbortOnConnectFail = false;
                         options.ConnectTimeout = 15000;
                         using (ConnectionMultiplexer redis = await ConnectionMultiplexer.ConnectAsync(options))
@@ -141,7 +141,7 @@ namespace Test.Shared.Suites
 
             using (ClientWebSocket ws = new ClientWebSocket())
             {
-                await ws.ConnectAsync(new Uri("ws://localhost:" + server.WsPort + "/"), ct);
+                await ws.ConnectAsync(new Uri("ws://127.0.0.1:" + server.WsPort + "/"), ct);
                 string body = _Serializer.SerializeJson(new { RequestId = "r", Operation = "ObjectRead", Container = container, Key = key }, false)!;
                 await ws.SendAsync(Encoding.UTF8.GetBytes(body), WebSocketMessageType.Text, true, ct);
 

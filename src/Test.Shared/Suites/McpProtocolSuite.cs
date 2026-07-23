@@ -125,7 +125,7 @@ namespace Test.Shared.Suites
                 if (_Http == null)
                 {
                     RestTestServer server = await SharedServer.GetAsync(ct).ConfigureAwait(false);
-                    HttpClient client = new HttpClient { BaseAddress = new Uri("http://localhost:" + server.McpHttpPort), Timeout = TimeSpan.FromSeconds(30) };
+                    HttpClient client = new HttpClient { BaseAddress = new Uri("http://127.0.0.1:" + server.McpHttpPort), Timeout = TimeSpan.FromSeconds(30) };
                     _Http = client;
                     await InitializeAsync(ct).ConfigureAwait(false);
                 }
