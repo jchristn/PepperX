@@ -1,0 +1,49 @@
+# Build output
+bin/
+obj/
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+*.user
+*.suo
+.vs/
+artifacts/
+
+# .NET
+project.lock.json
+*.nupkg
+*.snupkg
+msbuild.log
+
+# Test output
+TestResults/
+results.json
+*.received.*
+coverage*.json
+coverage*.xml
+*.trx
+
+# Node / dashboard
+node_modules/
+dist/
+.vite/
+dashboard/test-artifacts/
+npm-debug.log*
+yarn-error.log*
+
+# Runtime data
+data/
+logs/
+*.log
+
+# OS / editor
+.DS_Store
+Thumbs.db
+*.swp
+.idea/
+
+# Secrets / local overrides
+*.local.json
+.env
+.env.*

@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <Description>PepperX server host and protocol surfaces (REST, S3, RESP, WebSockets, MCP).</Description>
+    <RootNamespace>PepperX.Server</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="RedisRespServer" Version="0.1.1" />
+    <PackageReference Include="S3Server" Version="7.3.0" />
+    <PackageReference Include="SyslogLogging" Version="2.1.0" />
+    <PackageReference Include="Voltaic" Version="0.4.0" />
+    <PackageReference Include="Watson" Version="7.0.15" />
+    <PackageReference Include="WatsonWebsocket" Version="4.1.8" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\PepperX.Core\PepperX.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="..\..\pepperx.json" Link="pepperx.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,17 @@
+**/bin/
+**/obj/
+**/node_modules/
+**/dist/
+**/.vs/
+**/.vite/
+**/.idea/
+**/TestResults/
+**/artifacts/
+**/test-artifacts/
+data/
+logs/
+*.log
+.git/
+.gitignore
+**/*.user
+results.json
