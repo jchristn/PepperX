@@ -38,7 +38,8 @@ namespace Test.Shared
                     RestApiSuite.Build(),
                     S3ProtocolSuite.Build(),
                     RespInteropSuite.Build(),
-                    WebsocketProtocolSuite.Build()
+                    WebsocketProtocolSuite.Build(),
+                    McpProtocolSuite.Build()
                 };
             }
         }

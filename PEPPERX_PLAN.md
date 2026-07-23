@@ -794,10 +794,10 @@ Reference: WatsonWebsocket Test.Server; envelope spec §11.5.
 
 Reference: `LiteGraphMcpServer.cs`, Tablix `McpToolRegistrar.cs`, `C:\Code\Voltaic\README.md` (v0.4.0 API; the split is `Voltaic.Core` / `Voltaic.Mcp` / `Voltaic.A2A`); tool list §11.6.
 
-- [ ] **P09-01** `McpProtocolHandler`: Voltaic MCP server over Streamable HTTP (`/mcp`, sessions, SSE) on `Mcp.HttpPort` + TCP JSON-RPC transport on `Mcp.TcpPort`; both fed by one `McpToolRegistrar`; server info name/version from Constants; lifecycle methods (initialize/initialized/ping) via Voltaic defaults.
-- [ ] **P09-02** Typed argument classes (one file each, `Arguments/`) with JSON schema metadata (types, required, descriptions) for all 16 tools in §11.6; results as structured content wrapping the shared Response DTOs; `pepperx_object_read` enforces `MaxInlineBytes` with a clear too-large error directing callers to REST.
-- [ ] **P09-03** Touchstone `McpProtocolSuite` (Voltaic client over both HTTP and TCP): initialize handshake + capability shape; `tools/list` returns all 16 with schemas; `tools/call` happy path per tool; error content for not-found/conflict/too-large; `ping`.
-- [ ] **P09-04** Cross-protocol descriptor + MCP Inspector manual smoke recorded in annotation.
+- [x] **P09-01** `McpProtocolHandler`: Voltaic MCP server over Streamable HTTP (`/mcp`, sessions, SSE) on `Mcp.HttpPort` + TCP JSON-RPC transport on `Mcp.TcpPort`; both fed by one `McpToolRegistrar`; server info name/version from Constants; lifecycle methods (initialize/initialized/ping) via Voltaic defaults.
+- [x] **P09-02** Typed argument classes (one file each, `Arguments/`) with JSON schema metadata (types, required, descriptions) for all 16 tools in §11.6; results as structured content wrapping the shared Response DTOs; `pepperx_object_read` enforces `MaxInlineBytes` with a clear too-large error directing callers to REST.
+- [x] **P09-03** Touchstone `McpProtocolSuite` (Voltaic client over both HTTP and TCP): initialize handshake + capability shape; `tools/list` returns all 16 with schemas; `tools/call` happy path per tool; error content for not-found/conflict/too-large; `ping`.
+- [x] **P09-04** Cross-protocol descriptor + MCP Inspector manual smoke recorded in annotation.
 
 **Conformance gates**: zero-warning build; MCP suites green on both transports; MCP_API.md tool reference drafted.
 

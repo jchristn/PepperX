@@ -9,6 +9,7 @@ namespace PepperX.Server
     using PepperX.Core.Services;
     using PepperX.Core.Settings;
     using PepperX.Core.Storage.Disk;
+    using PepperX.Server.Api.Mcp;
     using PepperX.Server.Api.Resp;
     using PepperX.Server.Api.Rest;
     using PepperX.Server.Api.S3;
@@ -45,6 +46,7 @@ namespace PepperX.Server
         private S3ProtocolHandler? _S3Handler;
         private RespProtocolHandler? _RespHandler;
         private WebsocketProtocolHandler? _WsHandler;
+        private McpProtocolHandler? _McpHandler;
 
         #endregion
 
@@ -119,6 +121,13 @@ namespace PepperX.Server
                 _Logging.Info(_Header + "WebSocket listener started on port " + _Settings.Websocket.Port);
             }
 
+            if (_Settings.Mcp.Enabled)
+            {
+                _McpHandler = new McpProtocolHandler(containers, writes, reads, deletes, search, statistics, _Settings.Mcp, _Logging);
+                _McpHandler.Start();
+                _Logging.Info(_Header + "MCP listeners started on ports " + _Settings.Mcp.HttpPort + " (HTTP) and " + _Settings.Mcp.TcpPort + " (TCP)");
+            }
+
             _Logging.Info(_Header + Constants.ProductName + " v" + Constants.ProductVersion + " started (node " + _NodeId + ")");
         }
 
@@ -157,6 +166,7 @@ namespace PepperX.Server
             _S3Handler?.Stop();
             _RespHandler?.Stop();
             _WsHandler?.Stop();
+            _McpHandler?.Stop();
 
             _Janitor?.Dispose();
             _Heartbeat?.Dispose();
