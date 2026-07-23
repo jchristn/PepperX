@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <PackageId>PepperX.Sdk</PackageId>
+    <Description>Client SDK for PepperX, a high-performance key-value store with rich metadata. Provides typed REST and WebSocket clients.</Description>
+    <PackageTags>pepperx;key-value;storage;sdk;client</PackageTags>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <RepositoryType>git</RepositoryType>
+  </PropertyGroup>
+
+</Project>

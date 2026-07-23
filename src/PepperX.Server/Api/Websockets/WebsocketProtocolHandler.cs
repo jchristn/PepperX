@@ -1,6 +1,7 @@
 namespace PepperX.Server.Api.Websockets
 {
     using System;
+    using System.Collections.Generic;
     using System.IO;
     using System.Net.WebSockets;
     using System.Text;
@@ -78,8 +79,14 @@ namespace PepperX.Server.Api.Websockets
         /// </summary>
         public void Start()
         {
-            string host = _Settings.Hostname == "*" ? "localhost" : _Settings.Hostname;
-            _Server = new WatsonWsServer(host, _Settings.Port, false);
+            // A wildcard host binds every loopback name a local client might use. WebSocket upgrades are
+            // matched by listener prefix, so binding only one name would reject clients that address the node
+            // by the other.
+            List<string> hosts = _Settings.Hostname == "*"
+                ? new List<string> { "localhost", "127.0.0.1" }
+                : new List<string> { _Settings.Hostname };
+
+            _Server = new WatsonWsServer(hosts, _Settings.Port, false);
             _Server.MessageReceived += OnMessageReceived;
             _Server.Start();
         }

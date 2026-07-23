@@ -76,7 +76,9 @@ namespace PepperX.Server.Api.Mcp
         public void Start()
         {
             _Cts = new CancellationTokenSource();
-            _Http = new McpHttpServer(_Settings.Hostname, _Settings.HttpPort, "/rpc", "/events", true, "/mcp");
+            // The Streamable HTTP listener binds a single prefix, so a wildcard host resolves to loopback.
+            string httpHost = _Settings.Hostname == "*" ? "localhost" : _Settings.Hostname;
+            _Http = new McpHttpServer(httpHost, _Settings.HttpPort, "/rpc", "/events", true, "/mcp");
             _Tcp = new McpTcpServer(IPAddress.Loopback, _Settings.TcpPort, true);
             _Http.ServerName = Constants.ProductName;
             _Tcp.ServerName = Constants.ProductName;

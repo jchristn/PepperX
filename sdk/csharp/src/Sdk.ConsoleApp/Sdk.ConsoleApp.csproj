@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <IsPackable>false</IsPackable>
+    <AssemblyName>PepperX.Sdk.ConsoleApp</AssemblyName>
+    <RootNamespace>PepperX.Sdk.ConsoleApp</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\PepperX.Sdk\PepperX.Sdk.csproj" />
+  </ItemGroup>
+
+</Project>

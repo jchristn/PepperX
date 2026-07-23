@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <IsPackable>false</IsPackable>
+    <AssemblyName>PepperX.Sdk.Test.Automated</AssemblyName>
+    <RootNamespace>PepperX.Sdk.Test.Automated</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Touchstone.Cli" Version="0.1.12" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\PepperX.Sdk\PepperX.Sdk.csproj" />
+  </ItemGroup>
+
+</Project>
