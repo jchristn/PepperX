@@ -36,7 +36,8 @@ namespace Test.Shared
                     MultiNodeSemanticsSuite.Build(),
                     RehydrationSuite.Build(),
                     RestApiSuite.Build(),
-                    S3ProtocolSuite.Build()
+                    S3ProtocolSuite.Build(),
+                    RespInteropSuite.Build()
                 };
             }
         }

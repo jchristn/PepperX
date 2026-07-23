@@ -763,14 +763,14 @@ Reference: S3Server callback surface (`C:\Code\Less3\S3Server-7.0\src\S3Server\C
 
 Reference: `C:\Code\RedisRespServer\src\Redish.Server` (command handling shape), `Sample.RedisInterface`, `Test.StackExchangeRedis`; command table §11.3→§11.4.
 
-- [ ] **P07-01** `RespProtocolHandler`: `RespListener` + `RespInterface` on `RespSettings`; connection lifecycle; per-connection `RespConnectionState` (selected db, proto version, client name) keyed by client GUID.
-- [ ] **P07-02** `RespResponseWriter`: RESP2/RESP3 emitters for simple string, error, integer, bulk string (binary-safe), array, null (RESP2 `$-1`/RESP3 `_`), map, boolean, double — matching the connection's negotiated protocol.
-- [ ] **P07-03** `RespCommandDispatcher` + one handler class per command family (`Commands/` folder): full §11.4 table incl. HELLO negotiation, SELECT container mapping with lazy container auto-create, INCR-family CAS loop, KEYS glob matcher, SCAN cursor mapping, unsupported-option error messages byte-compatible with Redis phrasing where listed.
-- [ ] **P07-04** Binary safety end-to-end: values with 0x00/0xFF/CRLF bytes survive SET/GET roundtrip (RESP bulk strings are length-prefixed — verify no string conversions corrupt payloads).
-- [ ] **P07-05** Touchstone `RespRawProtocolSuite`: hand-built RESP frames over `TcpClient` asserting exact wire bytes for: PING, ECHO, HELLO 2 vs HELLO 3 reply shapes, SET/GET/DEL/EXISTS, SET NX/XX branches, unsupported EX error, MGET mixed hit/nil, INCR on non-numeric error text, SCAN cursor walk, TYPE/TTL/STRLEN, SELECT isolation between dbs, FLUSHDB, inline error for unknown command.
-- [ ] **P07-06** Touchstone `RespInteropSuite` using **StackExchange.Redis**: connect (handles its handshake: HELLO/CLIENT/COMMAND traffic), StringSet/StringGet incl. binary payload, KeyDelete, KeyExists, StringIncrement, MGET/MSET, DBSIZE, concurrent 32-client hammer (correctness under parallelism).
-- [ ] **P07-07** Concurrency descriptor: 8 parallel INCR loops × 100 on one key → final value exactly 800 (CAS proof, cluster mode).
-- [ ] **P07-08** Cross-protocol descriptor: RESP-SET value readable via REST (container `resp0`, content-type octet-stream) and vice versa.
+- [x] **P07-01** `RespProtocolHandler`: `RespListener` + `RespInterface` on `RespSettings`; connection lifecycle; per-connection `RespConnectionState` (selected db, proto version, client name) keyed by client GUID.
+- [x] **P07-02** `RespResponseWriter`: RESP2/RESP3 emitters for simple string, error, integer, bulk string (binary-safe), array, null (RESP2 `$-1`/RESP3 `_`), map, boolean, double — matching the connection's negotiated protocol.
+- [x] **P07-03** `RespCommandDispatcher` + one handler class per command family (`Commands/` folder): full §11.4 table incl. HELLO negotiation, SELECT container mapping with lazy container auto-create, INCR-family CAS loop, KEYS glob matcher, SCAN cursor mapping, unsupported-option error messages byte-compatible with Redis phrasing where listed.
+- [x] **P07-04** Binary safety end-to-end: values with 0x00/0xFF/CRLF bytes survive SET/GET roundtrip (RESP bulk strings are length-prefixed — verify no string conversions corrupt payloads).
+- [x] **P07-05** Touchstone `RespRawProtocolSuite`: hand-built RESP frames over `TcpClient` asserting exact wire bytes for: PING, ECHO, HELLO 2 vs HELLO 3 reply shapes, SET/GET/DEL/EXISTS, SET NX/XX branches, unsupported EX error, MGET mixed hit/nil, INCR on non-numeric error text, SCAN cursor walk, TYPE/TTL/STRLEN, SELECT isolation between dbs, FLUSHDB, inline error for unknown command.
+- [x] **P07-06** Touchstone `RespInteropSuite` using **StackExchange.Redis**: connect (handles its handshake: HELLO/CLIENT/COMMAND traffic), StringSet/StringGet incl. binary payload, KeyDelete, KeyExists, StringIncrement, MGET/MSET, DBSIZE, concurrent 32-client hammer (correctness under parallelism).
+- [x] **P07-07** Concurrency descriptor: 8 parallel INCR loops × 100 on one key → final value exactly 800 (CAS proof, cluster mode).
+- [x] **P07-08** Cross-protocol descriptor: RESP-SET value readable via REST (container `resp0`, content-type octet-stream) and vice versa.
 
 **Conformance gates**: zero-warning build; RESP suites green including StackExchange.Redis interop; `redis-cli` manual smoke (PING/SET/GET/KEYS/INFO) recorded in phase annotation.
 
