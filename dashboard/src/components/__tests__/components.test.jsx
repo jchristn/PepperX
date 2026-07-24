@@ -16,6 +16,7 @@ import DataTable from '../DataTable.jsx';
 import TablePagination from '../TablePagination.jsx';
 import { StatusBadge, toneForStatus } from '../Badges.jsx';
 import { buildQuery, toEnumerationBody } from '../../utils/api.js';
+import { defaultServerUrl, loadRuntimeConfig, runtimeConfig } from '../../utils/runtimeConfig.js';
 import { formatBytes, formatDuration, formatNumber, formatPercent } from '../../i18n/formatters.js';
 import { directionFor, normalizeLocale } from '../../i18n/localeRegistry.js';
 import resources from '../../i18n/resources.js';
@@ -103,6 +104,44 @@ describe('api helpers', () => {
     const body = toEnumerationBody({ labels: ['a'], tags: { k: 'v' } });
     expect(body.Labels).toEqual(['a']);
     expect(body.Tags).toEqual({ k: 'v' });
+  });
+});
+
+describe('runtime config', () => {
+  it('falls back to defaults when config.json is absent', async () => {
+    // The dev server has no config.json, and a console that refused to start over a missing
+    // configuration hint would be worse than one offering the wrong hint.
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('not found')));
+
+    await loadRuntimeConfig();
+    expect(defaultServerUrl()).toBe('http://localhost:8000');
+
+    vi.unstubAllGlobals();
+  });
+
+  it('takes the injected server URL when the container provides one', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ defaultServerUrl: 'http://node1.internal:8000' }),
+      }),
+    );
+
+    await loadRuntimeConfig();
+    expect(defaultServerUrl()).toBe('http://node1.internal:8000');
+    expect(runtimeConfig().defaultServerUrl).toBe('http://node1.internal:8000');
+
+    vi.unstubAllGlobals();
+  });
+
+  it('ignores a config that omits the URL rather than offering an empty box', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => ({}) }));
+
+    await loadRuntimeConfig();
+    expect(defaultServerUrl()).toBe('http://localhost:8000');
+
+    vi.unstubAllGlobals();
   });
 });
 

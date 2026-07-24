@@ -13,13 +13,16 @@ if errorlevel 1 exit /b 1
 
 echo Using Docker Build Cloud builder %DOCKER_BUILD_CLOUD_BUILDER%.
 
-call build-dashboard.bat "%VERSION_TAG%"
+rem Called by full path, not by bare name: when NoDefaultCurrentDirectoryInExePath is set -- which
+rem Git Bash and some CI shells do -- cmd will not search the current directory, and a bare
+rem `call build-dashboard.bat` fails with "not recognized" even after the pushd above.
+call "%~dp0build-dashboard.bat" "%VERSION_TAG%"
 if errorlevel 1 (
     popd
     exit /b %errorlevel%
 )
 
-call build-server.bat "%VERSION_TAG%"
+call "%~dp0build-server.bat" "%VERSION_TAG%"
 if errorlevel 1 (
     popd
     exit /b %errorlevel%

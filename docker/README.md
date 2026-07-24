@@ -152,6 +152,20 @@ to start over a mapping nothing depends on.
 See [`config/README.md`](config/README.md). In short: edit `config/nodeN.json`, then
 `docker compose restart nodeN`. Settings are read once at startup.
 
+The dashboard is configured by environment variable instead, since it is a static bundle:
+
+| Variable | Default | Notes |
+|---|---|---|
+| `PEPPERX_SERVER_URL` | `http://localhost:8000` | Pre-filled on the connect screen |
+
+The container writes it into `config.json` in the web root at startup and the app reads that before
+rendering. Note that the **browser** resolves the address: a compose service name like
+`http://node1:8000` resolves inside the network and nowhere else. It must also be the REST port
+(8000) — `docker ps` shows 6379 on the same container, but that is the Redis RESP listener.
+
+An operator's own last-used endpoint takes precedence over this default, so it only affects a
+first visit.
+
 Keep production settings out of the repository and mount your own file:
 
 ```yaml

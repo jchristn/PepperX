@@ -105,6 +105,15 @@ services:
     image: jchristn77/pepperx-dashboard:v0.1.0
     container_name: pepperx-dashboard
     restart: unless-stopped
+    environment:
+      # Pre-filled on the connect screen. This is node1's REST port -- 8000, not the 6379 that also
+      # appears in `docker ps` for the same container, which is the Redis RESP listener and speaks a
+      # different protocol entirely.
+      #
+      # The browser resolves this, not the container, so it has to be an address reachable from
+      # wherever the operator is: a compose service name like http://node1:8000 would resolve inside
+      # the network and nowhere else.
+      PEPPERX_SERVER_URL: http://localhost:8000
     ports:
       - "3000:80"
     networks:

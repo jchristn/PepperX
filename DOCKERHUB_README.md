@@ -73,6 +73,9 @@ services:
 
   dashboard:
     image: jchristn77/pepperx-dashboard:v0.1.0
+    environment:
+      # Pre-filled on the connect screen. Resolved by the browser, not the container.
+      PEPPERX_SERVER_URL: http://localhost:8000
     ports:
       - "3000:80"
 
@@ -115,6 +118,22 @@ The two settings you must change for a container deployment:
 | `Mcp.Hostname` | Set to `"*"`; the default `localhost` binds loopback and is unreachable from outside the container |
 
 Settings are read once at startup. Restart the container after changing them.
+
+### Dashboard
+
+The dashboard image takes one variable:
+
+| Variable | Default | Notes |
+|---|---|---|
+| `PEPPERX_SERVER_URL` | `http://localhost:8000` | Pre-filled on the connect screen |
+
+A static bundle cannot read environment variables, so the container writes this into `config.json`
+in the web root at startup and the app fetches it before rendering. That keeps one image usable
+against any node instead of requiring a rebuild to repoint the console.
+
+The **browser** resolves this address, not the container — so a compose service name like
+`http://node1:8000` will not work, and it must be the node's REST port (8000), not the RESP port
+(6379) that also appears in `docker ps` for the same container.
 
 ---
 

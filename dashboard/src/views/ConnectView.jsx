@@ -12,6 +12,7 @@ import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 
 import ApiClient, { ApiError } from '@utils/api.js';
+import { defaultServerUrl } from '@utils/runtimeConfig.js';
 import { useApp } from '@context/AppContext.jsx';
 import { GlobeIcon, MoonIcon, SunIcon } from '@components/Icons.jsx';
 
@@ -20,7 +21,10 @@ export default function ConnectView() {
   const navigate = useNavigate();
   const { setEndpoint, recentEndpoints, theme, toggleTheme, locale, locales, setLocale } = useApp();
 
-  const [url, setUrl] = useState(recentEndpoints[0] ?? 'http://localhost:8000');
+  // A returning operator's own last endpoint beats the deployment's configured default, which in
+  // turn beats the built-in fallback. Overriding someone's history with a container setting would
+  // be the wrong way round.
+  const [url, setUrl] = useState(recentEndpoints[0] ?? defaultServerUrl());
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
 

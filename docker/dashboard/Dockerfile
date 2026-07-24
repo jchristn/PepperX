@@ -27,6 +27,13 @@ LABEL org.opencontainers.image.title="PepperX Dashboard" \
 
 COPY --from=build /build/dist /usr/share/nginx/html
 COPY docker/dashboard/nginx.conf /etc/nginx/conf.d/default.conf
+COPY docker/dashboard/entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
+# Default server URL offered on the connect screen. Override per deployment:
+#   docker run -e PEPPERX_SERVER_URL=http://node1.internal:8000 ...
+# The entrypoint writes it into the web root at start, so one image serves any node.
+ENV PEPPERX_SERVER_URL=http://localhost:8000
 
 EXPOSE 80
 
@@ -36,3 +43,5 @@ EXPOSE 80
 # hidden this, which is why the server image's healthcheck was unaffected.)
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
     CMD wget --quiet --tries=1 --spider http://127.0.0.1/ || exit 1
+
+ENTRYPOINT ["/entrypoint.sh"]
