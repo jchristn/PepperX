@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="https://raw.githubusercontent.com/jchristn/pepperx/main/assets/logo.png" alt="PepperX" width="140" height="140">
+  <img src="https://raw.githubusercontent.com/jchristn/PepperX/main/assets/logo.png" alt="PepperX" width="140" height="140">
 </div>
 
 # PepperX
@@ -14,7 +14,7 @@ self-describing storage — reachable over five protocols at once: **REST**, **S
 trusted network behind a service that performs its own access control. Do not publish these ports to
 the internet.
 
-- Source and full documentation: https://github.com/jchristn/pepperx
+- Source and full documentation: https://github.com/jchristn/PepperX
 - License: MIT
 
 ---
@@ -23,11 +23,14 @@ the internet.
 
 | Image | Contents |
 |---|---|
-| `jchristn/pepperx` | Server node |
-| `jchristn/pepperx-dashboard` | React admin dashboard (static, served by nginx) |
+| `jchristn77/pepperx-server` | Server node |
+| `jchristn77/pepperx-dashboard` | React admin dashboard (static, served by nginx) |
 
-Tags: `0.1.0` for a pinned version, `latest` for the newest build. Pin the version in anything you
+Tags: `v0.1.0` for a pinned version, `latest` for the newest build. Pin the version in anything you
 depend on — this is alpha software and `latest` will move under you.
+
+Both images are multi-architecture: `linux/amd64` and `linux/arm64/v8`, so they run on Intel/AMD
+servers and on ARM (Apple silicon, Graviton, Raspberry Pi) without a platform override.
 
 ---
 
@@ -54,7 +57,7 @@ services:
       retries: 20
 
   pepperx:
-    image: jchristn/pepperx:0.1.0
+    image: jchristn77/pepperx-server:v0.1.0
     depends_on:
       postgres: { condition: service_healthy }
     ports:
@@ -69,7 +72,7 @@ services:
       - extent-data:/app/data/extents
 
   dashboard:
-    image: jchristn/pepperx-dashboard:0.1.0
+    image: jchristn77/pepperx-dashboard:v0.1.0
     ports:
       - "3000:80"
 
@@ -79,7 +82,7 @@ volumes:
 ```
 
 ```bash
-curl -O https://raw.githubusercontent.com/jchristn/pepperx/main/pepperx.json
+curl -O https://raw.githubusercontent.com/jchristn/PepperX/main/pepperx.json
 # edit Database.Hostname to "postgres"
 docker compose up -d
 ```
@@ -101,7 +104,7 @@ volumes:
 Configuration is deliberately file-based rather than environment-variable-based: the settings are
 nested and typed, and flattening them into dozens of variables would make a full configuration harder
 to read, not easier. Start from the
-[default file](https://raw.githubusercontent.com/jchristn/pepperx/main/pepperx.json), which documents
+[default file](https://raw.githubusercontent.com/jchristn/PepperX/main/pepperx.json), which documents
 every setting inline.
 
 The two settings you must change for a container deployment:
@@ -180,11 +183,11 @@ Bind these ports to a private network and put your own authenticated service in 
 
 ## Documentation
 
-- [README](https://github.com/jchristn/pepperx#readme)
-- [REST API](https://github.com/jchristn/pepperx/blob/main/REST_API.md) ·
-  [S3](https://github.com/jchristn/pepperx/blob/main/S3_API.md) ·
-  [RESP](https://github.com/jchristn/pepperx/blob/main/RESP_API.md) ·
-  [WebSockets](https://github.com/jchristn/pepperx/blob/main/WEBSOCKETS_API.md) ·
-  [MCP](https://github.com/jchristn/pepperx/blob/main/MCP_API.md)
-- [SDKs](https://github.com/jchristn/pepperx/blob/main/sdk/README.md) for C#, Python, and JavaScript
-- [Changelog](https://github.com/jchristn/pepperx/blob/main/CHANGELOG.md)
+- [README](https://github.com/jchristn/PepperX#readme)
+- [REST API](https://github.com/jchristn/PepperX/blob/main/REST_API.md) ·
+  [S3](https://github.com/jchristn/PepperX/blob/main/S3_API.md) ·
+  [RESP](https://github.com/jchristn/PepperX/blob/main/RESP_API.md) ·
+  [WebSockets](https://github.com/jchristn/PepperX/blob/main/WEBSOCKETS_API.md) ·
+  [MCP](https://github.com/jchristn/PepperX/blob/main/MCP_API.md)
+- [SDKs](https://github.com/jchristn/PepperX/blob/main/sdk/README.md) for C#, Python, and JavaScript
+- [Changelog](https://github.com/jchristn/PepperX/blob/main/CHANGELOG.md)

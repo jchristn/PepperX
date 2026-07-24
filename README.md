@@ -173,6 +173,19 @@ with PepperXClient("http://localhost:8000") as client:
 C#, Python, and JavaScript clients cover REST and WebSockets — see [`sdk/`](sdk/). For S3, RESP, and
 MCP, use the standard client for that protocol; there is nothing PepperX-specific to wrap.
 
+### Building the images
+
+`docker/compose.yaml` pulls published images. To build and push your own:
+
+```bat
+build-all.bat v0.1.0
+```
+
+Produces multi-architecture images — `linux/amd64` and `linux/arm64/v8` — for
+`jchristn77/pepperx-server` and `jchristn77/pepperx-dashboard`, tagged with the version and `latest`.
+`build-server.bat` and `build-dashboard.bat` do one each. See [`docker/`](docker/) for building a
+single-architecture image locally instead.
+
 ---
 
 ## Using the dashboard

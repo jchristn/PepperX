@@ -1,17 +1,48 @@
+# Both Dockerfiles take the repository root as their build context — the server image needs src/ and
+# pepperx.json, the dashboard image needs dashboard/ and docker/dashboard/nginx.conf. That makes this
+# file worth keeping tight: the whole context is uploaded to the Docker Build Cloud builder on every
+# build, so excluding what the images never read is the difference between a fast build and a slow one.
+
+# Build output
 **/bin/
 **/obj/
-**/node_modules/
 **/dist/
+**/artifacts/
+**/TestResults/
+**/test-artifacts/
 **/.vs/
 **/.vite/
 **/.idea/
-**/TestResults/
-**/artifacts/
-**/test-artifacts/
+**/*.user
+
+# Dependencies — restored inside the image, never copied in
+**/node_modules/
+
+# Python SDK artifacts
+**/__pycache__/
+**/*.egg-info/
+**/.pytest_cache/
+**/.ruff_cache/
+**/.mypy_cache/
+**/.venv/
+
+# Runtime state
 data/
 logs/
 *.log
-.git/
-.gitignore
-**/*.user
 results.json
+perf-baseline.json
+
+# Not read by either image
+.git/
+.github/
+.gitignore
+.dockerignore
+sdk/
+postman/
+memory/
+assets/
+dashboard/qa/
+dashboard/qa-output*/
+*.md
+*.bat

@@ -27,15 +27,44 @@ docker compose up -d
 | `config/` | Settings files mounted into each node |
 | `factory/` | Reset-and-seed scripts |
 
-Build from the **repository root**, not from `docker/` — both Dockerfiles need `src/` and
-`dashboard/` in the build context:
+---
 
-```bash
-docker build -f docker/server/Dockerfile -t pepperx-server .
-docker build -f docker/dashboard/Dockerfile -t pepperx-dashboard .
+## Images
+
+`compose.yaml` **pulls** published images rather than building them:
+
+| Service | Image |
+|---|---|
+| node1, node2 | `jchristn77/pepperx-server:v0.1.0` |
+| dashboard | `jchristn77/pepperx-dashboard:v0.1.0` |
+
+That means this directory works from a bare checkout of just `docker/`, and that everyone running the
+stack gets the same bits rather than whatever their local build produced.
+
+### Building them yourself
+
+From the **repository root**, not from `docker/`:
+
+```bat
+build-all.bat v0.1.0          :: both images
+build-server.bat v0.1.0       :: just the server
+build-dashboard.bat v0.1.0    :: just the dashboard
 ```
 
-`docker compose` handles this itself; its build context is `..`.
+These build for `linux/amd64` and `linux/arm64/v8` on Docker Build Cloud and push both the version tag
+and `latest`. Multi-architecture manifests cannot be loaded into the local daemon, which is why they
+push rather than `--load`.
+
+To build a single-architecture image locally for testing instead:
+
+```bash
+docker build -f docker/server/Dockerfile -t pepperx-server:local .
+docker build -f docker/dashboard/Dockerfile -t pepperx-dashboard:local .
+```
+
+Both take the repository root as context — the server image needs `src/` and `pepperx.json`, the
+dashboard image needs `dashboard/` and `docker/dashboard/nginx.conf`. Point `compose.yaml` at the
+`:local` tags if you want the stack to run what you just built.
 
 ---
 

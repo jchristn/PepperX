@@ -3,6 +3,10 @@
 #   cd docker && docker compose up -d
 #   open http://localhost:3000  and connect to  http://localhost:8000
 #
+# The images are pulled from Docker Hub rather than built here, so this file works from a bare
+# checkout of just docker/. To build and publish them yourself, run build-all.bat from the repository
+# root -- it produces multi-architecture images for linux/amd64 and linux/arm64/v8.
+#
 # Two nodes rather than one on purpose. PepperX nodes are stateless and coordinate through the
 # database and shared storage, and a single-node stack would hide the mistakes that only appear with
 # more than one -- notably that both nodes must see the same extent storage. Point them at different
@@ -40,10 +44,7 @@ services:
       - pepperx
 
   node1:
-    build:
-      context: ..
-      dockerfile: docker/server/Dockerfile
-    image: pepperx-server:local
+    image: jchristn77/pepperx-server:v0.1.0
     container_name: pepperx-node1
     restart: unless-stopped
     depends_on:
@@ -71,7 +72,7 @@ services:
       - pepperx
 
   node2:
-    image: pepperx-server:local
+    image: jchristn77/pepperx-server:v0.1.0
     container_name: pepperx-node2
     restart: unless-stopped
     depends_on:
@@ -101,10 +102,7 @@ services:
       - pepperx
 
   dashboard:
-    build:
-      context: ..
-      dockerfile: docker/dashboard/Dockerfile
-    image: pepperx-dashboard:local
+    image: jchristn77/pepperx-dashboard:v0.1.0
     container_name: pepperx-dashboard
     restart: unless-stopped
     ports:
