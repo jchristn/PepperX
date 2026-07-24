@@ -133,6 +133,14 @@ namespace Test.Shared
             settings.Resp.Enabled = enableResp;
             if (enableResp) settings.Resp.Port = respPort;
             settings.Websocket.Enabled = enableWs;
+            // Loopback, not the "*" the shipped settings use. An in-process test is loopback-only by
+            // nature, and on Windows the wildcard prefix needs a urlacl reservation that a test run
+            // cannot assume.
+            //
+            // That leaves a real gap: two container-only failures escaped this suite because the
+            // WebSocket and MCP listeners bound loopback when configured with "*", making them
+            // unreachable from outside a container while REST and S3 on the same node worked. The
+            // wildcard path is verified against the Docker stack instead -- see docker/README.md.
             settings.Websocket.Hostname = "127.0.0.1";
             if (enableWs) settings.Websocket.Port = wsPort;
             settings.Mcp.Enabled = enableMcp;

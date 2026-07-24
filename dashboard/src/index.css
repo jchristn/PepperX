@@ -1,0 +1,351 @@
+/*
+ * PepperX dashboard design tokens.
+ *
+ * Semantic names only: components reference roles (surface, border, accent, danger), never raw
+ * colors, so both themes stay consistent and a re-theme touches one file.
+ */
+
+:root {
+  /* Neutral surfaces */
+  --color-background: #f6f7f9;
+  --color-surface: #ffffff;
+  --color-surface-alt: #f1f3f6;
+  --color-surface-hover: #eceff3;
+  --color-border: #dfe3e9;
+  --color-border-strong: #c6ccd6;
+
+  /* Text */
+  --color-text: #16202c;
+  --color-text-secondary: #5b6774;
+  --color-text-muted: #7b8794;
+  --color-text-inverse: #ffffff;
+
+  /* Brand and status */
+  --color-accent: #b8253c;
+  --color-accent-hover: #9c1d32;
+  --color-accent-soft: #fdeef1;
+  --color-success: #1a7f47;
+  --color-success-soft: #e6f4ec;
+  --color-warning: #a86a00;
+  --color-warning-soft: #fdf2e0;
+  --color-danger: #c02a2a;
+  --color-danger-soft: #fbeaea;
+  --color-info: #1d6fa5;
+  --color-info-soft: #e8f2f9;
+  --color-focus: #3b82f6;
+
+  /* Chart series */
+  --color-chart-1: #1d6fa5;
+  --color-chart-2: #1a7f47;
+  --color-chart-3: #a86a00;
+  --color-chart-4: #7a4bbd;
+  --color-chart-grid: #e4e8ee;
+
+  /* Typography */
+  --font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue',
+    'Noto Sans', 'Noto Sans CJK SC', 'Noto Sans CJK JP', 'Microsoft YaHei', 'Hiragino Sans', Arial,
+    sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace;
+  --font-size-xs: 0.6875rem;
+  --font-size-sm: 0.8125rem;
+  --font-size-base: 0.9375rem;
+  --font-size-lg: 1.0625rem;
+  --font-size-xl: 1.25rem;
+  --font-size-2xl: 1.5rem;
+  --line-height-tight: 1.25;
+  --line-height-base: 1.5;
+
+  /* Spacing */
+  --spacing-xs: 0.25rem;
+  --spacing-sm: 0.5rem;
+  --spacing-md: 0.875rem;
+  --spacing-lg: 1.25rem;
+  --spacing-xl: 2rem;
+
+  /* Radii, shadows, layout */
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 10px;
+  --shadow-sm: 0 1px 2px rgba(16, 24, 40, 0.06);
+  --shadow-md: 0 4px 12px rgba(16, 24, 40, 0.1);
+  --shadow-lg: 0 16px 40px rgba(16, 24, 40, 0.18);
+  --sidebar-width: 240px;
+  --sidebar-collapsed-width: 60px;
+  --topbar-height: 56px;
+  --control-height: 34px;
+}
+
+[data-theme='dark'] {
+  --color-background: #0f141a;
+  --color-surface: #161d26;
+  --color-surface-alt: #1c242f;
+  --color-surface-hover: #222c38;
+  --color-border: #2a3542;
+  --color-border-strong: #3b4857;
+
+  --color-text: #e8edf3;
+  --color-text-secondary: #a4b0be;
+  --color-text-muted: #7d8b9a;
+  --color-text-inverse: #0f141a;
+
+  --color-accent: #f2637a;
+  --color-accent-hover: #ff7d90;
+  --color-accent-soft: #3a1c24;
+  --color-success: #4ac585;
+  --color-success-soft: #14301f;
+  --color-warning: #e0a34a;
+  --color-warning-soft: #33260f;
+  --color-danger: #f07171;
+  --color-danger-soft: #3a1a1a;
+  --color-info: #66b3e0;
+  --color-info-soft: #14293a;
+  --color-focus: #6ea8fe;
+
+  --color-chart-1: #66b3e0;
+  --color-chart-2: #4ac585;
+  --color-chart-3: #e0a34a;
+  --color-chart-4: #b48ae8;
+  --color-chart-grid: #253040;
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.45);
+  --shadow-lg: 0 16px 40px rgba(0, 0, 0, 0.6);
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-family);
+  font-size: var(--font-size-base);
+  line-height: var(--line-height-base);
+  color: var(--color-text);
+  background-color: var(--color-background);
+  -webkit-font-smoothing: antialiased;
+}
+
+h1,
+h2,
+h3,
+h4 {
+  margin: 0;
+  line-height: var(--line-height-tight);
+  font-weight: 600;
+}
+
+a {
+  color: var(--color-accent);
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+code,
+pre,
+.mono {
+  font-family: var(--font-mono);
+  font-size: var(--font-size-sm);
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+}
+
+/* Forms ------------------------------------------------------------------ */
+
+input,
+select,
+textarea {
+  width: 100%;
+  min-height: var(--control-height);
+  padding: 0 var(--spacing-sm);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  font-family: inherit;
+  font-size: var(--font-size-sm);
+  color: var(--color-text);
+  background-color: var(--color-surface);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+textarea {
+  padding: var(--spacing-sm);
+  font-family: var(--font-mono);
+  line-height: 1.45;
+  resize: vertical;
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  outline: none;
+  border-color: var(--color-focus);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-focus) 22%, transparent);
+}
+
+input:disabled,
+select:disabled,
+textarea:disabled,
+button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+label {
+  display: block;
+  margin-bottom: var(--spacing-xs);
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+
+/* Buttons ---------------------------------------------------------------- */
+
+button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-xs);
+  min-height: var(--control-height);
+  padding: 0 var(--spacing-md);
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  font-family: inherit;
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+  color: var(--color-text);
+  background: transparent;
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.button-primary {
+  color: var(--color-text-inverse);
+  background-color: var(--color-accent);
+}
+
+.button-primary:hover:not(:disabled) {
+  background-color: var(--color-accent-hover);
+}
+
+.button-secondary {
+  border-color: var(--color-border);
+  background-color: var(--color-surface);
+}
+
+.button-secondary:hover:not(:disabled) {
+  background-color: var(--color-surface-hover);
+}
+
+.button-danger {
+  color: #fff;
+  background-color: var(--color-danger);
+}
+
+.button-danger:hover:not(:disabled) {
+  filter: brightness(1.08);
+}
+
+.button-icon {
+  min-width: var(--control-height);
+  padding: 0;
+  border-radius: var(--radius-md);
+  color: var(--color-text-secondary);
+}
+
+.button-icon:hover:not(:disabled) {
+  color: var(--color-text);
+  background-color: var(--color-surface-hover);
+}
+
+/* Utilities -------------------------------------------------------------- */
+
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-lg);
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.row-between {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-md);
+}
+
+.muted {
+  color: var(--color-text-muted);
+}
+
+.text-sm {
+  font-size: var(--font-size-sm);
+}
+
+.nowrap {
+  white-space: nowrap;
+}
+
+.spinner {
+  width: 18px;
+  height: 18px;
+  border: 2px solid var(--color-border);
+  border-top-color: var(--color-accent);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Scrollbars ------------------------------------------------------------- */
+
+* {
+  scrollbar-color: var(--color-border-strong) transparent;
+  scrollbar-width: thin;
+}
+
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+*::-webkit-scrollbar-thumb {
+  border: 3px solid transparent;
+  border-radius: 6px;
+  background-clip: content-box;
+  background-color: var(--color-border-strong);
+}

@@ -1,0 +1,195 @@
+/**
+ * Component tests.
+ *
+ * These cover the logic that is easy to get subtly wrong and invisible in a screenshot: paging
+ * arithmetic, byte and duration formatting across locales, pseudo-locale generation, and the
+ * bucket-merge that keeps the chart's bar count stable.
+ */
+
+import React from 'react';
+import { describe, expect, it, vi } from 'vitest';
+import { fireEvent, render, screen } from '@testing-library/react';
+import '@testing-library/jest-dom/vitest';
+
+import '../../i18n/index.js';
+import DataTable from '../DataTable.jsx';
+import TablePagination from '../TablePagination.jsx';
+import { StatusBadge, toneForStatus } from '../Badges.jsx';
+import { buildQuery, toEnumerationBody } from '../../utils/api.js';
+import { formatBytes, formatDuration, formatNumber, formatPercent } from '../../i18n/formatters.js';
+import { directionFor, normalizeLocale } from '../../i18n/localeRegistry.js';
+import resources from '../../i18n/resources.js';
+
+describe('formatters', () => {
+  it('formats bytes in binary units', () => {
+    expect(formatBytes(0, 'en')).toBe('0 B');
+    expect(formatBytes(1023, 'en')).toBe('1,023 B');
+    expect(formatBytes(1024, 'en')).toBe('1 KiB');
+    expect(formatBytes(1536, 'en')).toBe('1.5 KiB');
+    expect(formatBytes(1024 ** 3, 'en')).toBe('1 GiB');
+  });
+
+  it('scales durations from milliseconds to minutes', () => {
+    expect(formatDuration(42, 'en')).toBe('42 ms');
+    expect(formatDuration(1500, 'en')).toBe('1.5 s');
+    expect(formatDuration(90_000, 'en')).toBe('1m 30s');
+  });
+
+  it('uses the locale rather than the browser default', () => {
+    expect(formatNumber(1234.5, 'de')).toBe('1.234,5');
+    expect(formatNumber(1234.5, 'en')).toBe('1,234.5');
+  });
+
+  it('renders an em dash for missing values rather than NaN', () => {
+    expect(formatBytes(null, 'en')).toBe('—');
+    expect(formatDuration(undefined, 'en')).toBe('—');
+    expect(formatPercent(null, 'en')).toBe('—');
+  });
+});
+
+describe('locale registry', () => {
+  it('falls back from a region-qualified locale to its language', () => {
+    expect(normalizeLocale('de-AT')).toBe('de');
+    expect(normalizeLocale('ja-JP')).toBe('ja');
+    expect(normalizeLocale('xx-YY')).toBe('en');
+    expect(normalizeLocale(undefined)).toBe('en');
+  });
+
+  it('reports right-to-left only for the RTL pseudo-locale', () => {
+    expect(directionFor('en')).toBe('ltr');
+    expect(directionFor('ar-XB')).toBe('rtl');
+  });
+});
+
+describe('pseudo-locales', () => {
+  it('expands strings so truncation shows up during development', () => {
+    const source = resources.en.translation.nav.containers;
+    const pseudo = resources['en-XA'].translation.nav.containers;
+    expect(pseudo.length).toBeGreaterThan(source.length * 1.3);
+  });
+
+  it('preserves interpolation placeholders', () => {
+    expect(resources['en-XA'].translation.table.showing).toContain('{{total}}');
+    expect(resources['ar-XB'].translation.table.showing).toContain('{{from}}');
+  });
+
+  it('covers every key present in the source catalog', () => {
+    const keys = (object, prefix = '') =>
+      Object.entries(object).flatMap(([key, value]) =>
+        typeof value === 'string' ? [`${prefix}${key}`] : keys(value, `${prefix}${key}.`),
+      );
+
+    const source = keys(resources.en.translation);
+    for (const locale of ['de', 'ja', 'en-XA', 'ar-XB']) {
+      expect(keys(resources[locale].translation).sort()).toEqual(source.sort());
+    }
+  });
+});
+
+describe('api helpers', () => {
+  it('drops empty values from query strings', () => {
+    expect(buildQuery({ a: 1, b: '', c: null, d: undefined, e: 'x' })).toBe('?a=1&e=x');
+    expect(buildQuery({})).toBe('');
+  });
+
+  it('omits absent filters from the enumeration body', () => {
+    const body = toEnumerationBody({ pageSize: 10, prefix: 'logs/' });
+    expect(body).toMatchObject({ MaxResults: 10, Skip: 0, Prefix: 'logs/' });
+    expect(body).not.toHaveProperty('Labels');
+    expect(body).not.toHaveProperty('Tags');
+  });
+
+  it('includes labels and tags when present', () => {
+    const body = toEnumerationBody({ labels: ['a'], tags: { k: 'v' } });
+    expect(body.Labels).toEqual(['a']);
+    expect(body.Tags).toEqual({ k: 'v' });
+  });
+});
+
+describe('status tones', () => {
+  it('maps status classes onto semantic tones', () => {
+    expect(toneForStatus(200)).toBe('success');
+    expect(toneForStatus(301)).toBe('info');
+    expect(toneForStatus(404)).toBe('warning');
+    expect(toneForStatus(500)).toBe('danger');
+    expect(toneForStatus('x')).toBe('neutral');
+  });
+
+  it('renders the code as text, so color is never the only signal', () => {
+    render(<StatusBadge status={404} />);
+    expect(screen.getByText('404')).toBeInTheDocument();
+  });
+});
+
+describe('DataTable', () => {
+  const columns = [
+    { key: 'name', label: 'Name' },
+    { key: 'size', label: 'Size', render: (item) => `${item.size} B` },
+  ];
+  const items = [
+    { id: '1', name: 'alpha', size: 10 },
+    { id: '2', name: 'beta', size: 20 },
+  ];
+
+  it('renders rows using column renderers', () => {
+    render(<DataTable columns={columns} items={items} />);
+    expect(screen.getByText('alpha')).toBeInTheDocument();
+    expect(screen.getByText('20 B')).toBeInTheDocument();
+  });
+
+  it('shows the empty message instead of an empty table body', () => {
+    render(<DataTable columns={columns} items={[]} emptyMessage="Nothing here" />);
+    expect(screen.getByText('Nothing here')).toBeInTheDocument();
+  });
+
+  it('does not fire the row handler when a checkbox is clicked', () => {
+    const onRowClick = vi.fn();
+    const onSelectedChange = vi.fn();
+    render(
+      <DataTable
+        columns={columns}
+        items={items}
+        onRowClick={onRowClick}
+        selectable
+        selected={new Set()}
+        onSelectedChange={onSelectedChange}
+      />,
+    );
+
+    fireEvent.click(screen.getByLabelText('1'));
+    expect(onSelectedChange).toHaveBeenCalled();
+    expect(onRowClick).not.toHaveBeenCalled();
+  });
+});
+
+describe('TablePagination', () => {
+  it('reports the visible record range', () => {
+    render(<TablePagination totalRecords={130} pageNumber={3} pageSize={25} />);
+    expect(screen.getByText('Showing 51–75 of 130 records')).toBeInTheDocument();
+  });
+
+  it('reports a zero range for an empty result set', () => {
+    render(<TablePagination totalRecords={0} pageNumber={1} pageSize={25} />);
+    expect(screen.getByText('Showing 0–0 of 0 records')).toBeInTheDocument();
+  });
+
+  it('disables the previous controls on the first page', () => {
+    render(<TablePagination totalRecords={130} pageNumber={1} pageSize={25} onPageChange={vi.fn()} />);
+    // Queried by role: these controls carry both aria-label and title, which getByLabelText
+    // counts as two matches for the same element.
+    expect(screen.getByRole('button', { name: 'First page' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Next page' })).toBeEnabled();
+  });
+
+  it('clamps a jump beyond the last page', () => {
+    const onPageChange = vi.fn();
+    render(<TablePagination totalRecords={130} pageNumber={1} pageSize={25} onPageChange={onPageChange} />);
+
+    const input = screen.getByRole('textbox', { name: 'Go to page' });
+    fireEvent.change(input, { target: { value: '999' } });
+    fireEvent.blur(input);
+
+    // 130 records at 25 per page is 6 pages.
+    expect(onPageChange).toHaveBeenCalledWith(6);
+  });
+});

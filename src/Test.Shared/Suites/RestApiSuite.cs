@@ -113,6 +113,86 @@ namespace Test.Shared.Suites
                         string body = await spec.Content.ReadAsStringAsync(ct);
                         Check.True(body.Contains("/v1.0/containers", StringComparison.Ordinal), "paths present");
                         Check.True(body.Contains("PepperX REST API", StringComparison.Ordinal), "title present");
+                    }),
+
+                    new TestCaseDescriptor("RestApi", "Cors", "CORS origin header is sent exactly once", async ct =>
+                    {
+                        // The dashboard fetches these two from a different origin. Watson's OpenAPI
+                        // handler emits its own Access-Control-Allow-Origin, so adding ours as well
+                        // produced "*, *" -- which browsers reject as a malformed origin list, and
+                        // which curl and server-side clients never notice.
+                        foreach (string path in new[] { "/openapi.json", "/v1.0/admin/stats" })
+                        {
+                            HttpResponseMessage response = await (await ClientAsync(ct)).GetAsync(path, ct);
+                            Check.True(
+                                response.Headers.TryGetValues("Access-Control-Allow-Origin", out IEnumerable<string>? origins),
+                                "CORS header present on " + path);
+
+                            List<string> values = new List<string>(origins!);
+                            Check.Equal(1, values.Count, "single CORS origin header on " + path);
+                            Check.Equal("*", values[0], "permissive CORS origin on " + path);
+                        }
+                    }),
+
+                    new TestCaseDescriptor("RestApi", "ResponseHeaders", "Responses do not echo request headers", async ct =>
+                    {
+                        // Watson seeds responses with default headers that are request headers by
+                        // nature. Echoing them back is not merely untidy: "Connection: close" on a
+                        // keep-alive connection makes strict HTTP parsers reject the whole response
+                        // (Node refused every object read with "Data after Connection: close"), and
+                        // "Host" leaks the node's internal hostname to every caller.
+                        HttpResponseMessage response = await (await ClientAsync(ct)).GetAsync("/v1.0/api/health", ct);
+
+                        foreach (string header in new[] { "Accept", "Accept-Language", "Accept-Charset", "Cache-Control", "User-Agent" })
+                        {
+                            Check.False(response.Headers.Contains(header), "no echoed " + header + " header");
+                        }
+                    }),
+
+                    new TestCaseDescriptor("RestApi", "ObjectFraming", "Object reads are length-declared and single-terminated", async ct =>
+                    {
+                        // The read path hand-rolled chunked framing and then returned null, so the
+                        // typed-route wrapper appended a second terminator. curl tolerated the extra
+                        // bytes; Node's parser rejected the response outright. A length-declared send
+                        // avoids the whole class of problem, so the framing is asserted directly.
+                        string container = DbTest.NewContainerName();
+                        await (await ClientAsync(ct)).PutAsync("/v1.0/containers", Json("{\"Name\":\"" + container + "\"}"), ct);
+
+                        byte[] payload = Encoding.UTF8.GetBytes("framing check payload");
+                        using (ByteArrayContent content = new ByteArrayContent(payload))
+                        {
+                            await (await ClientAsync(ct)).PutAsync("/v1.0/containers/" + container + "/object?key=framed.bin", content, ct);
+                        }
+
+                        HttpResponseMessage read = await (await ClientAsync(ct)).GetAsync("/v1.0/containers/" + container + "/object?key=framed.bin", ct);
+                        Check.True(read.IsSuccessStatusCode, "object read succeeded");
+                        Check.Equal(false, read.Headers.TransferEncodingChunked ?? false, "response is not chunked");
+                        Check.Equal((long)payload.Length, read.Content.Headers.ContentLength ?? -1, "content length declares the payload size");
+
+                        byte[] received = await read.Content.ReadAsByteArrayAsync(ct);
+                        Check.Equal(payload.Length, received.Length, "exactly the payload came back, with no trailing bytes");
+                    }),
+
+                    new TestCaseDescriptor("RestApi", "Settings", "Settings expose protocols without credentials", async ct =>
+                    {
+                        HttpResponseMessage response = await (await ClientAsync(ct)).GetAsync("/v1.0/admin/settings", ct);
+                        Check.True(response.IsSuccessStatusCode, "settings served");
+
+                        string body = await response.Content.ReadAsStringAsync(ct);
+                        foreach (string protocol in new[] { "REST", "S3", "RESP", "WebSockets", "MCP" })
+                        {
+                            Check.True(body.Contains("\"" + protocol + "\"", StringComparison.Ordinal), protocol + " listed");
+                        }
+
+                        Check.True(body.Contains("\"NodeId\"", StringComparison.Ordinal), "node identity present");
+                        Check.True(body.Contains("\"DatabaseName\"", StringComparison.Ordinal), "database named");
+
+                        // The whole point of a separate response type rather than serializing settings
+                        // directly: the database password and S3 static keys must not travel to an
+                        // unauthenticated dashboard.
+                        Check.False(body.Contains("Password", StringComparison.OrdinalIgnoreCase), "no password field");
+                        Check.False(body.Contains("SecretKey", StringComparison.OrdinalIgnoreCase), "no S3 secret");
+                        Check.False(body.Contains("AccessKey", StringComparison.OrdinalIgnoreCase), "no S3 access key");
                     })
                 });
         }

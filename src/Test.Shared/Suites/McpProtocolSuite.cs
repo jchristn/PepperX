@@ -57,31 +57,71 @@ namespace Test.Shared.Suites
                     {
                         string container = DbTest.NewContainerName();
 
-                        string create = await CallToolAsync("pepperx_container_create", "{\"Name\":\"" + container + "\"}", ct);
+                        string create = await CallToolAsync("pepperx_container_create", "{\"name\":\"" + container + "\"}", ct);
                         Check.True(create.Contains(container, StringComparison.Ordinal), "container created via MCP");
 
                         string payload = Convert.ToBase64String(Encoding.UTF8.GetBytes("mcp-payload"));
-                        string write = await CallToolAsync("pepperx_object_write", "{\"Container\":\"" + container + "\",\"Key\":\"k1\",\"DataBase64\":\"" + payload + "\"}", ct);
+                        string write = await CallToolAsync("pepperx_object_write", "{\"container\":\"" + container + "\",\"key\":\"k1\",\"dataBase64\":\"" + payload + "\"}", ct);
                         Check.True(write.Contains("ExtentId", StringComparison.Ordinal), "object written via MCP");
 
-                        string read = await CallToolAsync("pepperx_object_read", "{\"Container\":\"" + container + "\",\"Key\":\"k1\"}", ct);
+                        string read = await CallToolAsync("pepperx_object_read", "{\"container\":\"" + container + "\",\"key\":\"k1\"}", ct);
                         Check.True(read.Contains(payload, StringComparison.Ordinal), "payload returned via MCP");
                     }),
 
                     new TestCaseDescriptor("McpProtocol", "ToolCallError", "A missing object returns a tool error", async ct =>
                     {
                         string container = DbTest.NewContainerName();
-                        await CallToolAsync("pepperx_container_create", "{\"Name\":\"" + container + "\"}", ct);
-                        string read = await CallToolAsync("pepperx_object_read", "{\"Container\":\"" + container + "\",\"Key\":\"missing\"}", ct);
+                        await CallToolAsync("pepperx_container_create", "{\"name\":\"" + container + "\"}", ct);
+                        string read = await CallToolAsync("pepperx_object_read", "{\"container\":\"" + container + "\",\"key\":\"missing\"}", ct);
                         Check.True(read.Contains("not found", StringComparison.OrdinalIgnoreCase), "error surfaced for missing object");
+                    }),
+
+                    new TestCaseDescriptor("McpProtocol", "ToolSchemas", "Tools publish argument schemas", async ct =>
+                    {
+                        // A tool whose schema is an open object tells a client nothing about what to
+                        // pass. These assertions are what keep the surface usable by an agent that has
+                        // only tools/list to go on.
+                        string body = await RpcAsync("tools/list", "{}", ct);
+
+                        Check.True(body.Contains("dataBase64", StringComparison.Ordinal), "write payload argument described");
+                        Check.True(body.Contains("labelsFilter", StringComparison.Ordinal), "search filter argument described");
+                        Check.True(body.Contains("Container name.", StringComparison.Ordinal), "arguments carry descriptions");
+                        Check.True(body.Contains("required", StringComparison.Ordinal), "required arguments declared");
+                    }),
+
+                    new TestCaseDescriptor("McpProtocol", "ArgumentCasing", "camelCase arguments bind and off-schema names are refused", async ct =>
+                    {
+                        // MCP clients send the camelCase names the schema declares, while the argument
+                        // type is PascalCase like the rest of the codebase. Case-sensitive binding left
+                        // every property null, so a call arrived with no container and no key and then
+                        // failed deep inside a service -- and this suite missed it entirely because it
+                        // spoke the server's internal casing rather than the protocol's.
+                        string container = DbTest.NewContainerName();
+                        await CallToolAsync("pepperx_container_create", "{\"name\":\"" + container + "\"}", ct);
+
+                        string payload = Convert.ToBase64String(Encoding.UTF8.GetBytes("casing"));
+                        await CallToolAsync("pepperx_object_write", "{\"container\":\"" + container + "\",\"key\":\"camel\",\"dataBase64\":\"" + payload + "\"}", ct);
+
+                        string camel = await CallToolAsync("pepperx_object_read_metadata", "{\"container\":\"" + container + "\",\"key\":\"camel\"}", ct);
+                        Check.True(camel.Contains("camel", StringComparison.Ordinal), "camelCase arguments bind");
+
+                        // Names outside the published schema are rejected by schema validation before
+                        // reaching the handler. That is the desired outcome: the client gets a precise
+                        // "missing required property" instead of an obscure failure from inside a
+                        // service that received nulls.
+                        string offSchema = await CallToolAsync("pepperx_object_exists", "{\"Container\":\"" + container + "\",\"Key\":\"camel\"}", ct);
+                        Check.True(offSchema.Contains("container", StringComparison.OrdinalIgnoreCase), "off-schema argument names named in the error");
+                        Check.True(
+                            offSchema.Contains("required", StringComparison.OrdinalIgnoreCase) || offSchema.Contains("error", StringComparison.OrdinalIgnoreCase),
+                            "off-schema arguments rejected rather than silently ignored");
                     }),
 
                     new TestCaseDescriptor("McpProtocol", "CrossProtocol", "MCP-written object readable via REST", async ct =>
                     {
                         string container = DbTest.NewContainerName();
-                        await CallToolAsync("pepperx_container_create", "{\"Name\":\"" + container + "\"}", ct);
+                        await CallToolAsync("pepperx_container_create", "{\"name\":\"" + container + "\"}", ct);
                         string payload = Convert.ToBase64String(Encoding.UTF8.GetBytes("mcp-cross"));
-                        await CallToolAsync("pepperx_object_write", "{\"Container\":\"" + container + "\",\"Key\":\"shared\",\"DataBase64\":\"" + payload + "\"}", ct);
+                        await CallToolAsync("pepperx_object_write", "{\"container\":\"" + container + "\",\"key\":\"shared\",\"dataBase64\":\"" + payload + "\"}", ct);
 
                         HttpResponseMessage read = await (await SharedServer.GetAsync(ct)).Client.GetAsync("/v1.0/containers/" + container + "/object?key=shared", ct);
                         Check.Equal("mcp-cross", await read.Content.ReadAsStringAsync(ct), "MCP value read via REST");
@@ -100,7 +140,7 @@ namespace Test.Shared.Suites
         public static Task<string> WriteObjectAsync(string container, string key, string payload, CancellationToken ct)
         {
             string base64 = Convert.ToBase64String(Encoding.UTF8.GetBytes(payload));
-            return CallToolAsync("pepperx_object_write", "{\"Container\":\"" + container + "\",\"Key\":\"" + key + "\",\"ContentType\":\"text/plain\",\"DataBase64\":\"" + base64 + "\"}", ct);
+            return CallToolAsync("pepperx_object_write", "{\"container\":\"" + container + "\",\"key\":\"" + key + "\",\"contentType\":\"text/plain\",\"dataBase64\":\"" + base64 + "\"}", ct);
         }
 
         /// <summary>
@@ -112,7 +152,7 @@ namespace Test.Shared.Suites
         /// <returns>The raw tool-call response.</returns>
         public static Task<string> ReadObjectAsync(string container, string key, CancellationToken ct)
         {
-            return CallToolAsync("pepperx_object_read", "{\"Container\":\"" + container + "\",\"Key\":\"" + key + "\"}", ct);
+            return CallToolAsync("pepperx_object_read", "{\"container\":\"" + container + "\",\"key\":\"" + key + "\"}", ct);
         }
 
         private static async Task<HttpClient> HttpAsync(CancellationToken ct)

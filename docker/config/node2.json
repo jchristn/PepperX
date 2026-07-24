@@ -1,0 +1,91 @@
+{
+  "CreatedUtc": "2026-07-23T00:00:00.000Z",
+  "Logging": {
+    "ConsoleLogging": true,
+    "FileLogging": false,
+    "LogDirectory": "logs",
+    "LogFilename": "pepperx.log",
+    "MinimumSeverity": "Info"
+  },
+  "Database": {
+    "Type": "Postgresql",
+    "Hostname": "postgres",
+    "Port": 5432,
+    "DatabaseName": "pepperx",
+    "Username": "pepperx",
+    "Password": "pepperx",
+    "MaxPoolSize": 100
+  },
+  "Storage": {
+    "Driver": "Disk",
+    "Disk": {
+      "RootDirectory": "./data/extents"
+    },
+    "VerifyChecksumOnRead": false,
+    "MaxObjectBytes": 5368709120,
+    "MaxKeyBytes": 1024,
+    "MaxLabels": 64,
+    "MaxLabelLength": 512,
+    "MaxTags": 64,
+    "MaxMetadataObjectBytes": 1048576,
+    "ReplaceRetryCount": 3
+  },
+  "Cluster": {
+    "NodeId": null,
+    "DeleteCoordinationMode": "Cluster",
+    "ReadLeaseTtlSeconds": 30,
+    "HeartbeatIntervalSeconds": 5,
+    "NodeDeadAfterSeconds": 60,
+    "DeleteDrainPollMs": 50,
+    "DeleteDrainTimeoutSeconds": 120,
+    "JanitorIntervalSeconds": 60
+  },
+  "Rest": {
+    "Enabled": true,
+    "Hostname": "*",
+    "Port": 8000,
+    "Ssl": false,
+    "MetadataObjectHeaderLimitBytes": 16384
+  },
+  "S3": {
+    "Enabled": true,
+    "Hostname": "*",
+    "Port": 8001,
+    "Ssl": false,
+    "Region": "us-west-1",
+    "AllowAnonymous": true,
+    "StaticAccessKey": "pepperx",
+    "StaticSecretKey": "pepperx"
+  },
+  "Resp": {
+    "Enabled": true,
+    "Port": 6379,
+    "DatabaseCount": 16,
+    "ContainerPrefix": "resp",
+    "MaxValueBytes": 67108864,
+    "CasRetryCount": 8
+  },
+  "Websocket": {
+    "Enabled": true,
+    "Hostname": "*",
+    "Port": 8002,
+    "MaxMessageBytes": 134217728,
+    "KeepAliveSeconds": 30
+  },
+  "Mcp": {
+    "Enabled": true,
+    "Hostname": "*",
+    "HttpPort": 8003,
+    "TcpPort": 8004,
+    "MaxInlineBytes": 8388608
+  },
+  "RequestHistory": {
+    "Enabled": true,
+    "MaxRequestBodyBytes": 65536,
+    "MaxResponseBodyBytes": 65536,
+    "RetentionDays": 30,
+    "ExcludeBodyPaths": [
+      "/v1.0/containers/*/object*"
+    ]
+  }
+}

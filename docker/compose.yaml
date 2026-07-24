@@ -1,0 +1,121 @@
+# A complete PepperX deployment: PostgreSQL, two stateless nodes, and the dashboard.
+#
+#   cd docker && docker compose up -d
+#   open http://localhost:3000  and connect to  http://localhost:8000
+#
+# Two nodes rather than one on purpose. PepperX nodes are stateless and coordinate through the
+# database and shared storage, and a single-node stack would hide the mistakes that only appear with
+# more than one -- notably that both nodes must see the same extent storage. Point them at different
+# volumes and reads will intermittently 404 depending on which node answers.
+#
+# There is no authentication anywhere in this stack. That is by design: PepperX is backend
+# infrastructure meant to sit behind a service that does its own access control. Do not publish
+# these ports to a public network.
+
+name: pepperx
+
+services:
+  postgres:
+    image: postgres:17
+    container_name: pepperx-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: pepperx
+      POSTGRES_PASSWORD: pepperx
+      POSTGRES_DB: pepperx
+    ports:
+      # Published on 5442, not 5432. The nodes reach Postgres over the compose network and do not
+      # need this at all; it is here so you can inspect the metadata with psql. Using the default
+      # port would collide with the PostgreSQL most developers already run locally, and the stack
+      # would refuse to start for a mapping nothing depends on.
+      - "5442:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pepperx -d pepperx"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    networks:
+      - pepperx
+
+  node1:
+    build:
+      context: ..
+      dockerfile: docker/server/Dockerfile
+    image: pepperx-server:local
+    container_name: pepperx-node1
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "8000:8000"   # REST
+      - "8001:8001"   # S3
+      - "8002:8002"   # WebSockets
+      - "8003:8003"   # MCP over HTTP
+      - "8004:8004"   # MCP over TCP
+      - "6379:6379"   # Redis RESP
+    volumes:
+      - ./config/node1.json:/app/pepperx.json:ro
+      # Both nodes mount the same extent volume. This is the requirement that makes them
+      # interchangeable: any node must be able to serve any object.
+      - extent-data:/app/data/extents
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://localhost:8000/v1.0/api/health"]
+      interval: 15s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
+    networks:
+      - pepperx
+
+  node2:
+    image: pepperx-server:local
+    container_name: pepperx-node2
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      node1:
+        # Not a runtime dependency -- only so one node creates the schema before the other starts,
+        # which keeps the first run's logs free of harmless migration races.
+        condition: service_started
+    ports:
+      - "8010:8000"
+      - "8011:8001"
+      - "8012:8002"
+      - "8013:8003"
+      - "8014:8004"
+      - "6380:6379"
+    volumes:
+      - ./config/node2.json:/app/pepperx.json:ro
+      - extent-data:/app/data/extents
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://localhost:8000/v1.0/api/health"]
+      interval: 15s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
+    networks:
+      - pepperx
+
+  dashboard:
+    build:
+      context: ..
+      dockerfile: docker/dashboard/Dockerfile
+    image: pepperx-dashboard:local
+    container_name: pepperx-dashboard
+    restart: unless-stopped
+    ports:
+      - "3000:80"
+    networks:
+      - pepperx
+
+volumes:
+  postgres-data:
+  extent-data:
+
+networks:
+  pepperx:
+    driver: bridge

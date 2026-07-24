@@ -48,3 +48,17 @@ Thumbs.db
 .env
 .env.*
 perf-baseline.json
+
+# Playwright QA output (dashboard/qa/*.mjs write screenshots and a report here)
+dashboard/qa-output*/
+
+# Python SDK
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.venv/
+venv/
+build/

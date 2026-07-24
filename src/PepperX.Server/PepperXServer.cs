@@ -31,6 +31,12 @@ namespace PepperX.Server
         #region Private-Members
 
         private readonly string _Header = "[PepperXServer] ";
+
+        /// <summary>
+        /// Path Watson serves the generated OpenAPI document from.
+        /// </summary>
+        private const string OpenApiDocumentPath = "/openapi.json";
+
         private readonly PepperXSettings _Settings;
         private readonly LoggingModule _Logging;
         private readonly string _NodeId;
@@ -187,6 +193,17 @@ namespace PepperX.Server
             // reconnect per request. That dominates latency on a data-plane API, so it is enabled here.
             webserverSettings.IO.EnableKeepAlive = true;
 
+            // Watson seeds every response with default headers that are request headers by nature:
+            // Accept, Accept-Language, Accept-Charset, Cache-Control, Connection, and Host. They are
+            // meaningless coming back from a server, "Connection: close" contradicted the keep-alive
+            // enabled above -- strict HTTP parsers (Node's among them) reject such a response
+            // outright -- and "Host" leaked the node's internal container hostname to every caller.
+            //
+            // Cleared wholesale rather than removed by name so a future Watson version cannot
+            // reintroduce one. Content-Length, Date, and Connection are emitted by the HTTP stack
+            // itself and are unaffected; everything PepperX wants on a response is set explicitly.
+            webserverSettings.Headers.DefaultHeaders.Clear();
+
             _RestServer = new Webserver(webserverSettings, DefaultRouteAsync);
             _RestServer.Serializer = new PepperXWatsonSerializer();
 
@@ -213,7 +230,7 @@ namespace PepperX.Server
             new ContainerRoutes(containers).Register(_RestServer);
             new ObjectRoutes(writes, reads, deletes, search).Register(_RestServer);
             new SearchRoutes(search).Register(_RestServer);
-            new AdminRoutes(statistics, rehydration).Register(_RestServer);
+            new AdminRoutes(statistics, rehydration, _Settings, _NodeId).Register(_RestServer);
             new RequestHistoryRoutes(_Db!, _Settings.RequestHistory).Register(_RestServer);
 
             _RestServer.Start();
@@ -263,9 +280,23 @@ namespace PepperX.Server
 
         private static void AddCors(HttpContextBase context)
         {
-            context.Response.Headers.Add("Access-Control-Allow-Origin", "*");
+            // Watson's OpenAPI document handler emits its own Access-Control-Allow-Origin, and it runs
+            // after pre-routing. Adding ours as well produced "Access-Control-Allow-Origin: *, *",
+            // which browsers reject as a malformed origin list -- that broke the dashboard's API
+            // Explorer, which fetches this document. Its header is already permissive, so we defer.
+            if (!IsOpenApiDocument(context))
+            {
+                context.Response.Headers.Add("Access-Control-Allow-Origin", "*");
+            }
+
             context.Response.Headers.Add("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS, HEAD");
             context.Response.Headers.Add("Access-Control-Allow-Headers", "Content-Type, Authorization, Range, X-Api-Key, x-pepperx-labels, x-pepperx-tags, x-pepperx-object");
+        }
+
+        private static bool IsOpenApiDocument(HttpContextBase context)
+        {
+            string path = context.Request.Url.RawWithoutQuery ?? String.Empty;
+            return path.Equals(OpenApiDocumentPath, StringComparison.OrdinalIgnoreCase);
         }
 
         #endregion

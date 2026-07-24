@@ -5,6 +5,7 @@ namespace PepperX.Server.Api.Rest
     using PepperX.Core.Requests;
     using PepperX.Core.Responses;
     using PepperX.Core.Services;
+    using PepperX.Core.Settings;
     using WatsonWebserver;
     using WatsonWebserver.Core;
     using WatsonWebserver.Core.OpenApi;
@@ -18,6 +19,8 @@ namespace PepperX.Server.Api.Rest
 
         private readonly StatisticsService _Statistics;
         private readonly RehydrationService _Rehydration;
+        private readonly PepperXSettings _Settings;
+        private readonly string _NodeId;
 
         #endregion
 
@@ -28,11 +31,15 @@ namespace PepperX.Server.Api.Rest
         /// </summary>
         /// <param name="statistics">Statistics service.</param>
         /// <param name="rehydration">Rehydration service.</param>
+        /// <param name="settings">Node settings.</param>
+        /// <param name="nodeId">Resolved node identifier.</param>
         /// <exception cref="ArgumentNullException">A required argument is null.</exception>
-        public AdminRoutes(StatisticsService statistics, RehydrationService rehydration)
+        public AdminRoutes(StatisticsService statistics, RehydrationService rehydration, PepperXSettings settings, string nodeId)
         {
             _Statistics = statistics ?? throw new ArgumentNullException(nameof(statistics));
             _Rehydration = rehydration ?? throw new ArgumentNullException(nameof(rehydration));
+            _Settings = settings ?? throw new ArgumentNullException(nameof(settings));
+            _NodeId = nodeId ?? throw new ArgumentNullException(nameof(nodeId));
         }
 
         #endregion
@@ -55,6 +62,10 @@ namespace PepperX.Server.Api.Rest
             server.Get("/v1.0/admin/nodes", NodesAsync, openApi => openApi
                 .WithTag("Admin").WithDescription("List cluster nodes and their liveness.")
                 .WithResponse(200, OpenApiResponseMetadata.Json("Nodes", null)));
+
+            server.Get("/v1.0/admin/settings", SettingsAsync, openApi => openApi
+                .WithTag("Admin").WithDescription("Non-secret view of this node's configuration and protocol listeners.")
+                .WithResponse(200, OpenApiResponseMetadata.Json("Settings", null)));
 
             server.Post<RehydrationRequest>("/v1.0/admin/rehydrate", RehydrateAsync, openApi => openApi
                 .WithTag("Admin").WithDescription("Reconcile the database with raw extent storage (Verify, Repair, or Rebuild).")
@@ -79,6 +90,14 @@ namespace PepperX.Server.Api.Rest
             return RouteHelpers.HandleAsync(request, async () =>
             {
                 return await _Statistics.GetNodesAsync(request.CancellationToken).ConfigureAwait(false);
+            });
+        }
+
+        private Task<object> SettingsAsync(ApiRequest request)
+        {
+            return RouteHelpers.HandleAsync(request, () =>
+            {
+                return Task.FromResult<object>(ServerSettingsResponse.FromSettings(_Settings, _NodeId));
             });
         }
 

@@ -1,18 +1,72 @@
 # Changelog
 
 All notable changes to PepperX are documented here. The format follows
-[Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project
-adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+[Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project adheres to
+[Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.0.0] - 2026-07-23
 
-### Added
-- Initial repository scaffold: `PepperX.Core`, `PepperX.Server`, and the
-  Touchstone test projects (`Test.Shared`, `Test.Automated`, `Test.Xunit`,
-  `Test.Nunit`, `Test.Performance`).
-- Default settings file (`pepperx.json`) covering storage, database, cluster
-  coordination, and all five protocol listeners.
+First release.
 
-## [1.0.0] - Unreleased
+### Storage
 
-First public release. See `README.md` for the full feature set.
+- Containers holding immutable **extents**. An object is a key, a binary payload, and metadata in
+  three forms: labels (flat list), tags (key-value), and a freeform JSON object.
+- **PXE1 self-describing extent format.** Each file carries its own key, labels, tags, metadata
+  object, and SHA-256 checksum in a header ahead of the payload, so raw storage is sufficient to
+  reconstruct the metadata database.
+- **Atomic replace.** Writing an existing key creates a new extent and repoints the key; last writer
+  wins and in-flight readers finish safely against the old extent.
+- **Dual persistence** — PostgreSQL indexes metadata for search; extent files are the system of
+  record. `POST /v1.0/admin/rehydrate` verifies, repairs, or fully rebuilds the database from storage.
+
+### Protocols
+
+- **REST** (8000) — the complete surface, with a generated OpenAPI document and Swagger UI.
+- **S3** (8001) — buckets, objects, and tags. Compatible with the AWS CLI and SDKs, including the
+  AWS streaming-signature upload format.
+- **WebSockets** (8002) — REST-equivalent operations over one connection, correlated by `RequestId`.
+- **MCP** (8003 HTTP / 8004 TCP) — 16 tools for LLM agents, each publishing a full JSON Schema.
+- **RESP** (6379) — Redis string commands over durable storage. Any Redis client works.
+
+All five share one namespace: an object written over any protocol is readable over the others.
+
+### Clustering
+
+- Stateless nodes coordinating only through PostgreSQL and shared extent storage.
+- Node heartbeats with liveness tracking and janitor-based reaping.
+- **Cluster-wide delete coordination.** Deletes tombstone the extent, drain in-flight read leases
+  across every node, and only then destroy the payload — so a read that has begun always completes.
+
+### Operations
+
+- React admin dashboard: containers and objects, cross-container metadata search, capacity and
+  cluster health, request history with a traffic chart, and an API explorer driven by the node's own
+  OpenAPI document. English, German, and Japanese, plus pseudo-locales for layout and RTL testing.
+- Request history capture with time-bucketed summaries, body truncation limits, and path exclusions.
+- `GET /v1.0/admin/settings` — non-secret configuration view, deliberately omitting the database
+  password and S3 static keys.
+- Docker images for the server and dashboard, a two-node compose stack, and factory reset scripts for
+  Windows and POSIX.
+
+### Clients
+
+- SDKs for C#, Python (sync and async), and JavaScript/TypeScript, covering REST and WebSockets.
+- Postman collection and environment.
+- Cross-SDK verification: each SDK writes a canonical object and the other two read it back
+  byte-for-byte.
+
+### Testing
+
+- Runner-agnostic [Touchstone](https://www.nuget.org/packages/Touchstone) suites executing
+  identically under a console runner, xUnit, and NUnit.
+- `Test.Performance` harness with eight workloads reporting throughput and latency percentiles.
+- Dashboard component tests plus two Playwright sweeps: every route at three widths in both themes,
+  and four locales checked for overflow and text direction.
+
+### Notes
+
+PepperX is **unauthenticated by design**. It is backend infrastructure meant to sit behind a service
+that performs its own access control. See [Security](README.md#security) before deploying.
+
+[1.0.0]: https://github.com/jchristn/PepperX/releases/tag/v1.0.0

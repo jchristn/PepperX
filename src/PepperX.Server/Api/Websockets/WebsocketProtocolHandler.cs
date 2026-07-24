@@ -3,6 +3,7 @@ namespace PepperX.Server.Api.Websockets
     using System;
     using System.Collections.Generic;
     using System.IO;
+    using System.Net;
     using System.Net.WebSockets;
     using System.Text;
     using System.Threading;
@@ -38,6 +39,7 @@ namespace PepperX.Server.Api.Websockets
         private readonly SearchService _Search;
         private readonly StatisticsService _Statistics;
         private readonly WebsocketSettings _Settings;
+        private readonly string _Header = "[WebsocketProtocolHandler] ";
         private readonly LoggingModule? _Logging;
 
         private WatsonWsServer? _Server;
@@ -79,13 +81,42 @@ namespace PepperX.Server.Api.Websockets
         /// </summary>
         public void Start()
         {
-            // A wildcard host binds every loopback name a local client might use. WebSocket upgrades are
-            // matched by listener prefix, so binding only one name would reject clients that address the node
-            // by the other.
-            List<string> hosts = _Settings.Hostname == "*"
-                ? new List<string> { "localhost", "127.0.0.1" }
-                : new List<string> { _Settings.Hostname };
+            if (_Settings.Hostname != "*")
+            {
+                StartWith(new List<string> { _Settings.Hostname });
+                return;
+            }
 
+            // WebSocket upgrades are matched by listener prefix, so the set of bound names decides who
+            // can connect at all -- and there is no single choice that works everywhere.
+            //
+            // "+" binds every interface, which is what a container needs: binding only the loopback
+            // names left the listener unreachable from outside while REST and S3 on the same node
+            // worked, because the port was published but nothing listened on the interface Docker
+            // forwards to. On Windows, though, "+" requires a urlacl reservation or an elevated
+            // process, and failing there would break `dotnet run` out of the box.
+            //
+            // So: try the wildcard, and fall back to the loopback names when the platform refuses it.
+            // Both names are bound in the fallback so a local client reaches the node whichever one
+            // it addresses. They cannot be combined with "+" -- that double-binds the port and the
+            // listener fails with "address in use".
+            try
+            {
+                StartWith(new List<string> { "+" });
+            }
+            catch (HttpListenerException ex)
+            {
+                _Logging?.Warn(
+                    _Header + "could not bind all interfaces on port " + _Settings.Port + " (" + ex.Message +
+                    "); falling back to loopback only. On Windows, reserve the prefix with: netsh http add urlacl url=http://+:" +
+                    _Settings.Port + "/ user=Everyone");
+
+                StartWith(new List<string> { "localhost", "127.0.0.1" });
+            }
+        }
+
+        private void StartWith(List<string> hosts)
+        {
             _Server = new WatsonWsServer(hosts, _Settings.Port, false);
             _Server.MessageReceived += OnMessageReceived;
             _Server.Start();

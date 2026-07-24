@@ -1,0 +1,160 @@
+# Build and test PepperX.
+#
+# The .NET suites need PostgreSQL, so it runs as a service container on 5433 — the same port the
+# local `docker/compose.test.yaml` uses, so `PEPPERX_TEST_DB_*` overrides behave identically here and
+# on a developer machine.
+#
+# Both dotnet runners execute the same Touchstone descriptors as the console runner. All three run
+# because the point of the runner-agnostic design is that they stay interchangeable; a regression in
+# one adapter is worth catching.
+
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  dotnet:
+    name: .NET (${{ matrix.framework }})
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        framework: [net8.0, net10.0]
+
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: pepperx_test
+          POSTGRES_PASSWORD: pepperx_test
+          POSTGRES_DB: pepperx_test
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U pepperx_test -d pepperx_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+
+    env:
+      PEPPERX_TEST_DB_HOST: localhost
+      PEPPERX_TEST_DB_PORT: 5433
+      PEPPERX_TEST_DB_USER: pepperx_test
+      PEPPERX_TEST_DB_PASSWORD: pepperx_test
+      PEPPERX_TEST_DB_NAME: pepperx_test
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: |
+            8.0.x
+            10.0.x
+
+      - name: Build (Release)
+        # Warnings are errors project-wide, so this is also the style gate.
+        run: dotnet build src/PepperX.sln -c Release
+
+      - name: Console runner
+        run: >-
+          dotnet run --project src/Test.Automated/Test.Automated.csproj
+          -f ${{ matrix.framework }} -c Release
+          -- --results test-results-${{ matrix.framework }}.json
+
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-${{ matrix.framework }}
+          path: test-results-${{ matrix.framework }}.json
+          if-no-files-found: warn
+
+      - name: xUnit
+        run: dotnet test src/Test.Xunit/Test.Xunit.csproj -f ${{ matrix.framework }} -c Release
+
+      - name: NUnit
+        run: dotnet test src/Test.Nunit/Test.Nunit.csproj -f ${{ matrix.framework }} -c Release
+
+  dashboard:
+    name: Dashboard
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: dashboard/package-lock.json
+
+      - name: Install
+        working-directory: dashboard
+        run: npm ci
+
+      - name: Lint
+        working-directory: dashboard
+        run: npm run lint
+
+      - name: Test
+        working-directory: dashboard
+        run: npm test
+
+      - name: Build
+        working-directory: dashboard
+        run: npm run build
+
+  sdks:
+    name: SDKs
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      # The SDK suites skip rather than fail when no node is reachable, so these steps verify that
+      # each SDK builds and its unit tests pass. End-to-end SDK coverage against a live node runs in
+      # the .NET job, which has one.
+      - name: C# SDK
+        run: dotnet build sdk/csharp/src/PepperX.Sdk.sln -c Release
+
+      - name: JavaScript SDK
+        working-directory: sdk/js
+        run: npm ci && npm test
+
+      - name: Python SDK
+        working-directory: sdk/python
+        run: python -m pip install --quiet -e ".[dev]" && python -m pytest -q
+
+  docker:
+    name: Docker images
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # Build only. Publishing is a release decision, not something a test run should make.
+      - name: Server image
+        run: docker build -f docker/server/Dockerfile -t pepperx-server:ci .
+
+      - name: Dashboard image
+        run: docker build -f docker/dashboard/Dockerfile -t pepperx-dashboard:ci .

@@ -216,16 +216,19 @@ namespace PepperX.Server.Api.Rest
                         long end = offset.Value + handle.Payload.Length - 1;
                         response.Headers.Add("Content-Range", "bytes " + offset.Value + "-" + end + "/" + handle.Extent.SizeBytes);
                     }
-                    response.ChunkedTransfer = true;
-
-                    byte[] buffer = new byte[_ChunkBytes];
-                    int read;
-                    while ((read = await handle.Payload.ReadAsync(buffer.AsMemory(0, buffer.Length), request.CancellationToken).ConfigureAwait(false)) > 0)
-                    {
-                        byte[] chunk = read == buffer.Length ? buffer : buffer[0..read];
-                        await response.SendChunk(chunk, false, request.CancellationToken).ConfigureAwait(false);
-                    }
-                    await response.SendChunk(Array.Empty<byte>(), true, request.CancellationToken).ConfigureAwait(false);
+                    // Send the payload as a length-declared stream in a single call rather than
+                    // hand-rolling chunked framing.
+                    //
+                    // Chunking here emitted the terminator twice: the loop wrote its own final chunk,
+                    // and then the typed-route wrapper sent an empty response for the null return,
+                    // appending a second "0\r\n\r\n". curl tolerated the trailing bytes; Node's HTTP
+                    // parser rejected the whole response with "Data after Connection: close", which
+                    // broke every Node-based client on object reads.
+                    //
+                    // Content-Length is also simply better here: the size is known up front, so
+                    // clients can show progress and size the buffer, and range responses no longer
+                    // have to reconcile Content-Range against chunked framing.
+                    await response.Send(handle.Payload.Length, handle.Payload, request.CancellationToken).ConfigureAwait(false);
                     return null!;
                 }
             });
