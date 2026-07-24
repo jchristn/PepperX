@@ -4,6 +4,8 @@
 
 # PepperX
 
+> **Alpha — v0.1.0.** Interfaces and on-disk formats may change between releases.
+
 A high-performance, horizontally scalable key-value store with rich metadata and immutable,
 self-describing storage — reachable over five protocols at once: **REST**, **S3**, **Redis RESP**,
 **WebSockets**, and **MCP**.
@@ -24,8 +26,8 @@ the internet.
 | `jchristn/pepperx` | Server node |
 | `jchristn/pepperx-dashboard` | React admin dashboard (static, served by nginx) |
 
-Tags: `1.0.0` for a pinned version, `latest` for the newest release. Pin the version in anything you
-depend on.
+Tags: `0.1.0` for a pinned version, `latest` for the newest build. Pin the version in anything you
+depend on — this is alpha software and `latest` will move under you.
 
 ---
 
@@ -52,7 +54,7 @@ services:
       retries: 20
 
   pepperx:
-    image: jchristn/pepperx:1.0.0
+    image: jchristn/pepperx:0.1.0
     depends_on:
       postgres: { condition: service_healthy }
     ports:
@@ -67,7 +69,7 @@ services:
       - extent-data:/app/data/extents
 
   dashboard:
-    image: jchristn/pepperx-dashboard:1.0.0
+    image: jchristn/pepperx-dashboard:0.1.0
     ports:
       - "3000:80"
 

@@ -16,7 +16,7 @@ namespace PepperX.Core
         /// <summary>
         /// Product version.
         /// </summary>
-        public const string ProductVersion = "1.0.0";
+        public const string ProductVersion = "0.1.0";
 
         #endregion
 

@@ -1,6 +1,6 @@
 {
   "name": "@pepperx/sdk",
-  "version": "1.0.0",
+  "version": "0.1.0",
   "description": "Client SDK for PepperX, a high-performance key-value store with rich metadata.",
   "license": "MIT",
   "author": "Joel Christner",

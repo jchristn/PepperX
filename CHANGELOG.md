@@ -4,9 +4,10 @@ All notable changes to PepperX are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.0.0] - 2026-07-23
+## [0.1.0] - 2026-07-23
 
-First release.
+First alpha. Everything below works and is tested, but interfaces and the on-disk extent
+format may still change before 1.0.
 
 ### Storage
 
@@ -69,4 +70,4 @@ All five share one namespace: an object written over any protocol is readable ov
 PepperX is **unauthenticated by design**. It is backend infrastructure meant to sit behind a service
 that performs its own access control. See [Security](README.md#security) before deploying.
 
-[1.0.0]: https://github.com/jchristn/PepperX/releases/tag/v1.0.0
+[0.1.0]: https://github.com/jchristn/PepperX/releases/tag/v0.1.0

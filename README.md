@@ -1,101 +1,128 @@
 <div align="center">
-  <img src="assets/logo.png" alt="PepperX" width="160" height="160">
+
+  <img src="assets/logo.png" alt="PepperX" width="150" height="150">
+
+  # PepperX
+
+  **PepperX is a backend storage platform enabling scalable metadata and data storage via REST, WebSockets, Redis RESP, and MCP.**
+
+  [![Status](https://img.shields.io/badge/status-alpha-orange)](#status)
+  [![Version](https://img.shields.io/badge/version-0.1.0-blue)](CHANGELOG.md)
+  [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE.md)
+  [![.NET](https://img.shields.io/badge/.NET-8.0%20%7C%2010.0-512BD4)](https://dotnet.microsoft.com/)
+
 </div>
 
-# PepperX
+---
 
-A high-performance, horizontally scalable key-value store with rich metadata and immutable,
-self-describing storage — reachable over five protocols at once.
+## Status
 
-PepperX is **backend infrastructure**. There is no authentication and no authorization: access
-control belongs to the application in front of it. See [security](#security) before deploying.
-
-```bash
-cd docker && docker compose up -d
-open http://localhost:3000     # dashboard, connect to http://localhost:8000
-```
+**Alpha, v0.1.0.** Everything documented here works and is covered by tests — 115 backend tests
+across three runners, on .NET 8 and .NET 10 — but this has not been run in production. Interfaces
+and the on-disk extent format may change before 1.0. Pin your versions.
 
 ---
 
 ## What it is
 
-An object is a **key**, a binary **payload**, and metadata in three forms:
+A key-value store where the value is **arbitrary bytes** and the key carries **metadata worth
+searching on**.
 
-| Form | Shape | Use |
-|---|---|---|
-| **Labels** | `["metric", "cpu"]` | Flat tags. Searchable. |
-| **Tags** | `{"resolution": "1m"}` | Key-value pairs. Searchable. |
-| **Object** | any JSON | Freeform, arbitrarily nested. Stored, returned, not field-searchable. |
+Every object is a key, a binary payload, and metadata in three forms:
+
+| Form | Example | Searchable |
+|---|---|:---:|
+| **Labels** | `["invoice", "2026", "paid"]` | yes |
+| **Tags** | `{"customer": "acme", "region": "us-west"}` | yes |
+| **Object** | any JSON, arbitrarily nested | stored & returned |
 
 Objects live in **containers**, which map one-to-one onto S3 buckets.
 
-### Immutable extents
+The same data is reachable over five protocols at once. Write a value with `redis-cli`, read it with
+the AWS CLI, search it over REST, and let an LLM agent inspect it over MCP — one namespace, no
+synchronization.
 
-An object is stored as one **extent**: a self-describing file holding a header (key, labels, tags,
-metadata object, checksum) followed by the payload. Extents are never modified. Writing to an
-existing key creates a new extent and atomically repoints the key — last writer wins, and readers
-already streaming the old extent finish safely.
-
-### Dual persistence
-
-PostgreSQL holds the metadata index that makes label and tag search fast. The extent files hold
-everything needed to reconstruct that index. Lose the database entirely and
-`POST /v1.0/admin/rehydrate` with `Mode: Rebuild` rebuilds it by reading extent headers off disk.
-The database is an index, not the system of record.
-
-### Five protocols, one dataset
-
-| Protocol | Port | Completeness |
+| Protocol | Port | Coverage |
 |---|---|---|
-| [**REST**](REST_API.md) | 8000 | Everything. OpenAPI + Swagger UI included. |
-| [**S3**](S3_API.md) | 8001 | Buckets, objects, tags. Works with the AWS CLI and SDKs. |
+| [**REST**](REST_API.md) | 8000 | Everything. OpenAPI document + Swagger UI included. |
+| [**S3**](S3_API.md) | 8001 | Buckets, objects, tags. Works with the AWS CLI and SDKs unchanged. |
 | [**WebSockets**](WEBSOCKETS_API.md) | 8002 | REST-equivalent operations over one connection. |
-| [**MCP**](MCP_API.md) | 8003 / 8004 | 16 tools, for LLM agents. |
+| [**MCP**](MCP_API.md) | 8003 / 8004 | 16 tools with full JSON Schemas, for LLM agents. |
 | [**RESP**](RESP_API.md) | 6379 | Redis string commands. Any Redis client works. |
 
-One namespace. Write over RESP, read over S3, search over REST, inspect from an agent over MCP.
+---
 
-### Stateless nodes
+## Why you'd use it
 
-Nodes hold no local state and coordinate only through PostgreSQL and shared extent storage. Add or
-remove them freely behind a load balancer. Deletes coordinate cluster-wide: an extent is tombstoned,
-in-flight read leases on every node are allowed to drain, and only then is the payload destroyed — so
-a read that has begun always completes.
+**You have blobs, and you need to find them by what they are.** Object stores give you a key and a
+prefix. Databases give you rich queries but are a poor fit for payloads. PepperX gives you both:
+store the bytes, attach labels and tags, and query across every container by metadata.
+
+**Your clients already exist.** Speaking S3 and RESP means Python, Go, Java, Rust, and .NET can talk
+to PepperX today using libraries they already depend on. No SDK adoption required — though there are
+[first-party SDKs](sdk/) for C#, Python, and JavaScript if you want typed clients.
+
+**Your agents can use it directly.** The MCP surface is not an afterthought: every tool publishes a
+complete JSON Schema with per-argument descriptions, so an agent discovers how to store and search
+from `tools/list` alone.
+
+**Losing the database is not losing the data.** Extents are self-describing — every file carries its
+own key, labels, tags, metadata, and checksum in a header ahead of the payload. PostgreSQL is an
+*index*, not the system of record. Drop it entirely and one API call rebuilds it by reading storage.
+This is tested, not aspirational.
+
+**Scaling out is adding a process.** Nodes hold no local state. Point another one at the same
+database and the same extent storage, put a load balancer in front, and it's interchangeable with the
+others — no leader election, no resharding.
+
+### What it deliberately isn't
+
+- **Not authenticated.** PepperX is backend infrastructure meant to sit behind a service that does
+  its own access control. See [Security](#security) — this matters.
+- **Not a Redis replacement.** The RESP surface is durable storage, not an in-memory cache. It is far
+  slower than Redis and always will be.
+- **Not a full S3.** Buckets, objects, and tags only. No multipart upload, versioning, ACLs, or
+  lifecycle rules.
+
+---
+
+## Benefits at a glance
+
+| | |
+|---|---|
+| **Immutable extents** | Writes never mutate. A replace writes a new extent and atomically repoints the key, so readers already streaming the old one finish safely. |
+| **Metadata search** | Filter by label, tag, key prefix, suffix, and creation window — within a container or across all of them. |
+| **Rehydration** | `POST /v1.0/admin/rehydrate` verifies, repairs, or fully rebuilds the metadata database from raw storage. |
+| **Safe deletes** | Deletes tombstone, drain in-flight read leases cluster-wide, then destroy. A read that has begun always completes. |
+| **Checksums** | SHA-256 on every payload, returned on every read, optionally verified on read. |
+| **Observability** | Every request captured with timing, headers, and bodies, plus time-bucketed traffic summaries. |
+| **Admin dashboard** | React console in English, German, and Japanese, with light and dark themes. |
 
 ---
 
 ## Getting started
 
-### Docker (everything)
+Requires [Docker](https://docs.docker.com/get-docker/). Nothing else.
 
 ```bash
-cd docker
+git clone https://github.com/jchristn/PepperX.git
+cd PepperX/docker
 docker compose up -d
 ```
 
-Brings up PostgreSQL, two PepperX nodes, and the dashboard. See [`docker/`](docker/) for the layout
-and [`docker/factory/`](docker/factory/) for reset-and-seed scripts.
+That brings up PostgreSQL, **two** PepperX nodes, and the dashboard — two nodes because a single-node
+stack hides the mistakes that only appear in a cluster.
 
 | | |
 |---|---|
-| Dashboard | http://localhost:3000 |
-| node1 REST | http://localhost:8000 |
+| **Dashboard** | http://localhost:3000 — connect it to `http://localhost:8000` |
+| node1 REST | http://localhost:8000 · Swagger UI at `/swagger` |
 | node2 REST | http://localhost:8010 |
-| Swagger UI | http://localhost:8000/swagger |
 
-### From source
+Want sample data to look at? `./factory/reset.sh` (or `reset.bat`) rebuilds the stack from scratch
+and seeds containers, objects, and traffic.
 
-Requires the .NET 8 or .NET 10 SDK and a PostgreSQL instance.
-
-```bash
-docker compose -f docker/compose.test.yaml up -d --wait   # PostgreSQL on 5433
-dotnet run --project src/PepperX.Server
-```
-
-The server reads `pepperx.json` from its working directory. Every setting is documented inline in
-that file.
-
-### First object
+### Store and find something
 
 ```bash
 curl -X PUT http://localhost:8000/v1.0/containers \
@@ -104,27 +131,34 @@ curl -X PUT http://localhost:8000/v1.0/containers \
 curl -X PUT 'http://localhost:8000/v1.0/containers/telemetry/object?key=metrics/cpu.json' \
   -H 'Content-Type: application/json' \
   -H 'x-pepperx-labels: metric,cpu' \
-  -H 'x-pepperx-tags: resolution=1m' \
+  -H 'x-pepperx-tags: resolution=1m&host=web-01' \
   -d '{"cpu":0.42}'
 
-curl 'http://localhost:8000/v1.0/containers/telemetry/object?key=metrics/cpu.json'
-
+# Find it by metadata, across every container
 curl -X POST http://localhost:8000/v1.0/objects/enumerate \
-  -H 'Content-Type: application/json' -d '{"Labels":["metric"]}'
+  -H 'Content-Type: application/json' \
+  -d '{"Labels":["metric"],"Tags":{"host":"web-01"}}'
 ```
 
----
+The same store over the other protocols:
 
-## SDKs
+```bash
+aws --endpoint-url http://localhost:8001 s3 ls s3://telemetry/
+redis-cli -p 6379 SET greeting "hello"        # lands in container resp0
+```
 
-| Language | Package | Protocols |
-|---|---|---|
-| C# | [`sdk/csharp`](sdk/csharp) | REST, WebSockets |
-| Python | [`sdk/python`](sdk/python) | REST (sync + async), WebSockets |
-| JavaScript / TypeScript | [`sdk/js`](sdk/js) | REST, WebSockets |
+### From source
 
-For S3, RESP, and MCP, use the standard client for that protocol — there is nothing PepperX-specific
-to wrap. See [`sdk/README.md`](sdk/README.md).
+Needs the .NET 8 or .NET 10 SDK and a PostgreSQL instance.
+
+```bash
+docker compose -f docker/compose.test.yaml up -d --wait   # PostgreSQL on 5433
+dotnet run --project src/PepperX.Server
+```
+
+The server reads `pepperx.json` from its working directory; every setting is documented inline.
+
+### SDKs
 
 ```python
 from pepperx import PepperXClient
@@ -136,114 +170,48 @@ with PepperXClient("http://localhost:8000") as client:
     print(client.read_object("telemetry", "metrics/cpu.json").data)
 ```
 
+C#, Python, and JavaScript clients cover REST and WebSockets — see [`sdk/`](sdk/). For S3, RESP, and
+MCP, use the standard client for that protocol; there is nothing PepperX-specific to wrap.
+
 ---
 
-## Dashboard
+## Using the dashboard
 
-A React console for operating a node: containers and objects, cross-container metadata search,
-capacity and cluster health, request history with a traffic chart, and an API explorer driven by the
-node's own OpenAPI document.
+Open **http://localhost:3000** and enter a node's REST endpoint (`http://localhost:8000`). There is
+no login — PepperX is unauthenticated, so the connect screen only establishes *which node* you are
+operating. That address stays visible in the header, because with several interchangeable nodes it is
+the only thing telling you where a destructive action will land.
 
-Available in English, German, and Japanese, with pseudo-locales for layout and RTL testing. See
-[`dashboard/`](dashboard/).
+| View | What it's for |
+|---|---|
+| **Home** | Node state at a glance: counts, storage, traffic over time, and anything needing attention. |
+| **Containers** | Create, tag, browse, and delete. Deleting a non-empty container makes you type its name. |
+| **Objects** | Upload with labels, tags, and freeform JSON; inspect metadata and checksums; filter by prefix, label, or tag. |
+| **Search** | The same filters across every container at once. |
+| **Capacity** | Where storage is going, per container, and which cluster nodes are alive. Rehydration lives here. |
+| **Request History** | Every request served, with full detail. Click a bar in the chart to filter to that moment. |
+| **API Explorer** | Run any endpoint against the live node. Operations come from the node's own OpenAPI document, so it cannot drift. |
+| **Settings** | How this node is configured and where each protocol is listening. Read-only, as the server is. |
 
-```bash
-cd dashboard && npm install && npm run dev
-```
+Theme and language are in the header. First run against an empty node offers a short setup path; you
+can relaunch it from Settings.
 
 ---
 
 ## Security
 
-There is no authentication anywhere in PepperX. This is a design decision, not an omission — it is
-meant to run inside a trusted network behind a service that performs its own access control.
+**There is no authentication anywhere in PepperX.** This is a design decision, not an omission — it
+is meant to run inside a trusted network behind a service that performs its own access control.
 
-What that means concretely:
-
-- **Every endpoint is reachable by anyone who can reach the port**, including `DELETE` on containers
-  and the rehydration endpoint.
-- **The S3 static credentials are not a security control.** They exist because most S3 clients refuse
-  to send an unsigned request. Signatures are accepted, not verified.
-- **Do not publish these ports to the internet.** Bind them to a private network, and put your own
+- Every endpoint is reachable by anyone who can reach the port, including container deletion and
+  rehydration.
+- The S3 static credentials are **not** a security control. They exist because most S3 clients refuse
+  to send an unsigned request; signatures are accepted, not verified.
+- **Do not publish these ports to the internet.** Bind them to a private network and put your own
   authenticated service in front.
 
-The one thing PepperX does protect is credentials in its own configuration: `GET /v1.0/admin/settings`
-deliberately omits the database password and S3 keys.
-
----
-
-## Repository layout
-
-| Path | Contents |
-|---|---|
-| [`src/`](src/) | .NET solution: core library, server host, test projects |
-| [`sdk/`](sdk/) | C#, Python, and JavaScript SDKs |
-| [`dashboard/`](dashboard/) | React admin dashboard |
-| [`docker/`](docker/) | Dockerfiles, compose stack, factory reset scripts |
-| [`postman/`](postman/) | Postman collection and environment |
-| [`memory/`](memory/) | Project orientation notes ([overview](memory/pepperx-overview.md)) |
-
----
-
-## Testing
-
-Tests need PostgreSQL. Start the dockerized instance first:
-
-```bash
-docker compose -f docker/compose.test.yaml up -d --wait
-```
-
-All four runners execute the same [Touchstone](https://www.nuget.org/packages/Touchstone) descriptors,
-so a test written once runs everywhere:
-
-```bash
-dotnet run --project src/Test.Automated                       # console runner
-dotnet run --project src/Test.Automated -- --results out.json # + JSON export
-dotnet test src/Test.Xunit                                    # xUnit
-dotnet test src/Test.Nunit                                    # NUnit
-```
-
-Database-dependent suites are skipped rather than failed when PostgreSQL is unreachable. Override
-connection details with `PEPPERX_TEST_DB_HOST`, `PEPPERX_TEST_DB_PORT`, `PEPPERX_TEST_DB_USER`,
-`PEPPERX_TEST_DB_PASSWORD`, and `PEPPERX_TEST_DB_NAME`.
-
-The dashboard has its own tests and two Playwright QA sweeps — see [`dashboard/qa/`](dashboard/qa/):
-
-```bash
-cd dashboard && npm test
-```
-
----
-
-## Performance
-
-`Test.Performance` starts an in-process node (or targets a running one with `--target`) and runs a
-gauntlet of workloads, reporting throughput and latency percentiles:
-
-```bash
-dotnet run --project src/Test.Performance -c Release
-dotnet run --project src/Test.Performance -c Release -- \
-  --duration 10 --concurrency 32 --object-size 65536 --results perf.json
-dotnet run --project src/Test.Performance -c Release -- --workload read-heavy,search
-```
-
-Workloads: `write-small`, `read-heavy`, `mixed`, `search`, `replace-churn`, `delete-churn`, `s3-ops`,
-`resp-ops`. The harness exits non-zero when the error rate exceeds one percent.
-
-Indicative single-node numbers (developer laptop, 16 workers, 4 KiB objects, dockerized PostgreSQL —
-your hardware will differ):
-
-| Workload | Ops/s | p95 |
-|---|---:|---:|
-| read-heavy | ~870 | 31 ms |
-| search (label + tag filter) | ~580 | 36 ms |
-| mixed (70r / 20w / 10 search) | ~580 | 93 ms |
-| replace-churn (16 writers, one key) | ~180 | 128 ms |
-| write-small | ~160 | 145 ms |
-
-Writes are slower than reads because every write is a durable extent plus a metadata transaction.
-This harness is worth running against your own hardware: it found three production bugs during
-development that no functional test caught.
+The one thing PepperX does protect is credentials in its own configuration:
+`GET /v1.0/admin/settings` deliberately omits the database password and S3 keys.
 
 ---
 
@@ -251,17 +219,62 @@ development that no functional test caught.
 
 | | |
 |---|---|
-| [`REST_API.md`](REST_API.md) | Native REST API — the complete surface |
-| [`S3_API.md`](S3_API.md) | S3-compatible surface |
-| [`RESP_API.md`](RESP_API.md) | Redis wire protocol |
-| [`WEBSOCKETS_API.md`](WEBSOCKETS_API.md) | WebSocket envelopes and operations |
-| [`MCP_API.md`](MCP_API.md) | MCP tools for agents |
-| [`sdk/README.md`](sdk/README.md) | Client libraries |
-| [`postman/`](postman/) | Postman collection |
-| [`CHANGELOG.md`](CHANGELOG.md) | Release history |
+| [REST API](REST_API.md) | The complete surface |
+| [S3](S3_API.md) · [RESP](RESP_API.md) · [WebSockets](WEBSOCKETS_API.md) · [MCP](MCP_API.md) | Per-protocol references |
+| [`sdk/`](sdk/) | C#, Python, and JavaScript clients |
+| [`docker/`](docker/) | Compose stack, images, factory reset |
+| [`dashboard/`](dashboard/) | Console architecture and conventions |
+| [`postman/`](postman/) | Postman collection and environment |
+| [CHANGELOG](CHANGELOG.md) | Release history |
+
+A running node always serves its own contract at `/openapi.json`, with Swagger UI at `/swagger`.
+
+---
+
+## Testing
+
+```bash
+docker compose -f docker/compose.test.yaml up -d --wait
+
+dotnet run --project src/Test.Automated   # console runner
+dotnet test src/Test.Xunit                # xUnit
+dotnet test src/Test.Nunit                # NUnit
+```
+
+All three execute the same [Touchstone](https://www.nuget.org/packages/Touchstone) descriptors, so a
+test written once runs everywhere. Database-dependent suites skip rather than fail when PostgreSQL is
+unreachable.
+
+`Test.Performance` runs a workload gauntlet reporting throughput and latency percentiles — it found
+three real bugs during development that no functional test caught.
+
+---
+
+## Contributing
+
+### Filing an issue
+
+Bugs and feature requests: **https://github.com/jchristn/PepperX/issues**
+
+A good report includes the PepperX version (`GET /` returns it), which protocol you were using, what
+you expected, and what happened. If a node is involved, `GET /v1.0/admin/settings` gives a
+credential-free view of its configuration that is usually the fastest way to see the problem.
+
+Since this is alpha, please say whether you hit it from Docker or from source.
+
+### Starting a discussion
+
+Questions, ideas, and "is this the right tool for X" belong in
+**https://github.com/jchristn/PepperX/discussions** rather than the issue tracker. Design feedback is
+especially welcome while the interfaces are still moving.
+
+### Pull requests
+
+Run the test suite and `dotnet build -c Release` (warnings are errors) before opening one. Dashboard
+changes should also pass `npm test` and `npm run lint`.
 
 ---
 
 ## License
 
-[MIT](LICENSE.md)
+[MIT](LICENSE.md) — © 2026 Joel Christner

@@ -6,7 +6,7 @@
     <Nullable>enable</Nullable>
     <LangVersion>latest</LangVersion>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
-    <Version>1.0.0</Version>
+    <Version>0.1.0</Version>
     <Authors>Joel Christner</Authors>
     <Product>PepperX</Product>
     <Copyright>(c)2026 Joel Christner</Copyright>
