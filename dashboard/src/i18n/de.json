@@ -5,7 +5,6 @@
   },
   "connect": {
     "title": "Mit einem Knoten verbinden",
-    "subtitle": "PepperX ist nicht authentifizierte Backend-Infrastruktur. Richten Sie diese Konsole auf einen Knoten, um ihn zu bedienen.",
     "serverUrl": "Server-URL",
     "serverUrlPlaceholder": "http://localhost:8000",
     "connect": "Verbinden",

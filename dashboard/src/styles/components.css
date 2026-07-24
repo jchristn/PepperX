@@ -1266,12 +1266,13 @@
 
 .connect-card h1 {
   margin-top: var(--spacing-md);
-  font-size: var(--font-size-xl);
+  font-size: var(--font-size-2xl);
+  letter-spacing: -0.02em;
 }
 
-.connect-subtitle {
-  margin: var(--spacing-sm) 0 var(--spacing-lg);
-  font-size: var(--font-size-sm);
+.connect-subheading {
+  margin: var(--spacing-xs) 0 var(--spacing-lg);
+  font-size: var(--font-size-base);
   color: var(--color-text-secondary);
 }
 

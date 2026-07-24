@@ -5,7 +5,6 @@
   },
   "connect": {
     "title": "Connect to a node",
-    "subtitle": "PepperX is unauthenticated backend infrastructure. Point this console at a node to operate it.",
     "serverUrl": "Server URL",
     "serverUrlPlaceholder": "http://localhost:8000",
     "connect": "Connect",

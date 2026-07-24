@@ -74,8 +74,8 @@ export default function ConnectView() {
       >
         {/* Decorative: the product name is the adjacent heading, so alt text would only repeat it. */}
         <img className="connect-logo" src="/logo.png" alt="" width="72" height="72" />
-        <h1>{t('connect.title')}</h1>
-        <p className="connect-subtitle">{t('connect.subtitle')}</p>
+        <h1>{t('app.name')}</h1>
+        <p className="connect-subheading">{t('connect.title')}</p>
 
         <div className="form-field">
           <label htmlFor="connect-url">{t('connect.serverUrl')}</label>
