@@ -206,6 +206,38 @@ namespace Test.Shared.Suites
                         Check.True(afterBody.Contains("\"RequestHistoryRetentionDays\":99", StringComparison.Ordinal), "change is durable across reads");
                     }),
 
+                    new TestCaseDescriptor("RestApi", "RawSettingsRoundTrip", "The full settings document round-trips", async ct =>
+                    {
+                        // The raw endpoint is the whole file so every field is editable. Read it, change
+                        // a deeply nested value the curated update does not cover, write it back, and
+                        // confirm the change is reflected -- proving the entirety is editable, not a
+                        // subset.
+                        HttpResponseMessage get = await (await ClientAsync(ct)).GetAsync("/v1.0/admin/settings/raw", ct);
+                        Check.True(get.IsSuccessStatusCode, "raw settings served");
+                        string raw = await get.Content.ReadAsStringAsync(ct);
+                        Check.True(raw.Contains("\"Rest\"", StringComparison.Ordinal), "full document includes protocol sections");
+
+                        // Flip a nested value the partial update has no field for.
+                        string mutated = raw.Replace("\"Region\":\"us-west-1\"", "\"Region\":\"eu-central-1\"", StringComparison.Ordinal);
+                        Check.True(!ReferenceEquals(mutated, raw) && mutated != raw, "found the region to change");
+
+                        HttpResponseMessage put = await (await ClientAsync(ct)).PutAsync("/v1.0/admin/settings/raw", Json(mutated), ct);
+                        Check.True(put.IsSuccessStatusCode, "full document accepted");
+
+                        HttpResponseMessage after = await (await ClientAsync(ct)).GetAsync("/v1.0/admin/settings/raw", ct);
+                        string afterBody = await after.Content.ReadAsStringAsync(ct);
+                        Check.True(afterBody.Contains("eu-central-1", StringComparison.Ordinal), "nested change persisted");
+                    }),
+
+                    new TestCaseDescriptor("RestApi", "RawSettingsRejectsGarbage", "A malformed settings document is refused", async ct =>
+                    {
+                        // Validation is the deserialize: a body that cannot become settings is rejected
+                        // before anything is written, so a typo cannot leave a node with a file it can no
+                        // longer start from.
+                        HttpResponseMessage put = await (await ClientAsync(ct)).PutAsync("/v1.0/admin/settings/raw", Json("{ not valid"), ct);
+                        Check.Equal((int)HttpStatusCode.BadRequest, (int)put.StatusCode, "garbage rejected with 400");
+                    }),
+
                     new TestCaseDescriptor("RestApi", "Settings", "Settings expose protocols without credentials", async ct =>
                     {
                         HttpResponseMessage response = await (await ClientAsync(ct)).GetAsync("/v1.0/admin/settings", ct);

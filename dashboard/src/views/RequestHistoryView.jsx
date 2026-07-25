@@ -419,7 +419,7 @@ function RequestDetailModal({ detail, onClose }) {
       onClose={onClose}
       title={t('requests.detailTitle')}
       subtitle={<CopyableId value={detail.Id} />}
-      size="xlarge"
+      size="full"
     >
       <div className="request-detail">
         <div className="request-detail-hero">

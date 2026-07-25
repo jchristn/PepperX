@@ -338,7 +338,11 @@
     "restart": "Knoten neu starten",
     "restartHint": "Beendet den Knoten, damit sein Container mit den gespeicherten Einstellungen neu startet. Erfordert eine Container-Neustartrichtlinie — ein bloßer Prozess wird nur beendet.",
     "restartConfirm": "Den Knoten jetzt neu starten? Die Konsole verliert die Verbindung, bis der Knoten wieder verfügbar ist.",
-    "restarting": "Neustart… der Knoten ist kurz nicht verfügbar."
+    "restarting": "Neustart… der Knoten ist kurz nicht verfügbar.",
+    "fullConfig": "Vollständige Konfiguration",
+    "fullConfigHint": "Jede Einstellung in der Konfigurationsdatei des Knotens. Änderungen werden nach einem Neustart wirksam. Dies schließt Anmeldedaten ein — der Knoten ist nicht authentifiziert.",
+    "invalidJson": "Das ist kein gültiges JSON.",
+    "fullConfigSaved": "Konfiguration gespeichert. Zum Anwenden neu starten."
   },
   "setup": {
     "title": "Willkommen bei PepperX",

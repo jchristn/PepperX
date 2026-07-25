@@ -722,6 +722,14 @@
   max-width: 1200px;
 }
 
+/* Near-fullscreen: 95% of the viewport in both dimensions, for dense detail views. */
+.modal-full {
+  max-width: 95vw;
+  width: 95vw;
+  height: 95vh;
+  max-height: 95vh;
+}
+
 .modal-header {
   display: flex;
   align-items: flex-start;
@@ -1259,7 +1267,8 @@
   display: block;
   height: 100%;
   border-radius: 999px;
-  background-color: var(--color-accent);
+  /* Green, not the accent red: these bars show healthy capacity usage, and red reads as a problem. */
+  background-color: var(--color-success);
 }
 
 .drift-list {
@@ -1567,6 +1576,18 @@
   max-width: 70ch;
 }
 
+.settings-raw {
+  padding: var(--spacing-lg);
+}
+
+.settings-raw-editor {
+  width: 100%;
+  font-family: var(--font-mono);
+  font-size: var(--font-size-sm);
+  line-height: 1.5;
+  resize: vertical;
+}
+
 /* API Explorer ----------------------------------------------------------- */
 
 .explorer-operation-picker {
@@ -1615,8 +1636,10 @@
   align-items: center;
   gap: var(--spacing-sm);
   flex-wrap: wrap;
-  margin-top: var(--spacing-lg);
-  padding-top: var(--spacing-md);
+  /* Horizontal padding to match the card's fields; it is a direct card child and would otherwise sit
+     flush against the left edge. The top border still spans full width. */
+  margin-top: var(--spacing-md);
+  padding: var(--spacing-md) var(--spacing-lg);
   border-top: 1px solid var(--color-border);
 }
 

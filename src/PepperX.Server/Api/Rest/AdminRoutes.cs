@@ -1,9 +1,13 @@
 namespace PepperX.Server.Api.Rest
 {
     using System;
+    using System.IO;
     using System.Threading.Tasks;
+    using PepperX.Core.Enums;
+    using PepperX.Core.Exceptions;
     using PepperX.Core.Requests;
     using PepperX.Core.Responses;
+    using PepperX.Core.Serialization;
     using PepperX.Core.Services;
     using PepperX.Core.Settings;
     using SyslogLogging;
@@ -23,6 +27,7 @@ namespace PepperX.Server.Api.Rest
         private readonly PepperXSettings _Settings;
         private readonly string _NodeId;
         private readonly LoggingModule _Logging;
+        private readonly PepperXSerializer _Serializer = new PepperXSerializer();
         private readonly string _Header = "[AdminRoutes] ";
 
         #endregion
@@ -76,6 +81,15 @@ namespace PepperX.Server.Api.Rest
                 .WithTag("Admin").WithDescription("Persist a partial settings update to the node's settings file. Changes take effect after a restart.")
                 .WithRequestBody(OpenApiRequestBodyMetadata.Json(null, "Settings update", true))
                 .WithResponse(200, OpenApiResponseMetadata.Json("Updated settings", null)));
+
+            server.Get("/v1.0/admin/settings/raw", RawSettingsAsync, openApi => openApi
+                .WithTag("Admin").WithDescription("The complete settings file, every field, for full editing. Includes credentials -- there is no authentication on this node.")
+                .WithResponse(200, OpenApiResponseMetadata.Json("Full settings", null)));
+
+            server.Put("/v1.0/admin/settings/raw", UpdateRawSettingsAsync, openApi => openApi
+                .WithTag("Admin").WithDescription("Replace the entire settings file. The body is a complete settings document. Changes take effect after a restart.")
+                .WithRequestBody(OpenApiRequestBodyMetadata.Json(null, "Complete settings document", true))
+                .WithResponse(200, OpenApiResponseMetadata.Create("Saved")));
 
             server.Post("/v1.0/admin/restart", RestartAsync, openApi => openApi
                 .WithTag("Admin").WithDescription("Exit the process so a container restart policy brings it back up on the current settings file. No effect when not run under such a policy.")
@@ -132,6 +146,58 @@ namespace PepperX.Server.Api.Rest
                 _Logging.Info(_Header + "settings updated and persisted to " + path + " (restart required to apply)");
 
                 return Task.FromResult<object>(ServerSettingsResponse.FromSettings(_Settings, _NodeId));
+            });
+        }
+
+        private Task<object> RawSettingsAsync(ApiRequest request)
+        {
+            return RouteHelpers.HandleAsync(request, () =>
+            {
+                // The full file, every field, so the dashboard can edit the entire configuration --
+                // not the redacted view. This does return the database password and S3 keys. That is a
+                // deliberate consequence of the node being unauthenticated: anything reachable here is
+                // reachable by anyone who can reach the port, and full editability was the explicit ask.
+                string path = SettingsManager.ResolveSettingsPath();
+                PepperXSettings full = _Settings;
+                if (File.Exists(path))
+                {
+                    PepperXSettings? fromFile = _Serializer.DeserializeJson<PepperXSettings>(File.ReadAllText(path));
+                    if (fromFile != null) full = fromFile;
+                }
+
+                return Task.FromResult<object>(full);
+            });
+        }
+
+        private Task<object> UpdateRawSettingsAsync(ApiRequest request)
+        {
+            return RouteHelpers.HandleAsync(request, () =>
+            {
+                // Replace the whole file. Deserializing first is the validation: a body that does not
+                // parse into settings is rejected before anything is written, so a typo cannot leave
+                // the node with a settings file it can no longer start from.
+                string raw = request.Http.Request.DataAsString ?? String.Empty;
+                if (String.IsNullOrWhiteSpace(raw)) throw new PepperXException(ApiErrorEnum.BadRequest, 400, "The settings body is empty.");
+
+                PepperXSettings incoming;
+                try
+                {
+                    incoming = _Serializer.DeserializeJson<PepperXSettings>(raw) ?? throw new PepperXException(ApiErrorEnum.BadRequest, 400, "The settings body did not parse into a settings document.");
+                }
+                catch (PepperXException)
+                {
+                    throw;
+                }
+                catch (Exception ex)
+                {
+                    throw new PepperXException(ApiErrorEnum.BadRequest, 400, "The settings body is not valid: " + ex.Message);
+                }
+
+                string path = SettingsManager.ResolveSettingsPath();
+                SettingsManager.Save(incoming, path);
+                _Logging.Info(_Header + "full settings document persisted to " + path + " (restart required to apply)");
+
+                return Task.FromResult<object>(new { Saved = true });
             });
         }
 

@@ -338,7 +338,11 @@
     "restart": "Restart node",
     "restartHint": "Exits the node so its container restarts on the saved settings. This needs a container restart policy — a bare process will simply stop.",
     "restartConfirm": "Restart the node now? The console will lose its connection until the node comes back up.",
-    "restarting": "Restarting… the node will be briefly unavailable."
+    "restarting": "Restarting… the node will be briefly unavailable.",
+    "fullConfig": "Full configuration",
+    "fullConfigHint": "Every setting in the node's configuration file. Changes take effect after a restart. This includes credentials — the node is unauthenticated.",
+    "invalidJson": "That is not valid JSON.",
+    "fullConfigSaved": "Configuration saved. Restart to apply it."
   },
   "setup": {
     "title": "Welcome to PepperX",

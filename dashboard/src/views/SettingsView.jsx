@@ -1,11 +1,11 @@
 /**
  * Node configuration and console preferences.
  *
- * A curated subset of settings is editable. Saving persists to the node's settings file; the change
- * takes effect after a restart, because the server captures its configuration into services at
- * startup rather than reading it live. Ports, hostnames, and database details are deliberately not
- * editable here — a wrong value would leave the node unable to start after the restart that applies
- * it. Theme and language are separate: those live only in this browser.
+ * Two ways to edit the node's settings, both persisting to its configuration file: a form of common
+ * operational knobs for convenience, and a full JSON editor covering every field. Either way the
+ * change takes effect after a restart, because the server captures its configuration into services at
+ * startup rather than reading it live — the Restart button exits the process so a container restart
+ * policy applies it. Theme and language are separate: those live only in this browser.
  */
 
 import React, { useEffect, useState } from 'react';
@@ -46,6 +46,12 @@ export default function SettingsView() {
   const [saving, setSaving] = useState(false);
   const [restartOpen, setRestartOpen] = useState(false);
 
+  // The full configuration document, edited as raw JSON so every field — including ones with no form
+  // control — is editable.
+  const [rawText, setRawText] = useState('');
+  const [rawError, setRawError] = useState(null);
+  const [rawBusy, setRawBusy] = useState(false);
+
   useEffect(() => {
     if (!client) return;
     // A node running an older build has no settings route; the rest of the page still works.
@@ -56,7 +62,36 @@ export default function SettingsView() {
         setDraft(toDraft(loaded));
       })
       .catch(() => setSettings(null));
+
+    client
+      .rawServerSettings()
+      .then((full) => setRawText(JSON.stringify(full, null, 2)))
+      .catch(() => setRawText(''));
   }, [client]);
+
+  const saveRawSettings = async () => {
+    let parsed;
+    try {
+      parsed = JSON.parse(rawText);
+    } catch {
+      setRawError(t('settings.invalidJson'));
+      return;
+    }
+
+    setRawBusy(true);
+    setRawError(null);
+    try {
+      await client.updateRawServerSettings(parsed);
+      // Reload so the editor reflects exactly what was persisted (normalized formatting and all).
+      const full = await client.rawServerSettings();
+      setRawText(JSON.stringify(full, null, 2));
+      notify(t('settings.fullConfigSaved'), 'success');
+    } catch (caught) {
+      notify(caught.message, 'danger');
+    } finally {
+      setRawBusy(false);
+    }
+  };
 
   const saveSettings = async () => {
     setSaving(true);
@@ -267,6 +302,30 @@ export default function SettingsView() {
           <button type="button" className="button-danger" onClick={() => setRestartOpen(true)} disabled={!settings}>
             {t('settings.restart')}
           </button>
+        </div>
+      </Card>
+
+      <Card
+        title={t('settings.fullConfig')}
+        help={t('settings.fullConfigHint')}
+        actions={
+          <button type="button" className="button-primary" onClick={saveRawSettings} disabled={rawBusy || !rawText}>
+            {rawBusy ? t('common.loading') : t('common.save')}
+          </button>
+        }
+      >
+        <div className="settings-raw">
+          <textarea
+            className="settings-raw-editor"
+            value={rawText}
+            spellCheck={false}
+            rows={22}
+            onChange={(event) => {
+              setRawText(event.target.value);
+              setRawError(null);
+            }}
+          />
+          {rawError ? <p className="field-error">{rawError}</p> : null}
         </div>
       </Card>
 

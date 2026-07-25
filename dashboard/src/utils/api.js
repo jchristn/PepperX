@@ -238,6 +238,16 @@ export default class ApiClient {
     return this._request('PUT', '/v1.0/admin/settings', { body: update });
   }
 
+  /** The complete settings document, every field, for full editing. */
+  rawServerSettings() {
+    return this._request('GET', '/v1.0/admin/settings/raw');
+  }
+
+  /** Replace the entire settings document. `settings` is a complete settings object. */
+  updateRawServerSettings(settings) {
+    return this._request('PUT', '/v1.0/admin/settings/raw', { body: settings });
+  }
+
   /** Ask the node to exit so a container restart policy brings it back up on the new settings. */
   restartServer() {
     return this._request('POST', '/v1.0/admin/restart', { body: {} });
