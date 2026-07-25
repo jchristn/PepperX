@@ -18,6 +18,7 @@ import PageHeader from '@components/PageHeader.jsx';
 import TableFrame from '@components/TableFrame.jsx';
 import { CopyableId } from '@components/CopyButton.jsx';
 import { ErrorBanner } from '@components/EmptyState.jsx';
+import { JsonViewerModal } from '@components/JsonViewer.jsx';
 import { Field, TagEditor, cleanTags } from '@components/FilterBar.jsx';
 import { PlusIcon } from '@components/Icons.jsx';
 import { persistedPageSize } from '@components/TablePagination.jsx';
@@ -43,8 +44,10 @@ export default function ContainersView() {
   const [nameError, setNameError] = useState(null);
   const [saving, setSaving] = useState(false);
 
-  const [tagTarget, setTagTarget] = useState(null);
-  const [tagDraft, setTagDraft] = useState({});
+  // One modal renders both View and Edit; `detailMode` decides whether the tags are editable.
+  const [detailTarget, setDetailTarget] = useState(null);
+  const [detailMode, setDetailMode] = useState('view');
+  const [jsonTarget, setJsonTarget] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
 
   const load = useCallback(
@@ -100,18 +103,9 @@ export default function ContainersView() {
     }
   };
 
-  const submitTags = async () => {
-    setSaving(true);
-    try {
-      await client.updateContainerTags(tagTarget.Name, cleanTags(tagDraft));
-      setTagTarget(null);
-      notify(t('common.save'), 'success');
-      await load();
-    } catch (caught) {
-      notify(caught.message, 'danger');
-    } finally {
-      setSaving(false);
-    }
+  const openDetail = (item, mode) => {
+    setDetailMode(mode);
+    setDetailTarget(item);
   };
 
   const submitDelete = async () => {
@@ -131,7 +125,7 @@ export default function ContainersView() {
       label: t('common.name'),
       render: (item) => <strong className="link-text">{item.Name}</strong>,
     },
-    { key: 'Id', label: 'ID', render: (item) => <CopyableId value={item.Id} truncate={16} /> },
+    { key: 'Id', label: 'ID', render: (item) => <CopyableId value={item.Id} /> },
     {
       key: 'ObjectCount',
       label: t('containers.objects'),
@@ -174,15 +168,10 @@ export default function ContainersView() {
       render: (item) => (
         <ActionMenu
           items={[
+            { key: 'view', label: t('common.view'), onClick: () => openDetail(item, 'view') },
+            { key: 'edit', label: t('common.edit'), onClick: () => openDetail(item, 'edit') },
+            { key: 'json', label: t('common.viewJson'), onClick: () => setJsonTarget(item) },
             { key: 'browse', label: t('containers.browse'), onClick: () => navigate(`/containers/${encodeURIComponent(item.Name)}`) },
-            {
-              key: 'tags',
-              label: t('containers.editTags'),
-              onClick: () => {
-                setTagDraft({ ...(item.Tags ?? {}) });
-                setTagTarget(item);
-              },
-            },
             { key: 'delete', label: t('common.delete'), variant: 'danger', onClick: () => setDeleteTarget(item) },
           ]}
         />
@@ -268,30 +257,23 @@ export default function ContainersView() {
         </Field>
       </Modal>
 
-      <Modal
-        open={Boolean(tagTarget)}
-        onClose={() => setTagTarget(null)}
-        title={tagTarget ? t('containers.editTagsTitle', { name: tagTarget.Name }) : ''}
-        size="medium"
-        footer={
-          <>
-            <button type="button" className="button-secondary" onClick={() => setTagTarget(null)} disabled={saving}>
-              {t('common.cancel')}
-            </button>
-            <button type="button" className="button-primary" onClick={submitTags} disabled={saving}>
-              {t('common.save')}
-            </button>
-          </>
-        }
-      >
-        <TagEditor
-          tags={tagDraft}
-          onChange={setTagDraft}
-          keyLabel={t('containers.tagKey')}
-          valueLabel={t('containers.tagValue')}
-          addLabel={t('containers.addTag')}
-        />
-      </Modal>
+      <ContainerDetailModal
+        container={detailTarget}
+        mode={detailMode}
+        onClose={() => setDetailTarget(null)}
+        onSaved={async () => {
+          setDetailTarget(null);
+          await load();
+        }}
+      />
+
+      <JsonViewerModal
+        open={Boolean(jsonTarget)}
+        onClose={() => setJsonTarget(null)}
+        type={t('common.typeContainer')}
+        id={jsonTarget?.Id}
+        value={jsonTarget}
+      />
 
       <ConfirmModal
         open={Boolean(deleteTarget)}
@@ -311,5 +293,103 @@ export default function ContainersView() {
         onCancel={() => setDeleteTarget(null)}
       />
     </div>
+  );
+}
+
+/**
+ * Container details in view or edit mode.
+ *
+ * View and Edit are the same layout; edit mode makes tags writable and shows a Save button. Name,
+ * ID, counts, and dates are derived or immutable, so they are read-only in both — the only thing a
+ * container has that can change is its tags.
+ */
+function ContainerDetailModal({ container, mode, onClose, onSaved }) {
+  const { t } = useTranslation();
+  const { client, notify } = useApp();
+  const formatters = useFormatters();
+
+  const editable = mode === 'edit';
+  const [tags, setTags] = useState({});
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    if (container) setTags({ ...(container.Tags ?? {}) });
+  }, [container]);
+
+  if (!container) return null;
+
+  const submit = async () => {
+    setBusy(true);
+    try {
+      await client.updateContainerTags(container.Name, cleanTags(tags));
+      notify(t('common.save'), 'success');
+      await onSaved();
+    } catch (caught) {
+      notify(caught.message, 'danger');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Modal
+      open={Boolean(container)}
+      onClose={onClose}
+      title={t('common.typeDetails', { type: t('common.typeContainer') })}
+      subtitle={<CopyableId value={container.Id} />}
+      size="medium"
+      footer={
+        editable ? (
+          <>
+            <button type="button" className="button-secondary" onClick={onClose} disabled={busy}>
+              {t('common.cancel')}
+            </button>
+            <button type="button" className="button-primary" onClick={submit} disabled={busy}>
+              {t('common.save')}
+            </button>
+          </>
+        ) : (
+          <button type="button" className="button-secondary" onClick={onClose}>
+            {t('common.close')}
+          </button>
+        )
+      }
+    >
+      <dl className="detail-grid">
+        <dt>{t('common.name')}</dt>
+        <dd>
+          <strong>{container.Name}</strong>
+        </dd>
+        <dt>{t('containers.objects')}</dt>
+        <dd>{formatters.number(container.ObjectCount)}</dd>
+        <dt>{t('containers.size')}</dt>
+        <dd>{formatters.bytes(container.TotalBytes)}</dd>
+        <dt>{t('containers.created')}</dt>
+        <dd title={formatters.dateTime(container.CreatedUtc)}>{formatters.dateTime(container.CreatedUtc)}</dd>
+        <dt>{t('containers.updated')}</dt>
+        <dd title={formatters.dateTime(container.LastUpdateUtc)}>{formatters.dateTime(container.LastUpdateUtc)}</dd>
+      </dl>
+
+      <h3 className="detail-heading">{t('containers.tags')}</h3>
+      {editable ? (
+        <TagEditor
+          tags={tags}
+          onChange={setTags}
+          keyLabel={t('containers.tagKey')}
+          valueLabel={t('containers.tagValue')}
+          addLabel={t('containers.addTag')}
+        />
+      ) : Object.keys(container.Tags ?? {}).length ? (
+        <div className="chip-list">
+          {Object.entries(container.Tags).map(([key, value]) => (
+            <span className="chip is-static" key={key}>
+              {key}={value}
+            </span>
+          ))}
+        </div>
+      ) : (
+        <p className="muted">{t('common.none')}</p>
+      )}
+    </Modal>
   );
 }

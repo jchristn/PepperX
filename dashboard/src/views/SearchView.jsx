@@ -12,9 +12,12 @@ import { useTranslation } from 'react-i18next';
 
 import { useApp } from '@context/AppContext.jsx';
 import useFormatters from '@hooks/useFormatters.js';
+import ActionMenu from '@components/ActionMenu.jsx';
 import PageHeader, { Card } from '@components/PageHeader.jsx';
 import TableFrame from '@components/TableFrame.jsx';
 import { ErrorBanner } from '@components/EmptyState.jsx';
+import { JsonViewerModal } from '@components/JsonViewer.jsx';
+import { EditMetadataModal, ObjectDetailModal } from '@components/ObjectModals.jsx';
 import { ChipInput, Field, FilterActions, FilterGrid, TagEditor, cleanTags } from '@components/FilterBar.jsx';
 import { persistedPageSize } from '@components/TablePagination.jsx';
 
@@ -22,7 +25,7 @@ const EMPTY_FILTERS = { prefix: '', labels: [], tags: {}, containers: [], caseIn
 
 export default function SearchView() {
   const { t } = useTranslation();
-  const { client } = useApp();
+  const { client, notify } = useApp();
   const formatters = useFormatters();
   const navigate = useNavigate();
 
@@ -33,6 +36,38 @@ export default function SearchView() {
   const [pageSize, setPageSize] = useState(() => persistedPageSize('search', 25));
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+
+  const [detail, setDetail] = useState(null);
+  const [editTarget, setEditTarget] = useState(null);
+  const [jsonTarget, setJsonTarget] = useState(null);
+
+  // Search results carry a container name per row, so the object modals — which take an explicit
+  // container — work unchanged on cross-container results. Full metadata is fetched on demand; the
+  // enumeration row omits the freeform Object.
+  const openDetail = async (item) => {
+    try {
+      setDetail(await client.readObjectMetadata(item.ContainerName, item.Key));
+    } catch (caught) {
+      notify(caught.message, 'danger');
+    }
+  };
+
+  const openJson = async (item) => {
+    try {
+      setJsonTarget(await client.readObjectMetadata(item.ContainerName, item.Key));
+    } catch (caught) {
+      notify(caught.message, 'danger');
+    }
+  };
+
+  // Full metadata before editing, so the freeform Object the list omits is not cleared on save.
+  const openEdit = async (item) => {
+    try {
+      setEditTarget(await client.readObjectMetadata(item.ContainerName, item.Key));
+    } catch (caught) {
+      notify(caught.message, 'danger');
+    }
+  };
 
   useEffect(() => {
     if (!client) return;
@@ -95,6 +130,25 @@ export default function SearchView() {
       label: t('objects.created'),
       render: (item) => <span title={formatters.dateTime(item.CreatedUtc)}>{formatters.relative(item.CreatedUtc)}</span>,
     },
+    {
+      key: 'actions',
+      label: '',
+      style: { width: '48px' },
+      render: (item) => (
+        <ActionMenu
+          items={[
+            { key: 'view', label: t('common.view'), onClick: () => void openDetail(item) },
+            { key: 'edit', label: t('common.edit'), onClick: () => void openEdit(item) },
+            { key: 'json', label: t('common.viewJson'), onClick: () => void openJson(item) },
+            {
+              key: 'open',
+              label: t('search.openInContainer'),
+              onClick: () => navigate(`/containers/${encodeURIComponent(item.ContainerName)}`),
+            },
+          ]}
+        />
+      ),
+    },
   ];
 
   return (
@@ -130,19 +184,20 @@ export default function SearchView() {
             />
           </Field>
 
-          <Field id="search-containers" label={t('search.containers')} hint={t('search.containersAll')}>
+          <Field id="search-containers" label={t('search.containers')}>
             <select
               id="search-containers"
-              multiple
-              size={4}
-              value={filters.containers}
+              // Single-select: an empty value means "all containers", which the enumeration query
+              // expresses as an empty Containers list.
+              value={filters.containers[0] ?? ''}
               onChange={(event) =>
                 setFilters({
                   ...filters,
-                  containers: Array.from(event.target.selectedOptions, (option) => option.value),
+                  containers: event.target.value ? [event.target.value] : [],
                 })
               }
             >
+              <option value="">{t('search.containersAll')}</option>
               {containers.map((entry) => (
                 <option key={entry.Id} value={entry.Name}>
                   {entry.Name}
@@ -205,9 +260,29 @@ export default function SearchView() {
           storageKey="search"
           emptyMessage={t('objects.noMatches')}
           rowId={(item) => `${item.ContainerName}/${item.Key}`}
-          onRowClick={(item) => navigate(`/containers/${encodeURIComponent(item.ContainerName)}`)}
+          onRowClick={(item) => void openDetail(item)}
         />
       )}
+
+      <ObjectDetailModal detail={detail} container={detail?.ContainerName} onClose={() => setDetail(null)} />
+
+      <EditMetadataModal
+        target={editTarget}
+        container={editTarget?.ContainerName}
+        onClose={() => setEditTarget(null)}
+        onSaved={() => {
+          setEditTarget(null);
+          void run(filters, pageNumber, pageSize);
+        }}
+      />
+
+      <JsonViewerModal
+        open={Boolean(jsonTarget)}
+        onClose={() => setJsonTarget(null)}
+        type={t('common.typeObject')}
+        id={jsonTarget?.Key}
+        value={jsonTarget}
+      />
     </div>
   );
 }

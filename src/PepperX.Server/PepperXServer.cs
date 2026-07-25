@@ -230,7 +230,7 @@ namespace PepperX.Server
             new ContainerRoutes(containers).Register(_RestServer);
             new ObjectRoutes(writes, reads, deletes, search).Register(_RestServer);
             new SearchRoutes(search).Register(_RestServer);
-            new AdminRoutes(statistics, rehydration, _Settings, _NodeId).Register(_RestServer);
+            new AdminRoutes(statistics, rehydration, _Settings, _NodeId, _Logging).Register(_RestServer);
             new RequestHistoryRoutes(_Db!, _Settings.RequestHistory).Register(_RestServer);
 
             _RestServer.Start();

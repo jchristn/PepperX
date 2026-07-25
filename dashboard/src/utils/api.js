@@ -233,6 +233,16 @@ export default class ApiClient {
     return this._request('GET', '/v1.0/admin/settings');
   }
 
+  /** Persist a partial settings update. Changes take effect after a restart. */
+  updateServerSettings(update) {
+    return this._request('PUT', '/v1.0/admin/settings', { body: update });
+  }
+
+  /** Ask the node to exit so a container restart policy brings it back up on the new settings. */
+  restartServer() {
+    return this._request('POST', '/v1.0/admin/restart', { body: {} });
+  }
+
   rehydrate(mode) {
     return this._request('POST', '/v1.0/admin/rehydrate', { body: { Mode: mode } });
   }

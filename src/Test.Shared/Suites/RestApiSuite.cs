@@ -173,6 +173,39 @@ namespace Test.Shared.Suites
                         Check.Equal(payload.Length, received.Length, "exactly the payload came back, with no trailing bytes");
                     }),
 
+                    new TestCaseDescriptor("RestApi", "SettingsUpdate", "A settings update persists and reads back", async ct =>
+                    {
+                        // The update endpoint persists a partial change; only the supplied fields move.
+                        // Verifying the read-back rather than the file keeps the test independent of where
+                        // the node happens to store its settings.
+                        HttpResponseMessage before = await (await ClientAsync(ct)).GetAsync("/v1.0/admin/settings", ct);
+                        string beforeBody = await before.Content.ReadAsStringAsync(ct);
+                        bool startedEnabled = beforeBody.Contains("\"RequestHistoryEnabled\":true", StringComparison.Ordinal);
+
+                        // Flip retention to a distinctive value and toggle checksum verification.
+                        HttpResponseMessage put = await (await ClientAsync(ct)).PutAsync(
+                            "/v1.0/admin/settings",
+                            Json("{\"RequestHistoryRetentionDays\":99,\"VerifyChecksumOnRead\":true,\"LogMinimumSeverity\":\"Warn\"}"),
+                            ct);
+                        Check.True(put.IsSuccessStatusCode, "update accepted");
+
+                        string updated = await put.Content.ReadAsStringAsync(ct);
+                        Check.True(updated.Contains("\"RequestHistoryRetentionDays\":99", StringComparison.Ordinal), "retention changed");
+                        Check.True(updated.Contains("\"VerifyChecksumOnRead\":true", StringComparison.Ordinal), "checksum flag changed");
+                        Check.True(updated.Contains("\"LogMinimumSeverity\":\"Warn\"", StringComparison.Ordinal), "log level changed");
+
+                        // Unsupplied fields must not move: the request-history enabled flag is untouched.
+                        Check.Equal(
+                            startedEnabled,
+                            updated.Contains("\"RequestHistoryEnabled\":true", StringComparison.Ordinal),
+                            "unspecified fields are left alone");
+
+                        // A fresh read reflects the persisted change.
+                        HttpResponseMessage after = await (await ClientAsync(ct)).GetAsync("/v1.0/admin/settings", ct);
+                        string afterBody = await after.Content.ReadAsStringAsync(ct);
+                        Check.True(afterBody.Contains("\"RequestHistoryRetentionDays\":99", StringComparison.Ordinal), "change is durable across reads");
+                    }),
+
                     new TestCaseDescriptor("RestApi", "Settings", "Settings expose protocols without credentials", async ct =>
                     {
                         HttpResponseMessage response = await (await ClientAsync(ct)).GetAsync("/v1.0/admin/settings", ct);

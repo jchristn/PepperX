@@ -1,9 +1,11 @@
 /**
  * Node configuration and console preferences.
  *
- * Server settings are read-only: PepperX is configured by its settings file and restarted, so
- * editable fields would imply a capability the node does not have. Theme and language are the
- * exception — those live only in this browser.
+ * A curated subset of settings is editable. Saving persists to the node's settings file; the change
+ * takes effect after a restart, because the server captures its configuration into services at
+ * startup rather than reading it live. Ports, hostnames, and database details are deliberately not
+ * editable here — a wrong value would leave the node unable to start after the restart that applies
+ * it. Theme and language are separate: those live only in this browser.
  */
 
 import React, { useEffect, useState } from 'react';
@@ -11,26 +13,81 @@ import { useTranslation } from 'react-i18next';
 
 import { useApp } from '@context/AppContext.jsx';
 import useFormatters from '@hooks/useFormatters.js';
+import ConfirmModal from '@components/ConfirmModal.jsx';
 import DataTable from '@components/DataTable.jsx';
 import PageHeader, { Card } from '@components/PageHeader.jsx';
 import CopyButton, { CopyableId } from '@components/CopyButton.jsx';
+import { Field } from '@components/FilterBar.jsx';
 import { Badge } from '@components/Badges.jsx';
+
+const LOG_LEVELS = ['Debug', 'Info', 'Warn', 'Error', 'Alert', 'Critical', 'Emergency'];
+const DELETE_MODES = ['Cluster', 'Local'];
+
+/** The editable fields, pulled out of a settings response into form state. */
+function toDraft(settings) {
+  return {
+    LogMinimumSeverity: settings?.LogMinimumSeverity || 'Info',
+    VerifyChecksumOnRead: Boolean(settings?.VerifyChecksumOnRead),
+    DeleteCoordinationMode: settings?.DeleteCoordinationMode || 'Cluster',
+    RequestHistoryEnabled: Boolean(settings?.RequestHistoryEnabled),
+    RequestHistoryRetentionDays: settings?.RequestHistoryRetentionDays ?? 0,
+    RequestHistoryMaxRequestBodyBytes: settings?.RequestHistoryMaxRequestBodyBytes ?? 0,
+    RequestHistoryMaxResponseBodyBytes: settings?.RequestHistoryMaxResponseBodyBytes ?? 0,
+  };
+}
 
 export default function SettingsView() {
   const { t } = useTranslation();
-  const { client, serverInfo, endpoint, theme, setTheme, locale, locales, setLocale, dismissSetup } = useApp();
+  const { client, serverInfo, endpoint, theme, setTheme, locale, locales, setLocale, dismissSetup, notify } = useApp();
   const formatters = useFormatters();
 
   const [settings, setSettings] = useState(null);
+  const [draft, setDraft] = useState(toDraft(null));
+  const [saving, setSaving] = useState(false);
+  const [restartOpen, setRestartOpen] = useState(false);
 
   useEffect(() => {
     if (!client) return;
     // A node running an older build has no settings route; the rest of the page still works.
     client
       .serverSettings()
-      .then(setSettings)
+      .then((loaded) => {
+        setSettings(loaded);
+        setDraft(toDraft(loaded));
+      })
       .catch(() => setSettings(null));
   }, [client]);
+
+  const saveSettings = async () => {
+    setSaving(true);
+    try {
+      const updated = await client.updateServerSettings({
+        ...draft,
+        RequestHistoryRetentionDays: Number(draft.RequestHistoryRetentionDays),
+        RequestHistoryMaxRequestBodyBytes: Number(draft.RequestHistoryMaxRequestBodyBytes),
+        RequestHistoryMaxResponseBodyBytes: Number(draft.RequestHistoryMaxResponseBodyBytes),
+      });
+      setSettings(updated);
+      setDraft(toDraft(updated));
+      notify(t('settings.saved'), 'success');
+    } catch (caught) {
+      notify(caught.message, 'danger');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const restartNode = async () => {
+    setRestartOpen(false);
+    try {
+      await client.restartServer();
+      notify(t('settings.restarting'), 'info');
+    } catch (caught) {
+      // The node may drop the connection mid-response as it exits; that is success, not failure.
+      if (!caught.isNetworkError) notify(caught.message, 'danger');
+      else notify(t('settings.restarting'), 'info');
+    }
+  };
 
   return (
     <div className="page">
@@ -108,6 +165,120 @@ export default function SettingsView() {
           </dd>
         </dl>
       </Card>
+
+      <Card
+        title={t('settings.editable')}
+        help={t('settings.rebootNote')}
+        actions={
+          <button type="button" className="button-primary" onClick={saveSettings} disabled={saving || !settings}>
+            {saving ? t('common.loading') : t('common.save')}
+          </button>
+        }
+      >
+        <div className="settings-form">
+          <Field id="set-log" label={t('settings.logSeverity')}>
+            <select
+              id="set-log"
+              value={draft.LogMinimumSeverity}
+              onChange={(event) => setDraft({ ...draft, LogMinimumSeverity: event.target.value })}
+            >
+              {LOG_LEVELS.map((level) => (
+                <option key={level} value={level}>
+                  {level}
+                </option>
+              ))}
+            </select>
+          </Field>
+
+          <Field id="set-delete" label={t('settings.deleteMode')}>
+            <select
+              id="set-delete"
+              value={draft.DeleteCoordinationMode}
+              onChange={(event) => setDraft({ ...draft, DeleteCoordinationMode: event.target.value })}
+            >
+              {DELETE_MODES.map((mode) => (
+                <option key={mode} value={mode}>
+                  {mode}
+                </option>
+              ))}
+            </select>
+          </Field>
+
+          <Field id="set-verify" label={t('settings.verifyChecksum')}>
+            <label className="checkbox-row" htmlFor="set-verify-input">
+              <input
+                id="set-verify-input"
+                type="checkbox"
+                checked={draft.VerifyChecksumOnRead}
+                onChange={(event) => setDraft({ ...draft, VerifyChecksumOnRead: event.target.checked })}
+              />
+              <span>{t('common.yes')}</span>
+            </label>
+          </Field>
+
+          <Field id="set-history" label={t('settings.requestHistoryEnabled')}>
+            <label className="checkbox-row" htmlFor="set-history-input">
+              <input
+                id="set-history-input"
+                type="checkbox"
+                checked={draft.RequestHistoryEnabled}
+                onChange={(event) => setDraft({ ...draft, RequestHistoryEnabled: event.target.checked })}
+              />
+              <span>{t('common.yes')}</span>
+            </label>
+          </Field>
+
+          <Field id="set-retention" label={t('settings.retentionDays')}>
+            <input
+              id="set-retention"
+              type="number"
+              min="0"
+              value={draft.RequestHistoryRetentionDays}
+              onChange={(event) => setDraft({ ...draft, RequestHistoryRetentionDays: event.target.value })}
+            />
+          </Field>
+
+          <Field id="set-reqbody" label={t('settings.maxRequestBody')}>
+            <input
+              id="set-reqbody"
+              type="number"
+              min="0"
+              value={draft.RequestHistoryMaxRequestBodyBytes}
+              onChange={(event) => setDraft({ ...draft, RequestHistoryMaxRequestBodyBytes: event.target.value })}
+            />
+          </Field>
+
+          <Field id="set-respbody" label={t('settings.maxResponseBody')}>
+            <input
+              id="set-respbody"
+              type="number"
+              min="0"
+              value={draft.RequestHistoryMaxResponseBodyBytes}
+              onChange={(event) => setDraft({ ...draft, RequestHistoryMaxResponseBodyBytes: event.target.value })}
+            />
+          </Field>
+        </div>
+
+        <div className="settings-restart">
+          <div>
+            <strong>{t('settings.restart')}</strong>
+            <p className="field-hint">{t('settings.restartHint')}</p>
+          </div>
+          <button type="button" className="button-danger" onClick={() => setRestartOpen(true)} disabled={!settings}>
+            {t('settings.restart')}
+          </button>
+        </div>
+      </Card>
+
+      <ConfirmModal
+        open={restartOpen}
+        danger
+        title={t('settings.restart')}
+        message={t('settings.restartConfirm')}
+        confirmLabel={t('settings.restart')}
+        onConfirm={restartNode}
+        onCancel={() => setRestartOpen(false)}
+      />
 
       <Card title={t('settings.appearance')}>
         <div className="form-field">

@@ -137,7 +137,7 @@ export default function CapacityView() {
       <Card title={t('capacity.clusterNodes')} help={nodes.length <= 1 ? t('capacity.singleNode') : null}>
         <DataTable
           columns={[
-            { key: 'Id', label: 'ID', render: (item) => <CopyableId value={item.Id} truncate={20} /> },
+            { key: 'Id', label: 'ID', render: (item) => <CopyableId value={item.Id} /> },
             { key: 'Hostname', label: t('common.host'), render: (item) => item.Hostname || '—' },
             {
               key: 'IsAlive',

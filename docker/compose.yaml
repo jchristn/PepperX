@@ -58,7 +58,10 @@ services:
       - "8004:8004"   # MCP over TCP
       - "6379:6379"   # Redis RESP
     volumes:
-      - ./config/node1.json:/app/pepperx.json:ro
+      # Read-write, not :ro, so the Settings page can persist edits: the update endpoint writes to
+      # /app/pepperx.json, and the node re-reads it on the restart that applies the change. This does
+      # mean the committed config/node1.json is modified in place when you save settings.
+      - ./config/node1.json:/app/pepperx.json
       # Both nodes mount the same extent volume. This is the requirement that makes them
       # interchangeable: any node must be able to serve any object.
       - extent-data:/app/data/extents
@@ -90,7 +93,7 @@ services:
       - "8014:8004"
       - "6380:6379"
     volumes:
-      - ./config/node2.json:/app/pepperx.json:ro
+      - ./config/node2.json:/app/pepperx.json
       - extent-data:/app/data/extents
     healthcheck:
       test: ["CMD", "curl", "--fail", "--silent", "http://localhost:8000/v1.0/api/health"]

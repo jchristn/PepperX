@@ -8,7 +8,7 @@
 import React, { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 
-import CopyButton from './CopyButton.jsx';
+import CopyButton, { CopyableId } from './CopyButton.jsx';
 import Modal from './Modal.jsx';
 
 /** Tokenize a serialized JSON document into spans, so no HTML is ever injected. */
@@ -70,11 +70,25 @@ export default function JsonViewer({ value, emptyMessage = null, maxHeight = nul
   );
 }
 
-/** The same viewer inside a dialog, for row-level "View JSON" actions. */
-export function JsonViewerModal({ open, onClose, title, value }) {
+/**
+ * The viewer inside a dialog, for row-level "View JSON" actions.
+ *
+ * `type` gives the heading ("Container Details", "Object Details", …) and `id` renders the object's
+ * identifier beneath it with a copy button — the same affordance operators use to paste an ID into a
+ * terminal. The body carries its own copy button, so both the whole document and its ID are one
+ * click away.
+ */
+export function JsonViewerModal({ open, onClose, title, type, id, value }) {
   const { t } = useTranslation();
+  const heading = title || (type ? t('common.typeDetails', { type }) : t('common.viewJson'));
   return (
-    <Modal open={open} onClose={onClose} title={title || t('common.viewJson')} size="large">
+    <Modal
+      open={open}
+      onClose={onClose}
+      title={heading}
+      subtitle={id ? <CopyableId value={id} /> : null}
+      size="large"
+    >
       <JsonViewer value={value} />
     </Modal>
   );

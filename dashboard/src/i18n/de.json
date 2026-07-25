@@ -4,7 +4,8 @@
     "tagline": "Key-Value-Speicher mit umfangreichen Metadaten"
   },
   "connect": {
-    "title": "Mit einem Knoten verbinden",
+    "title": "PepperX-Anmeldung",
+    "subtitle": "Geben Sie Ihre Server-URL an, um Ihre PepperX-Infrastruktur zu verwalten.",
     "serverUrl": "Server-URL",
     "serverUrlPlaceholder": "http://localhost:8000",
     "connect": "Verbinden",
@@ -71,7 +72,11 @@
     "apply": "Anwenden",
     "clear": "Zurücksetzen",
     "of": "von",
-    "unknown": "Unbekannt"
+    "unknown": "Unbekannt",
+    "typeDetails": "{{type}}-Details",
+    "typeContainer": "Container",
+    "typeObject": "Objekt",
+    "typeRequest": "Anfrage"
   },
   "table": {
     "showing": "{{from}}–{{to}} von {{total}} Datensätzen",
@@ -249,6 +254,8 @@
     "duration": "Dauer",
     "source": "Quelle",
     "detailTitle": "Anfragedetails",
+    "requestSection": "Anfrage",
+    "responseSection": "Antwort",
     "metadata": "Metadaten",
     "requestHeaders": "Anfrage-Header",
     "requestBody": "Anfragetext",
@@ -279,6 +286,8 @@
     "response": "Antwort",
     "responseBody": "Text",
     "responseHeaders": "Header",
+    "responseMetadata": "Metadaten",
+    "responseTime": "Antwortzeit",
     "timing": "Zeitmessung",
     "snippets": "Code",
     "resolvedUrl": "Aufgelöste URL",
@@ -318,7 +327,18 @@
     "nodeId": "Knoten-ID",
     "deleteMode": "Löschkoordination",
     "requestHistory": "Anfrageerfassung",
-    "retentionDays": "{{count}} Tage Aufbewahrung"
+    "retentionDays": "Aufbewahrung (Tage)",
+    "editable": "Einstellungen bearbeiten",
+    "rebootNote": "Änderungen werden nach einem Neustart des Knotens wirksam.",
+    "logSeverity": "Protokollstufe",
+    "requestHistoryEnabled": "Anfrageverlauf erfassen",
+    "maxRequestBody": "Max. Anfragetext (Byte)",
+    "maxResponseBody": "Max. Antworttext (Byte)",
+    "saved": "Einstellungen gespeichert. Zum Anwenden neu starten.",
+    "restart": "Knoten neu starten",
+    "restartHint": "Beendet den Knoten, damit sein Container mit den gespeicherten Einstellungen neu startet. Erfordert eine Container-Neustartrichtlinie — ein bloßer Prozess wird nur beendet.",
+    "restartConfirm": "Den Knoten jetzt neu starten? Die Konsole verliert die Verbindung, bis der Knoten wieder verfügbar ist.",
+    "restarting": "Neustart… der Knoten ist kurz nicht verfügbar."
   },
   "setup": {
     "title": "Willkommen bei PepperX",

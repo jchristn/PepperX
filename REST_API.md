@@ -467,6 +467,48 @@ The database password and the S3 static keys are deliberately absent. This endpo
 like everything else, and serving credentials from it would turn a configuration display into a
 credential leak.
 
+### `PUT /v1.0/admin/settings`
+
+Persist a partial settings update to the node's settings file. Every field is optional; only the ones
+supplied change.
+
+```bash
+curl -X PUT http://localhost:8000/v1.0/admin/settings \
+  -H 'Content-Type: application/json' \
+  -d '{"RequestHistoryRetentionDays": 14, "LogMinimumSeverity": "Warn"}'
+```
+
+| Field | Type | Notes |
+|---|---|---|
+| `LogMinimumSeverity` | string | Debug, Info, Warn, Error, Alert, Critical, Emergency |
+| `VerifyChecksumOnRead` | bool | Verify each extent's checksum on read |
+| `DeleteCoordinationMode` | string | `Cluster` or `Local` |
+| `RequestHistoryEnabled` | bool | |
+| `RequestHistoryRetentionDays` | int | |
+| `RequestHistoryMaxRequestBodyBytes` | int | |
+| `RequestHistoryMaxResponseBodyBytes` | int | |
+
+**Changes take effect after a restart.** The server captures its configuration into its services at
+startup and does not read it live, so this writes the file the next boot will read rather than
+altering the running process. The editable surface is deliberately narrow — ports, hostnames, and
+database details are not here, because a wrong value would leave the node unable to start after the
+restart that applies it.
+
+The response is the updated `GET /v1.0/admin/settings` view.
+
+### `POST /v1.0/admin/restart`
+
+Exit the process so a container restart policy (`restart: unless-stopped` or `always`) brings it back
+up on the current settings file. Returns `202`; the connection drops as the node exits.
+
+```bash
+curl -X POST http://localhost:8000/v1.0/admin/restart
+```
+
+This has no effect when the node is not run under a restart policy — a bare `dotnet run` simply stops.
+Paired with `PUT /v1.0/admin/settings`, it is how the dashboard applies a settings change: save, then
+restart.
+
 ### `POST /v1.0/admin/rehydrate`
 
 Reconcile the metadata database against raw extent storage.

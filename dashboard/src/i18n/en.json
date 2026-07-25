@@ -4,7 +4,8 @@
     "tagline": "Key-value storage with rich metadata"
   },
   "connect": {
-    "title": "Connect to a node",
+    "title": "PepperX Login",
+    "subtitle": "Specify your server URL to manage your PepperX infrastructure.",
     "serverUrl": "Server URL",
     "serverUrlPlaceholder": "http://localhost:8000",
     "connect": "Connect",
@@ -71,7 +72,11 @@
     "apply": "Apply",
     "clear": "Clear",
     "of": "of",
-    "unknown": "Unknown"
+    "unknown": "Unknown",
+    "typeDetails": "{{type}} Details",
+    "typeContainer": "Container",
+    "typeObject": "Object",
+    "typeRequest": "Request"
   },
   "table": {
     "showing": "Showing {{from}}–{{to}} of {{total}} records",
@@ -249,6 +254,8 @@
     "duration": "Duration",
     "source": "Source",
     "detailTitle": "Request detail",
+    "requestSection": "Request",
+    "responseSection": "Response",
     "metadata": "Metadata",
     "requestHeaders": "Request headers",
     "requestBody": "Request body",
@@ -279,6 +286,8 @@
     "response": "Response",
     "responseBody": "Body",
     "responseHeaders": "Headers",
+    "responseMetadata": "Metadata",
+    "responseTime": "Response time",
     "timing": "Timing",
     "snippets": "Code",
     "resolvedUrl": "Resolved URL",
@@ -318,7 +327,18 @@
     "nodeId": "Node ID",
     "deleteMode": "Delete coordination",
     "requestHistory": "Request capture",
-    "retentionDays": "{{count}} day retention"
+    "retentionDays": "Retention (days)",
+    "editable": "Edit settings",
+    "rebootNote": "Changes take effect after the node restarts.",
+    "logSeverity": "Log level",
+    "requestHistoryEnabled": "Capture request history",
+    "maxRequestBody": "Max request body (bytes)",
+    "maxResponseBody": "Max response body (bytes)",
+    "saved": "Settings saved. Restart to apply them.",
+    "restart": "Restart node",
+    "restartHint": "Exits the node so its container restarts on the saved settings. This needs a container restart policy — a bare process will simply stop.",
+    "restartConfirm": "Restart the node now? The console will lose its connection until the node comes back up.",
+    "restarting": "Restarting… the node will be briefly unavailable."
   },
   "setup": {
     "title": "Welcome to PepperX",

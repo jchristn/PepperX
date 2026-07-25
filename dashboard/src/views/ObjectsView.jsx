@@ -14,14 +14,14 @@ import { useApp } from '@context/AppContext.jsx';
 import useFormatters from '@hooks/useFormatters.js';
 import ActionMenu from '@components/ActionMenu.jsx';
 import ConfirmModal from '@components/ConfirmModal.jsx';
-import JsonViewer from '@components/JsonViewer.jsx';
+import { JsonViewerModal } from '@components/JsonViewer.jsx';
+import { EditMetadataModal, ObjectDetailModal } from '@components/ObjectModals.jsx';
 import Modal from '@components/Modal.jsx';
 import PageHeader, { Card } from '@components/PageHeader.jsx';
 import TableFrame from '@components/TableFrame.jsx';
-import { CopyableId } from '@components/CopyButton.jsx';
 import { ErrorBanner } from '@components/EmptyState.jsx';
 import { ChipInput, Field, FilterActions, FilterGrid, TagEditor, cleanTags } from '@components/FilterBar.jsx';
-import { DownloadIcon, UploadIcon } from '@components/Icons.jsx';
+import { UploadIcon } from '@components/Icons.jsx';
 import { persistedPageSize } from '@components/TablePagination.jsx';
 
 const EMPTY_FILTERS = { prefix: '', labels: [], tags: {} };
@@ -41,6 +41,7 @@ export default function ObjectsView() {
 
   const [uploadOpen, setUploadOpen] = useState(false);
   const [detail, setDetail] = useState(null);
+  const [jsonTarget, setJsonTarget] = useState(null);
   const [editTarget, setEditTarget] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
 
@@ -82,6 +83,25 @@ export default function ObjectsView() {
     try {
       const full = await client.readObjectMetadata(container, item.Key);
       setDetail(full);
+    } catch (caught) {
+      notify(caught.message, 'danger');
+    }
+  };
+
+  // View JSON needs the full metadata, including the freeform Object the list query omits.
+  const openJson = async (item) => {
+    try {
+      setJsonTarget(await client.readObjectMetadata(container, item.Key));
+    } catch (caught) {
+      notify(caught.message, 'danger');
+    }
+  };
+
+  // Edit must load the full metadata first. The enumeration row omits the freeform Object, so
+  // editing from it and saving would clear an object that actually exists.
+  const openEdit = async (item) => {
+    try {
+      setEditTarget(await client.readObjectMetadata(container, item.Key));
     } catch (caught) {
       notify(caught.message, 'danger');
     }
@@ -137,12 +157,13 @@ export default function ObjectsView() {
         <ActionMenu
           items={[
             { key: 'view', label: t('common.view'), onClick: () => void openDetail(item) },
+            { key: 'edit', label: t('common.edit'), onClick: () => void openEdit(item) },
+            { key: 'json', label: t('common.viewJson'), onClick: () => void openJson(item) },
             {
               key: 'download',
               label: t('objects.downloadPayload'),
               onClick: () => window.open(client.objectUrl(container, item.Key), '_blank', 'noopener'),
             },
-            { key: 'edit', label: t('objects.editMetadata'), onClick: () => setEditTarget(item) },
             { key: 'delete', label: t('common.delete'), variant: 'danger', onClick: () => setDeleteTarget(item) },
           ]}
         />
@@ -261,6 +282,14 @@ export default function ObjectsView() {
           setEditTarget(null);
           await load();
         }}
+      />
+
+      <JsonViewerModal
+        open={Boolean(jsonTarget)}
+        onClose={() => setJsonTarget(null)}
+        type={t('common.typeObject')}
+        id={jsonTarget?.Key}
+        value={jsonTarget}
       />
 
       <ConfirmModal
@@ -404,188 +433,6 @@ function UploadModal({ open, container, onClose, onUploaded }) {
           value={metadataText}
           spellCheck={false}
           placeholder={'{\n  "source": "ingest"\n}'}
-          onChange={(event) => {
-            setMetadataText(event.target.value);
-            setJsonError(null);
-          }}
-        />
-      </Field>
-    </Modal>
-  );
-}
-
-/** Full metadata for one object, including its freeform JSON. */
-function ObjectDetailModal({ detail, container, onClose, onDelete }) {
-  const { t } = useTranslation();
-  const { client } = useApp();
-  const formatters = useFormatters();
-
-  if (!detail) return null;
-
-  return (
-    <Modal
-      open={Boolean(detail)}
-      onClose={onClose}
-      title={t('objects.detailTitle')}
-      subtitle={detail.Key}
-      size="large"
-      footer={
-        <>
-          <a
-            className="button-secondary"
-            href={client.objectUrl(container, detail.Key)}
-            target="_blank"
-            rel="noreferrer"
-          >
-            <DownloadIcon size={16} />
-            {t('objects.downloadPayload')}
-          </a>
-          <button type="button" className="button-danger" onClick={() => onDelete(detail)}>
-            {t('common.delete')}
-          </button>
-        </>
-      }
-    >
-      <dl className="detail-grid">
-        <dt>{t('objects.key')}</dt>
-        <dd className="mono">{detail.Key}</dd>
-        <dt>{t('objects.size')}</dt>
-        <dd>{formatters.bytes(detail.SizeBytes)}</dd>
-        <dt>{t('objects.contentType')}</dt>
-        <dd>{detail.ContentType || '—'}</dd>
-        <dt>{t('objects.extentId')}</dt>
-        <dd>
-          <CopyableId value={detail.ExtentId} />
-        </dd>
-        <dt>{t('objects.checksum')}</dt>
-        <dd>
-          <CopyableId value={detail.Sha256} truncate={24} />
-        </dd>
-        <dt>{t('objects.created')}</dt>
-        <dd title={formatters.dateTime(detail.CreatedUtc)}>{formatters.dateTime(detail.CreatedUtc)}</dd>
-      </dl>
-
-      <h3 className="detail-heading">{t('objects.labels')}</h3>
-      {detail.Labels?.length ? (
-        <div className="chip-list">
-          {detail.Labels.map((label) => (
-            <span className="chip is-static" key={label}>
-              {label}
-            </span>
-          ))}
-        </div>
-      ) : (
-        <p className="muted">{t('common.none')}</p>
-      )}
-
-      <h3 className="detail-heading">{t('containers.tags')}</h3>
-      {Object.keys(detail.Tags ?? {}).length ? (
-        <div className="chip-list">
-          {Object.entries(detail.Tags).map(([key, value]) => (
-            <span className="chip is-static" key={key}>
-              {key}={value}
-            </span>
-          ))}
-        </div>
-      ) : (
-        <p className="muted">{t('common.none')}</p>
-      )}
-
-      <h3 className="detail-heading">{t('objects.metadataObject')}</h3>
-      <JsonViewer value={detail.Object} emptyMessage={t('objects.noMetadataObject')} maxHeight="320px" />
-    </Modal>
-  );
-}
-
-/** Metadata-only update, which the server implements as a rewrite of the same payload. */
-function EditMetadataModal({ target, container, onClose, onSaved }) {
-  const { t } = useTranslation();
-  const { client, notify } = useApp();
-
-  const [labels, setLabels] = useState([]);
-  const [tags, setTags] = useState({});
-  const [metadataText, setMetadataText] = useState('');
-  const [jsonError, setJsonError] = useState(null);
-  const [busy, setBusy] = useState(false);
-
-  useEffect(() => {
-    if (!target) return;
-    setLabels(target.Labels ?? []);
-    setTags({ ...(target.Tags ?? {}) });
-    setMetadataText(target.Object ? JSON.stringify(target.Object, null, 2) : '');
-    setJsonError(null);
-  }, [target]);
-
-  if (!target) return null;
-
-  const submit = async () => {
-    let metadataObject = null;
-    if (metadataText.trim()) {
-      try {
-        metadataObject = JSON.parse(metadataText);
-      } catch {
-        setJsonError(t('objects.metadataObjectInvalid'));
-        return;
-      }
-    }
-
-    setBusy(true);
-    try {
-      await client.updateObjectMetadata(container, target.Key, {
-        Labels: labels,
-        Tags: cleanTags(tags),
-        Object: metadataObject,
-        // A null Object means "leave it alone" to the server, so emptying the box needs an explicit
-        // clear instead.
-        ClearObject: metadataObject === null,
-      });
-      notify(t('common.save'), 'success');
-      await onSaved();
-    } catch (caught) {
-      notify(caught.message, 'danger');
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  return (
-    <Modal
-      open={Boolean(target)}
-      onClose={onClose}
-      title={t('objects.editMetadataTitle', { key: target.Key })}
-      subtitle={t('objects.editMetadataHint')}
-      size="large"
-      footer={
-        <>
-          <button type="button" className="button-secondary" onClick={onClose} disabled={busy}>
-            {t('common.cancel')}
-          </button>
-          <button type="button" className="button-primary" onClick={submit} disabled={busy}>
-            {t('common.save')}
-          </button>
-        </>
-      }
-    >
-      <Field id="edit-labels" label={t('objects.labels')}>
-        <ChipInput id="edit-labels" values={labels} onChange={setLabels} placeholder={t('objects.labelsPlaceholder')} />
-      </Field>
-
-      <Field id="edit-tags" label={t('containers.tags')}>
-        <TagEditor
-          tags={tags}
-          onChange={setTags}
-          keyLabel={t('containers.tagKey')}
-          valueLabel={t('containers.tagValue')}
-          addLabel={t('containers.addTag')}
-        />
-      </Field>
-
-      <Field id="edit-object" label={t('objects.metadataObject')} error={jsonError}>
-        <textarea
-          id="edit-object"
-          rows={8}
-          value={metadataText}
-          spellCheck={false}
           onChange={(event) => {
             setMetadataText(event.target.value);
             setJsonError(null);

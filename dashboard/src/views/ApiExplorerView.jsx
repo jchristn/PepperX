@@ -54,7 +54,6 @@ export default function ApiExplorerView() {
   const [loading, setLoading] = useState(true);
   const [specError, setSpecError] = useState(null);
 
-  const [search, setSearch] = useState('');
   const [selectedId, setSelectedId] = useState(null);
   const [pathValues, setPathValues] = useState({});
   const [queryValues, setQueryValues] = useState({});
@@ -64,6 +63,7 @@ export default function ApiExplorerView() {
   const [result, setResult] = useState(null);
   const [running, setRunning] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [responseTab, setResponseTab] = useState('body');
 
   useEffect(() => {
     if (!client) return;
@@ -81,23 +81,23 @@ export default function ApiExplorerView() {
   const operations = useMemo(() => toOperations(spec), [spec]);
   const selected = operations.find((operation) => operation.id === selectedId) ?? null;
 
-  const filtered = useMemo(() => {
-    const needle = search.trim().toLowerCase();
-    if (!needle) return operations;
-    return operations.filter(
-      (operation) =>
-        operation.path.toLowerCase().includes(needle) ||
-        operation.method.toLowerCase().includes(needle) ||
-        operation.summary.toLowerCase().includes(needle),
-    );
-  }, [operations, search]);
+  // Grouped by tag for the dropdown's optgroups. `operations` is already sorted by tag then path.
+  const groups = useMemo(() => {
+    const byTag = new Map();
+    for (const operation of operations) {
+      if (!byTag.has(operation.tag)) byTag.set(operation.tag, []);
+      byTag.get(operation.tag).push(operation);
+    }
+    return Array.from(byTag, ([tag, ops]) => ({ tag, ops }));
+  }, [operations]);
 
   const selectOperation = useCallback((operation) => {
-    setSelectedId(operation.id);
+    setSelectedId(operation?.id ?? null);
     setPathValues({});
     setQueryValues({});
     setBodyText('');
     setResult(null);
+    setResponseTab('body');
   }, []);
 
   const resolvedPath = selected
@@ -140,6 +140,8 @@ export default function ApiExplorerView() {
       setResult({ status: 0, durationMs: performance.now() - started, headers: {}, body: caught.message });
     } finally {
       setRunning(false);
+      // Land on the Body tab for each new response — it is what a caller looks at first.
+      setResponseTab('body');
     }
   };
 
@@ -163,166 +165,185 @@ export default function ApiExplorerView() {
     <div className="page">
       <PageHeader title={t('explorer.title')} subtitle={t('explorer.subtitle')} />
 
-      <div className="explorer-layout">
-        <Card title={t('explorer.operations')} className="explorer-operations">
-          <div className="explorer-search">
-            <input
-              type="search"
-              value={search}
-              placeholder={t('explorer.searchOperations')}
-              aria-label={t('explorer.searchOperations')}
-              onChange={(event) => setSearch(event.target.value)}
-            />
-          </div>
-          <ul className="operation-list">
-            {filtered.map((operation, index) => (
-              <li key={operation.id}>
-                {/* The list is sorted by tag, so a header wherever the tag changes groups it for free. */}
-                {index === 0 || filtered[index - 1].tag !== operation.tag ? (
-                  <div className="operation-group">{operation.tag}</div>
-                ) : null}
-                <button
-                  type="button"
-                  className={`operation-item${operation.id === selectedId ? ' is-active' : ''}`}
-                  onClick={() => selectOperation(operation)}
-                  title={operation.summary}
-                >
-                  <MethodBadge method={operation.method} />
-                  <span className="operation-path mono">{operation.path}</span>
-                </button>
-              </li>
+      <Card title={t('explorer.operations')}>
+        <div className="explorer-operation-picker">
+          <select
+            className="explorer-operation-select"
+            value={selectedId ?? ''}
+            onChange={(event) => selectOperation(operations.find((operation) => operation.id === event.target.value))}
+            aria-label={t('explorer.operations')}
+          >
+            <option value="">{t('explorer.selectOperation')}</option>
+            {groups.map((group) => (
+              <optgroup key={group.tag} label={group.tag}>
+                {group.ops.map((operation) => (
+                  <option key={operation.id} value={operation.id}>
+                    {operation.method} {operation.path}
+                  </option>
+                ))}
+              </optgroup>
             ))}
-          </ul>
-        </Card>
+          </select>
+        </div>
+      </Card>
 
-        <div className="explorer-detail">
-          {!selected ? (
-            <Card>
-              <p className="muted card-padded">{t('explorer.selectOperation')}</p>
-            </Card>
-          ) : (
-            <>
-              <Card
-                title={
-                  <span className="row">
-                    <MethodBadge method={selected.method} />
-                    <span className="mono">{selected.path}</span>
-                  </span>
-                }
-                help={selected.summary || null}
-                actions={
-                  <button
-                    type="button"
-                    className="button-primary"
-                    disabled={running}
-                    onClick={() => (DESTRUCTIVE.has(selected.method) ? setConfirmOpen(true) : void execute())}
-                  >
-                    <PlayIcon size={14} />
-                    {running ? t('explorer.executing') : t('explorer.execute')}
-                  </button>
-                }
+      {!selected ? null : (
+        <>
+          <Card
+            title={
+              <span className="row">
+                <MethodBadge method={selected.method} />
+                <span className="mono">{selected.path}</span>
+              </span>
+            }
+            help={selected.summary || null}
+            actions={
+              <button
+                type="button"
+                className="button-primary"
+                disabled={running}
+                onClick={() => (DESTRUCTIVE.has(selected.method) ? setConfirmOpen(true) : void execute())}
               >
-                {pathParams.length > 0 ? (
-                  <>
-                    <h3 className="detail-heading">{t('explorer.pathParams')}</h3>
-                    {pathParams.map((parameter) => (
-                      <Field
-                        key={parameter.name}
-                        id={`path-${parameter.name}`}
-                        label={parameter.name}
-                        hint={parameter.description}
-                      >
-                        <input
-                          id={`path-${parameter.name}`}
-                          type="text"
-                          spellCheck={false}
-                          value={pathValues[parameter.name] ?? ''}
-                          onChange={(event) => setPathValues({ ...pathValues, [parameter.name]: event.target.value })}
-                        />
-                      </Field>
-                    ))}
-                  </>
-                ) : null}
-
-                {queryParams.length > 0 ? (
-                  <>
-                    <h3 className="detail-heading">{t('explorer.queryParams')}</h3>
-                    {queryParams.map((parameter) => (
-                      <Field
-                        key={parameter.name}
-                        id={`query-${parameter.name}`}
-                        label={parameter.name}
-                        hint={parameter.description}
-                      >
-                        <input
-                          id={`query-${parameter.name}`}
-                          type="text"
-                          spellCheck={false}
-                          value={queryValues[parameter.name] ?? ''}
-                          onChange={(event) => setQueryValues({ ...queryValues, [parameter.name]: event.target.value })}
-                        />
-                      </Field>
-                    ))}
-                  </>
-                ) : null}
-
-                <Field id="explorer-headers" label={t('explorer.headers')} hint="Name: value, one per line">
-                  <textarea
-                    id="explorer-headers"
-                    rows={3}
-                    value={headerText}
-                    spellCheck={false}
-                    onChange={(event) => setHeaderText(event.target.value)}
-                  />
-                </Field>
-
-                {selected.hasBody ? (
-                  <Field id="explorer-body" label={t('explorer.body')}>
-                    <textarea
-                      id="explorer-body"
-                      rows={8}
-                      value={bodyText}
+                <PlayIcon size={14} />
+                {running ? t('explorer.executing') : t('explorer.execute')}
+              </button>
+            }
+          >
+            {pathParams.length > 0 ? (
+              <>
+                <h3 className="detail-heading">{t('explorer.pathParams')}</h3>
+                {pathParams.map((parameter) => (
+                  <Field key={parameter.name} id={`path-${parameter.name}`} label={parameter.name} hint={parameter.description}>
+                    <input
+                      id={`path-${parameter.name}`}
+                      type="text"
                       spellCheck={false}
-                      onChange={(event) => setBodyText(event.target.value)}
+                      value={pathValues[parameter.name] ?? ''}
+                      onChange={(event) => setPathValues({ ...pathValues, [parameter.name]: event.target.value })}
                     />
                   </Field>
+                ))}
+              </>
+            ) : null}
+
+            {queryParams.length > 0 ? (
+              <>
+                <h3 className="detail-heading">{t('explorer.queryParams')}</h3>
+                {queryParams.map((parameter) => (
+                  <Field key={parameter.name} id={`query-${parameter.name}`} label={parameter.name} hint={parameter.description}>
+                    <input
+                      id={`query-${parameter.name}`}
+                      type="text"
+                      spellCheck={false}
+                      value={queryValues[parameter.name] ?? ''}
+                      onChange={(event) => setQueryValues({ ...queryValues, [parameter.name]: event.target.value })}
+                    />
+                  </Field>
+                ))}
+              </>
+            ) : null}
+
+            <Field id="explorer-headers" label={t('explorer.headers')} hint="Name: value, one per line">
+              <textarea
+                id="explorer-headers"
+                rows={3}
+                value={headerText}
+                spellCheck={false}
+                onChange={(event) => setHeaderText(event.target.value)}
+              />
+            </Field>
+
+            {selected.hasBody ? (
+              <Field id="explorer-body" label={t('explorer.body')}>
+                <textarea
+                  id="explorer-body"
+                  rows={8}
+                  value={bodyText}
+                  spellCheck={false}
+                  onChange={(event) => setBodyText(event.target.value)}
+                />
+              </Field>
+            ) : null}
+
+            <div className="explorer-url">
+              <span className="field-hint">{t('explorer.resolvedUrl')}</span>
+              <code className="break-all">{endpoint + resolvedPath}</code>
+              <CopyButton value={endpoint + resolvedPath} />
+            </div>
+          </Card>
+
+          {result ? (
+            <Card
+              title={t('explorer.response')}
+              actions={
+                <span className="row">
+                  <StatusBadge status={result.status || '—'} />
+                  <span className="muted">{formatters.duration(result.durationMs)}</span>
+                </span>
+              }
+            >
+              <div className="tabs" role="tablist">
+                {[
+                  ['body', t('explorer.responseBody')],
+                  ['headers', t('explorer.responseHeaders')],
+                  ['metadata', t('explorer.responseMetadata')],
+                ].map(([id, label]) => (
+                  <button
+                    key={id}
+                    type="button"
+                    role="tab"
+                    aria-selected={responseTab === id}
+                    className={`tab${responseTab === id ? ' is-active' : ''}`}
+                    onClick={() => setResponseTab(id)}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+
+              <div className="tab-panel">
+                {responseTab === 'body' ? (
+                  result.body ? (
+                    <JsonViewer value={result.body} maxHeight="460px" />
+                  ) : (
+                    <p className="muted">{t('requests.noBody')}</p>
+                  )
                 ) : null}
 
-                <div className="explorer-url">
-                  <span className="field-hint">{t('explorer.resolvedUrl')}</span>
-                  <code className="break-all">{endpoint + resolvedPath}</code>
-                  <CopyButton value={endpoint + resolvedPath} />
-                </div>
-              </Card>
+                {responseTab === 'headers' ? (
+                  Object.keys(result.headers).length ? (
+                    <dl className="detail-grid is-compact">
+                      {Object.entries(result.headers).map(([key, value]) => (
+                        <React.Fragment key={key}>
+                          <dt>{key}</dt>
+                          <dd className="mono">{value}</dd>
+                        </React.Fragment>
+                      ))}
+                    </dl>
+                  ) : (
+                    <p className="muted">{t('common.none')}</p>
+                  )
+                ) : null}
 
-              {result ? (
-                <Card
-                  title={t('explorer.response')}
-                  actions={
-                    <span className="row">
+                {responseTab === 'metadata' ? (
+                  <dl className="detail-grid">
+                    <dt>{t('requests.status')}</dt>
+                    <dd>
                       <StatusBadge status={result.status || '—'} />
-                      <span className="muted">{formatters.duration(result.durationMs)}</span>
-                    </span>
-                  }
-                >
-                  <h3 className="detail-heading">{t('explorer.responseHeaders')}</h3>
-                  <dl className="detail-grid is-compact">
-                    {Object.entries(result.headers).map(([key, value]) => (
-                      <React.Fragment key={key}>
-                        <dt>{key}</dt>
-                        <dd className="mono">{value}</dd>
-                      </React.Fragment>
-                    ))}
+                    </dd>
+                    <dt>{t('explorer.responseTime')}</dt>
+                    <dd>{formatters.duration(result.durationMs)}</dd>
+                    <dt>{t('objects.contentType')}</dt>
+                    <dd className="mono">{result.headers['content-type'] || '—'}</dd>
+                    <dt>{t('objects.size')}</dt>
+                    <dd>{formatters.bytes(new Blob([result.body ?? '']).size)}</dd>
                   </dl>
-
-                  <h3 className="detail-heading">{t('explorer.responseBody')}</h3>
-                  {result.body ? <JsonViewer value={result.body} maxHeight="420px" /> : <p className="muted">{t('requests.noBody')}</p>}
-                </Card>
-              ) : null}
-            </>
-          )}
-        </div>
-      </div>
+                ) : null}
+              </div>
+            </Card>
+          ) : null}
+        </>
+      )}
 
       <ConfirmModal
         open={confirmOpen}

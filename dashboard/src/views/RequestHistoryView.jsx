@@ -12,11 +12,12 @@ import { useApp } from '@context/AppContext.jsx';
 import useFormatters from '@hooks/useFormatters.js';
 import ActionMenu from '@components/ActionMenu.jsx';
 import ActivityChart, { getTimeRange, rangeWindow } from '@components/ActivityChart.jsx';
+import Collapsible from '@components/Collapsible.jsx';
 import ConfirmModal from '@components/ConfirmModal.jsx';
 import Modal from '@components/Modal.jsx';
 import PageHeader, { Card, Metric } from '@components/PageHeader.jsx';
 import TableFrame from '@components/TableFrame.jsx';
-import { CopyableId } from '@components/CopyButton.jsx';
+import CopyButton, { CopyableId } from '@components/CopyButton.jsx';
 import { ErrorBanner } from '@components/EmptyState.jsx';
 import { Field, FilterActions, FilterGrid } from '@components/FilterBar.jsx';
 import { JsonViewerModal } from '@components/JsonViewer.jsx';
@@ -114,6 +115,24 @@ export default function RequestHistoryView() {
     void load(next, 1, pageSize, rangeId);
   };
 
+  // The list query omits headers and bodies; the detail and JSON views need the full record, so both
+  // fetch it by id rather than reusing the row.
+  const openDetail = async (item) => {
+    try {
+      setDetail(await client.requestHistoryEntry(item.Id));
+    } catch (caught) {
+      notify(caught.message, 'danger');
+    }
+  };
+
+  const openJson = async (item) => {
+    try {
+      setJsonTarget(await client.requestHistoryEntry(item.Id));
+    } catch (caught) {
+      notify(caught.message, 'danger');
+    }
+  };
+
   const submitDelete = async () => {
     try {
       await client.deleteRequestHistoryEntry(deleteTarget.Id);
@@ -174,8 +193,8 @@ export default function RequestHistoryView() {
       render: (item) => (
         <ActionMenu
           items={[
-            { key: 'view', label: t('common.view'), onClick: () => setDetail(item) },
-            { key: 'json', label: t('common.viewJson'), onClick: () => setJsonTarget(item) },
+            { key: 'view', label: t('common.view'), onClick: () => void openDetail(item) },
+            { key: 'json', label: t('common.viewJson'), onClick: () => void openJson(item) },
             { key: 'delete', label: t('common.delete'), variant: 'danger', onClick: () => setDeleteTarget(item) },
           ]}
         />
@@ -314,7 +333,7 @@ export default function RequestHistoryView() {
         storageKey="requests"
         emptyMessage={totalCount === 0 && !filters.method && !filters.pathContains ? t('requests.empty') : t('requests.noMatches')}
         rowId={(item) => item.Id}
-        onRowClick={(item) => setDetail(item)}
+        onRowClick={(item) => void openDetail(item)}
       />
 
       <RequestDetailModal detail={detail} onClose={() => setDetail(null)} />
@@ -322,7 +341,8 @@ export default function RequestHistoryView() {
       <JsonViewerModal
         open={Boolean(jsonTarget)}
         onClose={() => setJsonTarget(null)}
-        title={t('requests.rawJson')}
+        type={t('common.typeRequest')}
+        id={jsonTarget?.Id}
         value={jsonTarget}
       />
 
@@ -352,6 +372,33 @@ export default function RequestHistoryView() {
   );
 }
 
+/** Pretty-print a header dictionary for display and copying. */
+function stringifyHeaders(headers) {
+  return JSON.stringify(headers ?? {}, null, 2);
+}
+
+/**
+ * One expandable Headers or Body block inside the Request/Response panels.
+ *
+ * Headers are pretty-printed JSON; bodies are shown verbatim. Both carry a copy button, and bodies
+ * flag truncation. Empty content still renders a block so the operator can see there was nothing,
+ * rather than the section silently disappearing.
+ */
+function DetailBlock({ title, value, empty, truncatedNote = null, defaultOpen = true }) {
+  const text = value ?? '';
+  const isEmpty = text.length === 0;
+  return (
+    <Collapsible
+      title={title}
+      defaultOpen={defaultOpen}
+      actions={isEmpty ? null : <CopyButton value={text} />}
+    >
+      {truncatedNote ? <p className="field-hint request-block-note">{truncatedNote}</p> : null}
+      <pre className="request-block-body">{isEmpty ? empty : text}</pre>
+    </Collapsible>
+  );
+}
+
 /** Full request and response detail for one entry. */
 function RequestDetailModal({ detail, onClose }) {
   const { t } = useTranslation();
@@ -359,68 +406,89 @@ function RequestDetailModal({ detail, onClose }) {
 
   if (!detail) return null;
 
-  const headerRows = (headers) => {
-    const entries = Object.entries(headers ?? {});
-    if (entries.length === 0) return <p className="muted">{t('common.none')}</p>;
-    return (
-      <dl className="detail-grid is-compact">
-        {entries.map(([key, value]) => (
-          <React.Fragment key={key}>
-            <dt>{key}</dt>
-            <dd className="mono">{value}</dd>
-          </React.Fragment>
-        ))}
-      </dl>
-    );
-  };
-
-  const bodyBlock = (body, truncated, bytes) => {
-    if (!body) return <p className="muted">{t('requests.noBody')}</p>;
-    return (
-      <>
-        {truncated ? (
-          <p className="field-hint">{t('requests.truncated', { shown: formatters.bytes(body.length), total: formatters.bytes(bytes) })}</p>
-        ) : null}
-        <pre className="body-block">{body}</pre>
-      </>
-    );
-  };
+  const requestBodyNote = detail.RequestBodyTruncated
+    ? t('requests.truncated', { shown: formatters.bytes(detail.RequestBody?.length ?? 0), total: formatters.bytes(detail.RequestBodyBytes) })
+    : null;
+  const responseBodyNote = detail.ResponseBodyTruncated
+    ? t('requests.truncated', { shown: formatters.bytes(detail.ResponseBody?.length ?? 0), total: formatters.bytes(detail.ResponseBodyBytes) })
+    : null;
 
   return (
     <Modal
       open={Boolean(detail)}
       onClose={onClose}
       title={t('requests.detailTitle')}
-      subtitle={`${detail.Method} ${detail.Path}`}
-      headerMeta={<CopyableId value={detail.Id} truncate={16} />}
-      size="large"
+      subtitle={<CopyableId value={detail.Id} />}
+      size="xlarge"
     >
-      <dl className="detail-grid">
-        <dt>{t('requests.status')}</dt>
-        <dd>
-          <StatusBadge status={detail.StatusCode} />
-        </dd>
-        <dt>{t('requests.duration')}</dt>
-        <dd>{formatters.duration(detail.DurationMs)}</dd>
-        <dt>{t('requests.when')}</dt>
-        <dd>{formatters.dateTime(detail.CreatedUtc)}</dd>
-        <dt>{t('requests.source')}</dt>
-        <dd>{detail.SourceIp || '—'}</dd>
-        <dt>URL</dt>
-        <dd className="mono break-all">{detail.Url}</dd>
-      </dl>
+      <div className="request-detail">
+        <div className="request-detail-hero">
+          <div className="request-detail-badges">
+            <MethodBadge method={detail.Method} />
+            <StatusBadge status={detail.StatusCode} />
+          </div>
+          <div className="request-detail-url mono">{detail.Url || detail.Path}</div>
+          <div className="request-detail-stats">
+            <div className="stat-card">
+              <span className="stat-card-label">{t('requests.duration')}</span>
+              <span className="stat-card-value">{formatters.duration(detail.DurationMs)}</span>
+            </div>
+            <div className="stat-card">
+              <span className="stat-card-label">{t('requests.status')}</span>
+              <span className="stat-card-value">{detail.StatusCode}</span>
+            </div>
+            <div className="stat-card">
+              <span className="stat-card-label">{t('requests.requestBody')}</span>
+              <span className="stat-card-value">{formatters.bytes(detail.RequestBodyBytes ?? 0)}</span>
+            </div>
+            <div className="stat-card">
+              <span className="stat-card-label">{t('requests.responseBody')}</span>
+              <span className="stat-card-value">{formatters.bytes(detail.ResponseBodyBytes ?? 0)}</span>
+            </div>
+            <div className="stat-card">
+              <span className="stat-card-label">{t('requests.when')}</span>
+              <span className="stat-card-value stat-card-value-sm">{formatters.dateTimeShort(detail.CreatedUtc)}</span>
+            </div>
+          </div>
+        </div>
 
-      <h3 className="detail-heading">{t('requests.requestHeaders')}</h3>
-      {headerRows(detail.RequestHeaders)}
+        <dl className="detail-grid">
+          <dt>{t('requests.method')}</dt>
+          <dd>{detail.Method}</dd>
+          <dt>{t('requests.path')}</dt>
+          <dd className="mono break-all">{detail.Path}</dd>
+          <dt>{t('requests.source')}</dt>
+          <dd>{detail.SourceIp || '—'}</dd>
+          <dt>{t('requests.when')}</dt>
+          <dd>{formatters.dateTime(detail.CreatedUtc)}</dd>
+          <dt>URL</dt>
+          <dd className="mono break-all">{detail.Url}</dd>
+        </dl>
 
-      <h3 className="detail-heading">{t('requests.requestBody')}</h3>
-      {bodyBlock(detail.RequestBody, detail.RequestBodyTruncated, detail.RequestBodyBytes)}
+        <div className="request-detail-panels">
+          <section className="request-detail-section">
+            <div className="request-detail-section-title">{t('requests.requestSection')}</div>
+            <DetailBlock title={t('requests.requestHeaders')} value={stringifyHeaders(detail.RequestHeaders)} empty="{}" />
+            <DetailBlock
+              title={t('requests.requestBody')}
+              value={detail.RequestBody}
+              empty={t('requests.noBody')}
+              truncatedNote={requestBodyNote}
+            />
+          </section>
 
-      <h3 className="detail-heading">{t('requests.responseHeaders')}</h3>
-      {headerRows(detail.ResponseHeaders)}
-
-      <h3 className="detail-heading">{t('requests.responseBody')}</h3>
-      {bodyBlock(detail.ResponseBody, detail.ResponseBodyTruncated, detail.ResponseBodyBytes)}
+          <section className="request-detail-section">
+            <div className="request-detail-section-title">{t('requests.responseSection')}</div>
+            <DetailBlock title={t('requests.responseHeaders')} value={stringifyHeaders(detail.ResponseHeaders)} empty="{}" />
+            <DetailBlock
+              title={t('requests.responseBody')}
+              value={detail.ResponseBody}
+              empty={t('requests.noBody')}
+              truncatedNote={responseBodyNote}
+            />
+          </section>
+        </div>
+      </div>
     </Modal>
   );
 }

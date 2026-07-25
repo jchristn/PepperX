@@ -106,6 +106,20 @@ namespace PepperX.Core.Settings
 
         #endregion
 
+        /// <summary>
+        /// Resolve the settings file path the same way <see cref="Load"/> does.
+        /// <para>
+        /// Exposed so the admin surface can persist edits to exactly the file the next startup will
+        /// read, rather than guessing at the path.
+        /// </para>
+        /// </summary>
+        /// <param name="path">Explicit path, or null to use the environment variable then the default.</param>
+        /// <returns>Resolved path.</returns>
+        public static string ResolveSettingsPath(string? path = null)
+        {
+            return ResolvePath(path);
+        }
+
         #region Private-Methods
 
         private static string ResolvePath(string? path)

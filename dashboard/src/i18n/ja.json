@@ -4,7 +4,8 @@
     "tagline": "豊富なメタデータを備えたキーバリューストア"
   },
   "connect": {
-    "title": "ノードに接続",
+    "title": "PepperX ログイン",
+    "subtitle": "サーバー URL を指定して、PepperX インフラストラクチャを管理します。",
     "serverUrl": "サーバー URL",
     "serverUrlPlaceholder": "http://localhost:8000",
     "connect": "接続",
@@ -71,7 +72,11 @@
     "apply": "適用",
     "clear": "クリア",
     "of": "/",
-    "unknown": "不明"
+    "unknown": "不明",
+    "typeDetails": "{{type}}の詳細",
+    "typeContainer": "コンテナー",
+    "typeObject": "オブジェクト",
+    "typeRequest": "リクエスト"
   },
   "table": {
     "showing": "{{total}} 件中 {{from}}–{{to}} 件を表示",
@@ -249,6 +254,8 @@
     "duration": "所要時間",
     "source": "送信元",
     "detailTitle": "リクエストの詳細",
+    "requestSection": "リクエスト",
+    "responseSection": "レスポンス",
     "metadata": "メタデータ",
     "requestHeaders": "リクエストヘッダー",
     "requestBody": "リクエストボディ",
@@ -279,6 +286,8 @@
     "response": "レスポンス",
     "responseBody": "ボディ",
     "responseHeaders": "ヘッダー",
+    "responseMetadata": "メタデータ",
+    "responseTime": "応答時間",
     "timing": "所要時間",
     "snippets": "コード",
     "resolvedUrl": "解決された URL",
@@ -318,7 +327,18 @@
     "nodeId": "ノード ID",
     "deleteMode": "削除の調整方式",
     "requestHistory": "リクエストの記録",
-    "retentionDays": "保持期間 {{count}} 日"
+    "retentionDays": "保持期間（日）",
+    "editable": "設定を編集",
+    "rebootNote": "変更はノードの再起動後に有効になります。",
+    "logSeverity": "ログレベル",
+    "requestHistoryEnabled": "リクエスト履歴を記録",
+    "maxRequestBody": "リクエストボディの最大サイズ（バイト）",
+    "maxResponseBody": "レスポンスボディの最大サイズ（バイト）",
+    "saved": "設定を保存しました。適用するには再起動してください。",
+    "restart": "ノードを再起動",
+    "restartHint": "ノードを終了し、保存した設定でコンテナーを再起動させます。コンテナーの再起動ポリシーが必要です。通常のプロセスは停止するだけです。",
+    "restartConfirm": "今すぐノードを再起動しますか？ノードが復帰するまでコンソールの接続は失われます。",
+    "restarting": "再起動しています… ノードは一時的に利用できなくなります。"
   },
   "setup": {
     "title": "PepperX へようこそ",

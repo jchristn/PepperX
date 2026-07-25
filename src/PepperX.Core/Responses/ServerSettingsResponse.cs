@@ -83,6 +83,21 @@ namespace PepperX.Core.Responses
         /// </summary>
         public int RequestHistoryRetentionDays { get; set; } = 0;
 
+        /// <summary>
+        /// Maximum captured request-body size, in bytes.
+        /// </summary>
+        public int RequestHistoryMaxRequestBodyBytes { get; set; } = 0;
+
+        /// <summary>
+        /// Maximum captured response-body size, in bytes.
+        /// </summary>
+        public int RequestHistoryMaxResponseBodyBytes { get; set; } = 0;
+
+        /// <summary>
+        /// Minimum log severity emitted.
+        /// </summary>
+        public string LogMinimumSeverity { get; set; } = String.Empty;
+
         #endregion
 
         #region Private-Members
@@ -123,7 +138,10 @@ namespace PepperX.Core.Responses
                 NodeId = nodeId ?? String.Empty,
                 DeleteCoordinationMode = settings.Cluster.DeleteCoordinationMode.ToString(),
                 RequestHistoryEnabled = settings.RequestHistory.Enabled,
-                RequestHistoryRetentionDays = settings.RequestHistory.RetentionDays
+                RequestHistoryRetentionDays = settings.RequestHistory.RetentionDays,
+                RequestHistoryMaxRequestBodyBytes = settings.RequestHistory.MaxRequestBodyBytes,
+                RequestHistoryMaxResponseBodyBytes = settings.RequestHistory.MaxResponseBodyBytes,
+                LogMinimumSeverity = settings.Logging.MinimumSeverity
             };
 
             ret.Protocols.Add(new ProtocolEndpoint("REST", settings.Rest.Enabled, settings.Rest.Hostname, settings.Rest.Port, settings.Rest.Ssl ? "https" : "http"));

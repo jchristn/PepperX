@@ -18,8 +18,13 @@ Edit the file and restart that node:
 docker compose restart node1
 ```
 
-Settings are read once at startup. There is no reload endpoint, which is why the dashboard presents
-them read-only.
+Settings are read once at startup. The dashboard's Settings page can edit a curated subset (log
+level, checksum verification, delete-coordination mode, request-history options) and persist it here
+via `PUT /v1.0/admin/settings`; its **Restart node** button then exits the process so the container's
+`restart: unless-stopped` policy brings it back up on the new file. For that write to succeed the
+config file is bind-mounted **read-write** in `compose.yaml` — saving settings therefore modifies the
+committed `config/nodeN.json` in place. Ports, hostnames, and database details are intentionally not
+editable from the console: a wrong value would leave the node unable to start after the restart.
 
 ## What not to put here
 
