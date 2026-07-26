@@ -4,7 +4,7 @@
 
   # PepperX
 
-  **PepperX is a backend storage platform enabling scalable metadata and data storage via REST, WebSockets, Redis RESP, and MCP.**
+  **A protocol-agnostic storage backend: durable, recoverable key-value storage with extensive, searchable metadata, reachable over REST, S3, Redis RESP, WebSockets, and MCP from one namespace.**
 
   [![Status](https://img.shields.io/badge/status-alpha-orange)](#status)
   [![Version](https://img.shields.io/badge/version-0.1.0-blue)](CHANGELOG.md)
@@ -17,18 +17,19 @@
 
 ## Status
 
-**Alpha, v0.1.0.** Everything documented here works and is covered by tests — 115 backend tests
-across three runners, on .NET 8 and .NET 10 — but this has not been run in production. Interfaces
-and the on-disk extent format may change before 1.0. Pin your versions.
+**Alpha, v0.1.0.** Everything documented here works and is covered by tests — 165 backend tests
+across three runners (console, xUnit, NUnit), on .NET 8 and .NET 10 — but it has not been run in
+production. Interfaces and the on-disk extent format may change before 1.0. Pin your versions.
 
 ---
 
 ## What it is
 
-A key-value store where the value is **arbitrary bytes** and the key carries **metadata worth
-searching on**.
-
-Every object is a key, a binary payload, and metadata in three forms:
+PepperX is a key-value store where the value is **arbitrary bytes** and every object carries
+**extensive metadata** you can search on and extend. Metadata comes in three forms — a flat list of
+labels, key/value tags, and a freeform JSON object. Labels and tags give you fine-grained filtering;
+the JSON object gives you room to categorize and use the data however your application needs, without
+a schema change.
 
 | Form | Example | Searchable |
 |---|---|:---:|
@@ -36,49 +37,59 @@ Every object is a key, a binary payload, and metadata in three forms:
 | **Tags** | `{"customer": "acme", "region": "us-west"}` | yes |
 | **Object** | any JSON, arbitrarily nested | stored & returned |
 
-Objects live in **containers**, which map one-to-one onto S3 buckets.
+Objects live in **containers**, which map one-to-one onto S3 buckets. The same data is reachable over
+five protocols at once, against one namespace with no synchronization between them. Which protocol a
+client uses is a property of the client, not a copy of the data.
 
-The same data is reachable over five protocols at once. Write a value with `redis-cli`, read it with
-the AWS CLI, search it over REST, and let an LLM agent inspect it over MCP — one namespace, no
-synchronization.
-
-| Protocol | Port | Coverage |
+| Protocol | Port | Use it for |
 |---|---|---|
-| [**REST**](REST_API.md) | 8000 | Everything. OpenAPI document + Swagger UI included. |
-| [**S3**](S3_API.md) | 8001 | Buckets, objects, tags. Works with the AWS CLI and SDKs unchanged. |
-| [**WebSockets**](WEBSOCKETS_API.md) | 8002 | REST-equivalent operations over one connection. |
-| [**MCP**](MCP_API.md) | 8003 / 8004 | 16 tools with full JSON Schemas, for LLM agents. |
-| [**RESP**](RESP_API.md) | 6379 | Redis string commands. Any Redis client works. |
+| [**REST**](REST_API.md) | 8000 | The complete surface. Application backends, admin tooling, and anything that speaks HTTP and JSON. Ships an OpenAPI document and Swagger UI. |
+| [**S3**](S3_API.md) | 8001 | Drop-in object storage for anything already built on S3 — data pipelines, backup and archive targets, existing S3 applications — using the AWS CLI and SDKs unchanged. |
+| [**Redis RESP**](RESP_API.md) | 6379 | Durable key/value for code that already speaks Redis, when you want persistence and metadata search rather than an in-memory cache. |
+| [**WebSockets**](WEBSOCKETS_API.md) | 8002 | REST-equivalent operations over one long-lived connection, for services doing high request volume without per-call HTTP overhead. |
+| [**MCP**](MCP_API.md) | 8003 / 8004 | Direct tool access for LLM agents: store, read, and search as discoverable tool calls, each with a full JSON Schema. |
 
 ---
 
 ## Why you'd use it
 
-**You have blobs, and you need to find them by what they are.** Object stores give you a key and a
-prefix. Databases give you rich queries but are a poor fit for payloads. PepperX gives you both:
-store the bytes, attach labels and tags, and query across every container by metadata.
+**A single backend for many kinds of client.** One namespace answers to five protocols at once, so an
+application backend on HTTP, a data pipeline on S3, a service that speaks Redis, and an LLM agent on
+MCP all read and write the same objects. You add a protocol by pointing a different client at the same
+node, not by standing up another store and keeping it in sync.
 
-**Your clients already exist.** Speaking S3 and RESP means Python, Go, Java, Rust, and .NET can talk
-to PepperX today using libraries they already depend on. No SDK adoption required — though there are
-[first-party SDKs](sdk/) for C#, Python, and JavaScript if you want typed clients.
+**A durable layer for applications that are growing.** Extent files are the system of record. Each one
+carries its key, labels, tags, metadata, and a SHA-256 checksum in a header ahead of the payload;
+PostgreSQL indexes that for search but holds nothing you cannot regenerate. Capacity and throughput
+grow by adding stateless nodes and storage behind them. Nodes keep no local state, so another one is
+interchangeable with the rest behind a load balancer — no leader election, no resharding.
 
-**Your agents can use it directly.** The MCP surface is not an afterthought: every tool publishes a
-complete JSON Schema with per-argument descriptions, so an agent discovers how to store and search
-from `tools/list` alone.
+**Recoverable storage for data you cannot afford to lose.** Because every extent is self-describing,
+the metadata database is rebuildable from storage alone: one API call reads the extents and
+reconstructs the index, and that path is tested rather than assumed. Writes are immutable and
+atomically repointed, deletes drain in-flight reads across the cluster before destroying anything, and
+every payload is checksummed on write and optionally verified on read.
 
-**Losing the database is not losing the data.** Extents are self-describing — every file carries its
-own key, labels, tags, metadata, and checksum in a header ahead of the payload. PostgreSQL is an
-*index*, not the system of record. Drop it entirely and one API call rebuilds it by reading storage.
-This is tested, not aspirational.
+**Fine-grained search and extensibility over your data.** Labels and tags let you filter by what an
+object is — `["metric","cpu"]`, `{"host":"web-01"}` — within a container or across all of them. The
+freeform JSON object travels with each object for anything the flat metadata does not capture, so you
+can categorize and evolve how you use the data without touching a schema.
 
-**Scaling out is adding a process.** Nodes hold no local state. Point another one at the same
-database and the same extent storage, put a load balancer in front, and it's interchangeable with the
-others — no leader election, no resharding.
+**The clients you already run.** Speaking S3 and RESP means Python, Go, Java, and .NET reach PepperX
+through libraries they already depend on. There is nothing PepperX-specific to adopt for those
+surfaces, and there are first-party [SDKs](sdk/) for C#, Python, and JavaScript when you want typed
+REST and WebSocket clients.
+
+**A backend to build a platform on.** A larger storage or data platform — protocol front ends,
+tenancy, policy, placement — can sit on top of one recoverable namespace instead of reimplementing
+durable storage for each protocol it exposes. An enterprise consolidating a fragmented backend can put
+the same substrate underneath its existing services. PepperX owns the storage, metadata, and recovery;
+the layer above owns access control and business logic.
 
 ### What it deliberately isn't
 
-- **Not authenticated.** PepperX is backend infrastructure meant to sit behind a service that does
-  its own access control. See [Security](#security) — this matters.
+- **Not authenticated.** PepperX is backend infrastructure meant to sit behind a service that does its
+  own access control. See [Security](#security).
 - **Not a Redis replacement.** The RESP surface is durable storage, not an in-memory cache. It is far
   slower than Redis and always will be.
 - **Not a full S3.** Buckets, objects, and tags only. No multipart upload, versioning, ACLs, or
@@ -86,7 +97,7 @@ others — no leader election, no resharding.
 
 ---
 
-## Benefits at a glance
+## Capabilities
 
 | | |
 |---|---|
@@ -103,7 +114,11 @@ others — no leader election, no resharding.
 
 ## Getting started
 
-Requires [Docker](https://docs.docker.com/get-docker/). Nothing else.
+PepperX is a multi-service platform — PostgreSQL, one or more stateless nodes, shared extent storage,
+and the dashboard. Deploy it with the [Docker](https://docs.docker.com/get-docker/) environment in
+this repository, which wires those pieces together the way the platform expects. The composition,
+networking, and storage layout are part of how PepperX behaves, so Docker is the supported path;
+running the server binary against your own PostgreSQL is only appropriate for reading the code.
 
 ```bash
 git clone https://github.com/jchristn/PepperX.git
@@ -120,8 +135,8 @@ stack hides the mistakes that only appear in a cluster.
 | node1 REST | http://localhost:8000 · Swagger UI at `/swagger` |
 | node2 REST | http://localhost:8010 |
 
-Want sample data to look at? `./factory/reset.sh` (or `reset.bat`) rebuilds the stack from scratch
-and seeds containers, objects, and traffic.
+Want sample data to look at? `./factory/reset.sh` (or `reset.bat`) rebuilds the stack from scratch and
+seeds containers, objects, and traffic.
 
 ### Store and find something
 
@@ -141,25 +156,14 @@ curl -X POST http://localhost:8000/v1.0/objects/enumerate \
   -d '{"Labels":["metric"],"Tags":{"host":"web-01"}}'
 ```
 
-The same store over the other protocols:
+The same object over the other protocols:
 
 ```bash
 aws --endpoint-url http://localhost:8001 s3 ls s3://telemetry/
 redis-cli -p 6379 SET greeting "hello"        # lands in container resp0
 ```
 
-### From source
-
-Needs the .NET 8 or .NET 10 SDK and a PostgreSQL instance.
-
-```bash
-docker compose -f docker/compose.test.yaml up -d --wait   # PostgreSQL on 5433
-dotnet run --project src/PepperX.Server
-```
-
-The server reads `pepperx.json` from its working directory; every setting is documented inline.
-
-### SDKs
+### Using an SDK
 
 ```python
 from pepperx import PepperXClient
@@ -171,8 +175,8 @@ with PepperXClient("http://localhost:8000") as client:
     print(client.read_object("telemetry", "metrics/cpu.json").data)
 ```
 
-C#, Python, and JavaScript clients cover REST and WebSockets — see [`sdk/`](sdk/). For S3, RESP, and
-MCP, use the standard client for that protocol; there is nothing PepperX-specific to wrap.
+The C#, Python, and JavaScript clients cover REST and WebSockets — see [`sdk/`](sdk/). For S3, RESP,
+and MCP, use the standard client for that protocol; there is nothing PepperX-specific to wrap.
 
 ### Building the images
 
@@ -182,17 +186,17 @@ MCP, use the standard client for that protocol; there is nothing PepperX-specifi
 build-all.bat v0.1.0
 ```
 
-Produces multi-architecture images — `linux/amd64` and `linux/arm64/v8` — for
+This produces multi-architecture images — `linux/amd64` and `linux/arm64/v8` — for
 `jchristn77/pepperx-server` and `jchristn77/pepperx-dashboard`, tagged with the version and `latest`.
 `build-server.bat` and `build-dashboard.bat` do one each. See [`docker/`](docker/) for building a
-single-architecture image locally instead.
+single-architecture image locally.
 
 ---
 
 ## Using the dashboard
 
-Open **http://localhost:3000** and enter a node's REST endpoint (`http://localhost:8000`). There is
-no login — PepperX is unauthenticated, so the connect screen only establishes *which node* you are
+Open **http://localhost:3000** and enter a node's REST endpoint (`http://localhost:8000`). There is no
+login — PepperX is unauthenticated, so the connect screen only establishes *which node* you are
 operating. That address stays visible in the header, because with several interchangeable nodes it is
 the only thing telling you where a destructive action will land.
 
@@ -205,7 +209,7 @@ the only thing telling you where a destructive action will land.
 | **Capacity** | Where storage is going, per container, and which cluster nodes are alive. Rehydration lives here. |
 | **Request History** | Every request served, with full detail. Click a bar in the chart to filter to that moment. |
 | **API Explorer** | Run any endpoint against the live node. Operations come from the node's own OpenAPI document, so it cannot drift. |
-| **Settings** | How this node is configured and where each protocol is listening. Read-only, as the server is. |
+| **Settings** | How this node is configured and where each protocol is listening. |
 
 Theme and language are in the header. First run against an empty node offers a short setup path; you
 can relaunch it from Settings.
@@ -214,8 +218,8 @@ can relaunch it from Settings.
 
 ## Security
 
-**There is no authentication anywhere in PepperX.** This is a design decision, not an omission — it
-is meant to run inside a trusted network behind a service that performs its own access control.
+**There is no authentication anywhere in PepperX.** This is a design decision, not an omission — it is
+meant to run inside a trusted network behind a service that performs its own access control.
 
 - Every endpoint is reachable by anyone who can reach the port, including container deletion and
   rehydration.
@@ -273,8 +277,6 @@ Bugs and feature requests: **https://github.com/jchristn/PepperX/issues**
 A good report includes the PepperX version (`GET /` returns it), which protocol you were using, what
 you expected, and what happened. If a node is involved, `GET /v1.0/admin/settings` gives a
 credential-free view of its configuration that is usually the fastest way to see the problem.
-
-Since this is alpha, please say whether you hit it from Docker or from source.
 
 ### Starting a discussion
 
