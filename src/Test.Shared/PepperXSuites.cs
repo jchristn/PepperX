@@ -38,6 +38,7 @@ namespace Test.Shared
                     ContainerCacheSuite.Build(),
                     ContainerCacheConcurrencySuite.Build(),
                     ContainerCacheConsistencySuite.Build(),
+                    ContainerCacheSoakSuite.Build(),
                     MultiNodeSemanticsSuite.Build(),
                     RehydrationSuite.Build(),
                     RestApiSuite.Build(),

@@ -42,6 +42,8 @@ namespace PepperX.Core.Storage.Disk
         private const string _ManifestFile = "container.json";
         private const string _TempDirName = ".tmp";
         private const int _CopyBufferBytes = 81920;
+        private const int _DeleteRetryCount = 20;
+        private const int _DeleteRetryDelayMs = 25;
 
         private readonly string _Root;
         private readonly string _TempDir;
@@ -170,12 +172,26 @@ namespace PepperX.Core.Storage.Disk
         /// <param name="location">Driver-relative location.</param>
         /// <param name="token">Cancellation token.</param>
         /// <returns>True if a file was deleted.</returns>
-        public Task<bool> DeleteAsync(string location, CancellationToken token = default)
+        public async Task<bool> DeleteAsync(string location, CancellationToken token = default)
         {
             string path = Resolve(location);
-            if (!File.Exists(path)) return Task.FromResult(false);
-            File.Delete(path);
-            return Task.FromResult(true);
+            if (!File.Exists(path)) return false;
+
+            // On Windows a file whose handle is still closing — a just-finished read, or an antivirus or
+            // indexer scan of a freshly written extent — can briefly reject deletion with a sharing
+            // violation. A short bounded retry absorbs that transient; on POSIX the first attempt succeeds.
+            for (int attempt = 0; ; attempt++)
+            {
+                try
+                {
+                    File.Delete(path);
+                    return true;
+                }
+                catch (Exception ex) when ((ex is IOException || ex is UnauthorizedAccessException) && attempt < _DeleteRetryCount)
+                {
+                    await Task.Delay(_DeleteRetryDelayMs, token).ConfigureAwait(false);
+                }
+            }
         }
 
         /// <summary>

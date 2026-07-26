@@ -251,7 +251,7 @@ namespace Test.Shared.Suites
                             Enabled = true, Policy = CacheEvictionPolicyEnum.FIFO, MaxObjects = 777, EvictCount = 3, MaxCacheableObjectBytes = 1048576
                         }, ct);
 
-                        Check.Equal(0, errors.Count, "no exceptions under reconfigure load");
+                        Check.Equal(0, errors.Count, "no exceptions under reconfigure load; " + Detail(errors));
                         ContainerCacheResponse cache = await stack.Containers.ReadCacheAsync(c.Name, ct);
                         Check.Equal(CacheEvictionPolicyEnum.FIFO, cache.Policy, "final policy applied");
                         Check.Equal(777, cache.MaxObjects, "final capacity applied");
@@ -442,6 +442,13 @@ namespace Test.Shared.Suites
             List<Task> tasks = new List<Task>(count);
             for (int i = 0; i < count; i++) tasks.Add(Task.Run(body));
             return Task.WhenAll(tasks);
+        }
+
+        private static string Detail(ConcurrentBag<Exception> errors)
+        {
+            System.Text.StringBuilder sb = new System.Text.StringBuilder();
+            foreach (Exception ex in errors) sb.Append(ex.GetType().Name).Append(": ").Append(ex.Message).Append(" | ");
+            return sb.ToString();
         }
 
         private static byte[] Homogeneous(byte value, int length)

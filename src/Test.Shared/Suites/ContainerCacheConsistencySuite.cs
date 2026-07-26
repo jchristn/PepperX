@@ -1,6 +1,7 @@
 namespace Test.Shared.Suites
 {
     using System;
+    using System.Collections.Concurrent;
     using System.Collections.Generic;
     using System.IO;
     using System.Text;
@@ -8,6 +9,7 @@ namespace Test.Shared.Suites
     using System.Threading.Tasks;
     using PepperX.Core.Database;
     using PepperX.Core.Enums;
+    using PepperX.Core.Exceptions;
     using PepperX.Core.Models;
     using PepperX.Core.Requests;
     using PepperX.Core.Responses;
@@ -131,6 +133,139 @@ namespace Test.Shared.Suites
                         Container? cRow = await driver.Containers.ReadByNameAsync(name, ct);
                         Check.True(node1.Cache.Statistics(cRow!.Id) != null, "node1 stats independent");
                         Check.True(node2.Cache.Statistics(cRow.Id) != null, "node2 stats independent");
+                    }),
+
+                    TwoNodeCase("TwoNodeConcurrentReplace", "node2 readers never see a torn or uncommitted value while node1 replaces, and converge", async (driver, node1, node2, ct) =>
+                    {
+                        const int versions = 30;
+                        string name = DbTest.NewContainerName();
+                        await node1.Containers.CreateAsync(new ContainerCreateRequest
+                        {
+                            Name = name,
+                            Cache = new UpdateCacheSettingsRequest { Enabled = true, Policy = CacheEvictionPolicyEnum.LRU, MaxObjects = 1000, EvictCount = 10, MaxCacheableObjectBytes = 1048576 }
+                        }, ct);
+
+                        // Each version is a homogeneous payload whose byte value IS the version number, so a
+                        // torn read (mixed bytes) or an uncommitted value (out of range) is detectable.
+                        await WriteAsync(node1, name, "hot", Homogeneous(1, 64), ct);
+                        await ReadAsync(node1, name, "hot", ct);
+                        await ReadAsync(node2, name, "hot", ct); // hydrate node2's independent cache
+
+                        ConcurrentBag<Exception> errors = new ConcurrentBag<Exception>();
+                        ConcurrentBag<string> bad = new ConcurrentBag<string>();
+                        CancellationTokenSource stop = new CancellationTokenSource();
+
+                        // node2 readers: every served value must be one complete, committed version.
+                        List<Task> readers = new List<Task>();
+                        for (int r = 0; r < 3; r++)
+                        {
+                            readers.Add(Task.Run(async () =>
+                            {
+                                while (!stop.IsCancellationRequested)
+                                {
+                                    try
+                                    {
+                                        byte[]? b = await ReadAsync(node2, name, "hot", ct);
+                                        if (b != null && (b.Length != 64 || !IsHomogeneous(b) || b[0] < 1 || b[0] > versions))
+                                            bad.Add(b.Length == 64 && IsHomogeneous(b) ? ("value " + b[0]) : "torn");
+                                    }
+                                    catch (Exception ex) { errors.Add(ex); }
+                                    await Task.Delay(2, ct);
+                                }
+                            }, ct));
+                        }
+
+                        // node1 replaces through the versions.
+                        for (int v = 2; v <= versions; v++)
+                        {
+                            try { await WriteAsync(node1, name, "hot", Homogeneous((byte)v, 64), ct); }
+                            catch (ConcurrentModificationException) { }
+                            catch (Exception ex) { errors.Add(ex); }
+                            await Task.Delay(2, ct);
+                        }
+
+                        stop.Cancel();
+                        await Task.WhenAll(readers);
+
+                        Check.Equal(0, errors.Count, "no exceptions during concurrent cross-node replace");
+                        Check.Equal(0, bad.Count, "node2 never served a torn or uncommitted value");
+
+                        // Convergence: node2's next read reflects node1's final version, not a stale cache entry.
+                        byte[]? final = await ReadAsync(node2, name, "hot", ct);
+                        Check.NotNull(final, "final read present");
+                        Check.Equal(versions, (int)final![0], "node2 converged to node1's latest version");
+                    }),
+
+                    TwoNodeCase("TwoNodeConcurrentReadDelete", "node2 readers never see a torn value and miss after node1 deletes", async (driver, node1, node2, ct) =>
+                    {
+                        string name = DbTest.NewContainerName();
+                        await node1.Containers.CreateAsync(new ContainerCreateRequest
+                        {
+                            Name = name,
+                            Cache = new UpdateCacheSettingsRequest { Enabled = true, Policy = CacheEvictionPolicyEnum.LRU, MaxObjects = 1000, EvictCount = 10, MaxCacheableObjectBytes = 1048576 }
+                        }, ct);
+
+                        await WriteAsync(node1, name, "hot", Homogeneous(0x55, 64), ct);
+                        await ReadAsync(node1, name, "hot", ct);
+                        await ReadAsync(node2, name, "hot", ct); // hydrate both
+
+                        ConcurrentBag<Exception> errors = new ConcurrentBag<Exception>();
+                        ConcurrentBag<bool> bad = new ConcurrentBag<bool>();
+                        CancellationTokenSource stop = new CancellationTokenSource();
+
+                        List<Task> readers = new List<Task>();
+                        for (int r = 0; r < 3; r++)
+                        {
+                            readers.Add(Task.Run(async () =>
+                            {
+                                while (!stop.IsCancellationRequested)
+                                {
+                                    try
+                                    {
+                                        byte[]? b = await ReadAsync(node2, name, "hot", ct);
+                                        if (b != null && (b.Length != 64 || !IsHomogeneous(b) || b[0] != 0x55)) bad.Add(true);
+                                    }
+                                    catch (Exception ex) { errors.Add(ex); }
+                                    await Task.Delay(2, ct);
+                                }
+                            }, ct));
+                        }
+
+                        await Task.Delay(75, ct);
+                        Check.True(await node1.Deletes.DeleteAsync(name, "hot", ct), "node1 deletes");
+                        await Task.Delay(75, ct);
+                        stop.Cancel();
+                        await Task.WhenAll(readers);
+
+                        Check.Equal(0, errors.Count, "no exceptions during concurrent cross-node delete");
+                        Check.Equal(0, bad.Count, "node2 never served a torn or wrong value");
+                        Check.True(await node2.Reads.ReadAsync(name, "hot", null, null, ct) == null, "node2 misses after cross-node delete");
+                        Check.False(await node2.Reads.ExistsAsync(name, "hot", ct), "object gone cluster-wide");
+                    }),
+
+                    TwoNodeCase("TwoNodeMetadataCoherence", "A cross-node metadata rewrite is reflected on the other node's next metadata read", async (driver, node1, node2, ct) =>
+                    {
+                        string name = DbTest.NewContainerName();
+                        await node1.Containers.CreateAsync(new ContainerCreateRequest
+                        {
+                            Name = name,
+                            Cache = new UpdateCacheSettingsRequest { Enabled = true, Policy = CacheEvictionPolicyEnum.LRU, MaxObjects = 1000, EvictCount = 10, MaxCacheableObjectBytes = 1048576 }
+                        }, ct);
+
+                        await node1.Writes.WriteAsync(name, "k", new MemoryStream(Encoding.UTF8.GetBytes("payload")),
+                            "text/plain", null, new Dictionary<string, string> { { "v", "1" } }, null, false, ct);
+
+                        // node2 hydrates its metadata cache against the first extent.
+                        ObjectMetadata? m1 = await node2.Reads.ReadMetadataAsync(name, "k", ct);
+                        Check.Equal("1", m1!.Tags["v"], "node2 sees the original metadata");
+
+                        // node1 rewrites the extent with new metadata (a new extent id).
+                        await node1.Writes.UpdateMetadataAsync(name, "k", new UpdateMetadataRequest { Tags = new Dictionary<string, string> { { "v", "2" } } }, ct);
+
+                        // node2's coherence check must detect the extent-id change and re-read the new metadata.
+                        ObjectMetadata? m2 = await node2.Reads.ReadMetadataAsync(name, "k", ct);
+                        Check.Equal("2", m2!.Tags["v"], "node2 sees the rewritten metadata, not its stale entry");
+                        Check.Equal("payload", await ReadStringAsync(node2, name, "k", ct), "payload intact through the metadata rewrite");
                     })
                 });
         }

@@ -1,27 +1,27 @@
 {
-  "CreatedUtc": "2026-07-23T00:00:00.000Z",
+  "CreatedUtc": "2026-07-26T08:26:32.500505Z",
   "Logging": {
     "ConsoleLogging": true,
     "FileLogging": true,
     "LogDirectory": "logs",
     "LogFilename": "pepperx.log",
-    "MinimumSeverity": "Info"
+    "MinimumSeverity": "Warn"
   },
   "Database": {
     "Type": "Postgresql",
     "Hostname": "localhost",
-    "Port": 5432,
-    "DatabaseName": "pepperx",
-    "Username": "pepperx",
-    "Password": "pepperx",
-    "MaxPoolSize": 100
+    "Port": 5433,
+    "DatabaseName": "pepperx_test_2cd43080fdb54239a72ab18523246b9f",
+    "Username": "pepperx_test",
+    "Password": "pepperx_test",
+    "MaxPoolSize": 15
   },
   "Storage": {
     "Driver": "Disk",
     "Disk": {
-      "RootDirectory": "./data/extents"
+      "RootDirectory": "C:\\Users\\joelc\\AppData\\Local\\Temp\\pepperx-store-6d220bbe39874a0398708027bf5ca590"
     },
-    "VerifyChecksumOnRead": false,
+    "VerifyChecksumOnRead": true,
     "MaxObjectBytes": 5368709120,
     "MaxKeyBytes": 1024,
     "MaxLabels": 64,
@@ -31,35 +31,34 @@
     "ReplaceRetryCount": 3
   },
   "Cluster": {
-    "NodeId": null,
     "DeleteCoordinationMode": "Cluster",
     "ReadLeaseTtlSeconds": 30,
-    "HeartbeatIntervalSeconds": 5,
+    "HeartbeatIntervalSeconds": 60,
     "NodeDeadAfterSeconds": 60,
     "DeleteDrainPollMs": 50,
     "DeleteDrainTimeoutSeconds": 120,
-    "JanitorIntervalSeconds": 60
+    "JanitorIntervalSeconds": 3600
   },
   "Rest": {
     "Enabled": true,
-    "Hostname": "*",
-    "Port": 8000,
+    "Hostname": "127.0.0.1",
+    "Port": 55789,
     "Ssl": false,
     "MetadataObjectHeaderLimitBytes": 16384
   },
   "S3": {
     "Enabled": true,
-    "Hostname": "*",
-    "Port": 8001,
+    "Hostname": "127.0.0.1",
+    "Port": 55790,
     "Ssl": false,
-    "Region": "us-west-1",
+    "Region": "eu-central-1",
     "AllowAnonymous": true,
     "StaticAccessKey": "pepperx",
     "StaticSecretKey": "pepperx"
   },
   "Resp": {
     "Enabled": true,
-    "Port": 6379,
+    "Port": 55791,
     "DatabaseCount": 16,
     "ContainerPrefix": "resp",
     "MaxValueBytes": 67108864,
@@ -67,24 +66,23 @@
   },
   "Websocket": {
     "Enabled": true,
-    "Hostname": "*",
-    "Port": 8002,
+    "Hostname": "127.0.0.1",
+    "Port": 55792,
     "MaxMessageBytes": 134217728,
     "KeepAliveSeconds": 30
   },
   "Mcp": {
     "Enabled": true,
-    "HttpPort": 8003,
-    "TcpPort": 8004,
+    "Hostname": "127.0.0.1",
+    "HttpPort": 55793,
+    "TcpPort": 55794,
     "MaxInlineBytes": 8388608
   },
   "RequestHistory": {
     "Enabled": true,
     "MaxRequestBodyBytes": 65536,
     "MaxResponseBodyBytes": 65536,
-    "RetentionDays": 30,
-    "ExcludeBodyPaths": [
-      "/v1.0/containers/*/object*"
-    ]
+    "RetentionDays": 99,
+    "ExcludeBodyPaths": []
   }
 }
