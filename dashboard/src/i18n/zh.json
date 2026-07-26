@@ -198,11 +198,12 @@
   "resp": {
     "section": "RESP 索引",
     "label": "RESP 数据库索引",
-    "hint": "使用此容器索引执行 SELECT n 的 Redis 客户端将访问此容器，而不是默认的 resp{n}。该索引在所有容器中唯一，并且必须在节点的 Resp.DatabaseCount（默认 16）范围内才能访问。留空则不分配。",
+    "hint": "发出 SELECT n 的 Redis 客户端会寻址声明索引 n 的容器，而不是默认的 resp{n}。该索引在所有容器中唯一，且必须在节点的 Resp.DatabaseCount（默认 16）范围内才可访问。选择“无”可使此容器在 RESP 上不可用。",
     "placeholder": "留空表示不设置",
     "notSet": "未设置",
     "conflict": "该索引已被另一个容器使用。",
-    "negative": "RESP 数据库索引必须为零或更大。"
+    "negative": "RESP 数据库索引必须为零或更大。",
+    "none": "无"
   },
   "objects": {
     "title": "{{container}} 中的对象",

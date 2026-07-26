@@ -198,11 +198,12 @@
   "resp": {
     "section": "Index RESP",
     "label": "Index de base de données RESP",
-    "hint": "Un client Redis qui exécute SELECT n avec l'index de ce conteneur adresse ce conteneur au lieu du resp{n} par défaut. L'index est unique parmi tous les conteneurs et doit être compris dans le Resp.DatabaseCount du nœud (16 par défaut) pour être accessible. Laissez vide pour ne pas l'attribuer.",
+    "hint": "Un client Redis qui exécute SELECT n adresse le conteneur possédant l'index n au lieu du resp{n} par défaut. L'index est unique parmi tous les conteneurs et doit être compris dans le Resp.DatabaseCount du nœud (16 par défaut) pour être accessible. Choisissez Aucun pour laisser ce conteneur indisponible via RESP.",
     "placeholder": "Laisser vide pour aucun",
     "notSet": "Non défini",
     "conflict": "Cet index est déjà utilisé par un autre conteneur.",
-    "negative": "L'index de base de données RESP doit être supérieur ou égal à zéro."
+    "negative": "L'index de base de données RESP doit être supérieur ou égal à zéro.",
+    "none": "Aucun"
   },
   "objects": {
     "title": "Objets dans {{container}}",

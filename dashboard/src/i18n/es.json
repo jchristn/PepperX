@@ -198,11 +198,12 @@
   "resp": {
     "section": "Índice RESP",
     "label": "Índice de base de datos RESP",
-    "hint": "Un cliente Redis que ejecuta SELECT n con el índice de este contenedor direcciona este contenedor en lugar del resp{n} predeterminado. El índice es único entre todos los contenedores y debe estar dentro del Resp.DatabaseCount del nodo (16 de forma predeterminada) para ser accesible. Déjalo en blanco para dejarlo sin asignar.",
+    "hint": "Un cliente Redis que ejecuta SELECT n direcciona el contenedor que reclama el índice n en lugar del resp{n} predeterminado. El índice es único entre todos los contenedores y debe estar dentro del Resp.DatabaseCount del nodo (16 de forma predeterminada) para ser accesible. Elige Ninguno para dejar este contenedor no disponible por RESP.",
     "placeholder": "Déjalo en blanco para ninguno",
     "notSet": "Sin asignar",
     "conflict": "Ese índice ya está en uso por otro contenedor.",
-    "negative": "El índice de base de datos RESP debe ser cero o mayor."
+    "negative": "El índice de base de datos RESP debe ser cero o mayor.",
+    "none": "Ninguno"
   },
   "objects": {
     "title": "Objetos en {{container}}",

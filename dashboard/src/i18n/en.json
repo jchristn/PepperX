@@ -198,11 +198,12 @@
   "resp": {
     "section": "RESP index",
     "label": "RESP database index",
-    "hint": "A Redis client that issues SELECT n with this container's index addresses this container instead of the default resp{n}. The index is unique across all containers and must be within the node's Resp.DatabaseCount (16 by default) to be reachable. Leave blank to leave it unset.",
+    "hint": "A Redis client that issues SELECT n addresses the container claiming index n instead of the default resp{n}. The index is unique across all containers and must be within the node's Resp.DatabaseCount (16 by default) to be reachable. Choose None to leave this container unavailable over RESP.",
     "placeholder": "Leave blank for none",
     "notSet": "Not set",
     "conflict": "That index is already in use by another container.",
-    "negative": "The RESP database index must be zero or greater."
+    "negative": "The RESP database index must be zero or greater.",
+    "none": "None"
   },
   "objects": {
     "title": "Objects in {{container}}",

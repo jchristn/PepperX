@@ -198,11 +198,12 @@
   "resp": {
     "section": "RESP-Index",
     "label": "RESP-Datenbankindex",
-    "hint": "Ein Redis-Client, der SELECT n mit dem Index dieses Containers ausführt, adressiert diesen Container anstelle des standardmäßigen resp{n}. Der Index ist über alle Container hinweg eindeutig und muss innerhalb des Resp.DatabaseCount des Knotens (standardmäßig 16) liegen, um erreichbar zu sein. Leer lassen, um ihn nicht zuzuweisen.",
+    "hint": "Ein Redis-Client, der SELECT n ausführt, adressiert den Container mit Index n anstelle des standardmäßigen resp{n}. Der Index ist über alle Container hinweg eindeutig und muss innerhalb des Resp.DatabaseCount des Knotens (standardmäßig 16) liegen, um erreichbar zu sein. Wählen Sie Keine, um diesen Container über RESP nicht verfügbar zu lassen.",
     "placeholder": "Leer lassen für keinen",
     "notSet": "Nicht festgelegt",
     "conflict": "Dieser Index wird bereits von einem anderen Container verwendet.",
-    "negative": "Der RESP-Datenbankindex muss null oder größer sein."
+    "negative": "Der RESP-Datenbankindex muss null oder größer sein.",
+    "none": "Keine"
   },
   "objects": {
     "title": "Objekte in {{container}}",

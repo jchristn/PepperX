@@ -41,6 +41,10 @@ const CACHE_DEFAULTS = {
 
 const CACHE_POLICIES = ['LRU', 'FIFO'];
 
+// RESP addresses databases by integer only, 0..DatabaseCount-1 (16 by default), so the index is a
+// bounded choice rather than free text. "None" (an empty draft) leaves the container unreachable over RESP.
+const RESP_DATABASE_INDICES = Array.from({ length: 16 }, (_, i) => i);
+
 /** Pull cache settings out of a response (or container) into editable form state. */
 function cacheToDraft(cache) {
   return {
@@ -193,15 +197,18 @@ function RespIndexField({ idPrefix, value, onChange, error }) {
   const { t } = useTranslation();
   return (
     <Field id={`${idPrefix}-resp-index`} label={t('resp.label')} hint={t('resp.hint')} error={error}>
-      <input
+      <select
         id={`${idPrefix}-resp-index`}
-        type="number"
-        min="0"
-        step="1"
         value={value}
-        placeholder={t('resp.placeholder')}
         onChange={(event) => onChange(event.target.value)}
-      />
+      >
+        <option value="">{t('resp.none')}</option>
+        {RESP_DATABASE_INDICES.map((index) => (
+          <option key={index} value={String(index)}>
+            {index}
+          </option>
+        ))}
+      </select>
     </Field>
   );
 }
