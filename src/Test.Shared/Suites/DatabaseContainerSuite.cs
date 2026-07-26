@@ -1,5 +1,6 @@
 namespace Test.Shared.Suites
 {
+    using System;
     using System.Collections.Generic;
     using PepperX.Core.Enumeration;
     using PepperX.Core.Exceptions;
@@ -57,36 +58,44 @@ namespace Test.Shared.Suites
 
                     DbTest.Case("DatabaseContainer", "RespIndexAssignReadClear", "Assign, look up, and clear a RESP database index", async (driver, ct) =>
                     {
+                        // The RESP index is globally unique, and the test database is shared across suites and
+                        // (under the xUnit adapter) each case runs both individually and inside RunAll, so a
+                        // fixed index would collide with the other run. A per-invocation random index keeps
+                        // each run independent.
+                        int idx = Random.Shared.Next(1_000_000, int.MaxValue);
                         Container created = await DbTest.NewContainerAsync(driver, ct);
 
-                        Container? assigned = await driver.Containers.UpdateRespDatabaseIndexAsync(created.Id, 5, ct);
-                        Check.Equal(5, assigned!.RespDatabaseIndex ?? -1, "index assigned");
+                        Container? assigned = await driver.Containers.UpdateRespDatabaseIndexAsync(created.Id, idx, ct);
+                        Check.Equal(idx, assigned!.RespDatabaseIndex ?? -1, "index assigned");
 
                         Container? byId = await driver.Containers.ReadByIdAsync(created.Id, ct);
-                        Check.Equal(5, byId!.RespDatabaseIndex ?? -1, "index persisted");
+                        Check.Equal(idx, byId!.RespDatabaseIndex ?? -1, "index persisted");
 
-                        Container? byIndex = await driver.Containers.ReadByRespDatabaseIndexAsync(5, ct);
+                        Container? byIndex = await driver.Containers.ReadByRespDatabaseIndexAsync(idx, ct);
                         Check.NotNull(byIndex, "lookup by index finds the container");
                         Check.Equal(created.Id, byIndex!.Id, "same container");
 
                         Container? cleared = await driver.Containers.UpdateRespDatabaseIndexAsync(created.Id, null, ct);
                         Check.True(cleared!.RespDatabaseIndex == null, "index cleared");
-                        Check.True(await driver.Containers.ReadByRespDatabaseIndexAsync(5, ct) == null, "lookup finds nothing after clear");
+                        Check.True(await driver.Containers.ReadByRespDatabaseIndexAsync(idx, ct) == null, "lookup finds nothing after clear");
                     }),
 
                     DbTest.Case("DatabaseContainer", "RespIndexUnique", "A RESP database index is unique across containers", async (driver, ct) =>
                     {
+                        // Per-invocation random indices; see RespIndexAssignReadClear for why.
+                        int taken = Random.Shared.Next(1_000_000, int.MaxValue);
+                        int free = Random.Shared.Next(1_000_000, int.MaxValue);
                         Container first = await DbTest.NewContainerAsync(driver, ct);
                         Container second = await DbTest.NewContainerAsync(driver, ct);
 
-                        await driver.Containers.UpdateRespDatabaseIndexAsync(first.Id, 9, ct);
+                        await driver.Containers.UpdateRespDatabaseIndexAsync(first.Id, taken, ct);
                         await Check.ThrowsAsync<PepperXException>(
-                            () => driver.Containers.UpdateRespDatabaseIndexAsync(second.Id, 9, ct),
+                            () => driver.Containers.UpdateRespDatabaseIndexAsync(second.Id, taken, ct),
                             "assigning an already-claimed index conflicts");
 
                         // The second container can still claim a different index.
-                        Container? ok = await driver.Containers.UpdateRespDatabaseIndexAsync(second.Id, 10, ct);
-                        Check.Equal(10, ok!.RespDatabaseIndex ?? -1, "a free index is accepted");
+                        Container? ok = await driver.Containers.UpdateRespDatabaseIndexAsync(second.Id, free, ct);
+                        Check.Equal(free, ok!.RespDatabaseIndex ?? -1, "a free index is accepted");
                     }),
 
                     DbTest.Case("DatabaseContainer", "Delete", "Delete a container", async (driver, ct) =>

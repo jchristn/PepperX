@@ -117,18 +117,21 @@ namespace Test.Shared.Suites
 
                     new TestCaseDescriptor("RestApi", "RespIndex", "A container's RESP index is assignable, unique, and clearable", async ct =>
                     {
+                        // A random, per-invocation index: it is globally unique and the shared server DB is
+                        // reused across cases (and the xUnit adapter runs each case twice), so a fixed value
+                        // would collide with the other run.
+                        int idx = Random.Shared.Next(1_000_000, int.MaxValue);
                         string a = DbTest.NewContainerName();
                         string b = DbTest.NewContainerName();
                         await (await ClientAsync(ct)).PutAsync("/v1.0/containers", Json("{\"Name\":\"" + a + "\"}"), ct);
                         await (await ClientAsync(ct)).PutAsync("/v1.0/containers", Json("{\"Name\":\"" + b + "\"}"), ct);
 
-                        // Assign an index (chosen high to avoid colliding with other suites' mappings).
-                        HttpResponseMessage assign = await (await ClientAsync(ct)).PutAsync("/v1.0/containers/" + a + "/resp-index", Json("{\"Index\":42}"), ct);
+                        HttpResponseMessage assign = await (await ClientAsync(ct)).PutAsync("/v1.0/containers/" + a + "/resp-index", Json("{\"Index\":" + idx + "}"), ct);
                         Check.True(assign.IsSuccessStatusCode, "index assigned");
-                        Check.True((await assign.Content.ReadAsStringAsync(ct)).Contains("\"RespDatabaseIndex\":42", StringComparison.Ordinal), "index echoed on the container");
+                        Check.True((await assign.Content.ReadAsStringAsync(ct)).Contains("\"RespDatabaseIndex\":" + idx, StringComparison.Ordinal), "index echoed on the container");
 
                         // The same index on another container conflicts.
-                        HttpResponseMessage conflict = await (await ClientAsync(ct)).PutAsync("/v1.0/containers/" + b + "/resp-index", Json("{\"Index\":42}"), ct);
+                        HttpResponseMessage conflict = await (await ClientAsync(ct)).PutAsync("/v1.0/containers/" + b + "/resp-index", Json("{\"Index\":" + idx + "}"), ct);
                         Check.Equal((int)HttpStatusCode.Conflict, (int)conflict.StatusCode, "duplicate index is 409");
 
                         // A negative index is rejected.
@@ -138,7 +141,7 @@ namespace Test.Shared.Suites
                         // Clearing frees the index for another container.
                         HttpResponseMessage clear = await (await ClientAsync(ct)).PutAsync("/v1.0/containers/" + a + "/resp-index", Json("{\"Index\":null}"), ct);
                         Check.True(clear.IsSuccessStatusCode, "index cleared");
-                        HttpResponseMessage reassign = await (await ClientAsync(ct)).PutAsync("/v1.0/containers/" + b + "/resp-index", Json("{\"Index\":42}"), ct);
+                        HttpResponseMessage reassign = await (await ClientAsync(ct)).PutAsync("/v1.0/containers/" + b + "/resp-index", Json("{\"Index\":" + idx + "}"), ct);
                         Check.True(reassign.IsSuccessStatusCode, "freed index reassignable");
                     }),
 

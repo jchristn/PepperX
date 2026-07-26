@@ -44,12 +44,15 @@ namespace Test.Shared.Suites
                             string cB = await NewContainerAsync(stack, ct);
                             // A container with a distinctive, non-default cache config to confirm a Rebuild
                             // restores cache settings from the manifest (D8/C1-06), not the disabled default.
+                            // Random per-invocation RESP index: it is globally unique in the shared source DB,
+                            // and the xUnit adapter runs this case twice, so a fixed value would collide.
+                            int respIdx = Random.Shared.Next(1_000_000, int.MaxValue);
                             string cC = DbTest.NewContainerName();
                             await stack.Containers.CreateAsync(new ContainerCreateRequest
                             {
                                 Name = cC,
                                 Cache = new UpdateCacheSettingsRequest { Enabled = true, Policy = CacheEvictionPolicyEnum.FIFO, MaxObjects = 333, EvictCount = 9, MaxCacheableObjectBytes = 4096 },
-                                RespDatabaseIndex = 11
+                                RespDatabaseIndex = respIdx
                             }, ct);
                             await Write(stack, cA, "photo1", "aaa", new List<string> { "animal" }, new Dictionary<string, string> { { "team", "a" } }, new Dictionary<string, object> { { "meta", 1 } }, ct);
                             await Write(stack, cA, "photo2", "bbbb", new List<string> { "plant" }, null, null, ct);
@@ -87,7 +90,7 @@ namespace Test.Shared.Suites
                                 Check.Equal(333, rebuiltC.Cache.MaxObjects, "cache max objects restored");
                                 Check.Equal(9, rebuiltC.Cache.EvictCount, "cache evict count restored");
                                 Check.Equal(4096L, rebuiltC.Cache.MaxCacheableObjectBytes, "cache ceiling restored");
-                                Check.Equal(11, rebuiltC.RespDatabaseIndex ?? -1, "RESP database index restored from the manifest");
+                                Check.Equal(respIdx, rebuiltC.RespDatabaseIndex ?? -1, "RESP database index restored from the manifest");
                             }
                         }
                         finally
