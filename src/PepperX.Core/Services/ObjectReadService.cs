@@ -24,6 +24,8 @@ namespace PepperX.Core.Services
     {
         #region Private-Members
 
+        private const int _ReadRaceRetryCount = 5;
+        private const int _ReadRaceRetryDelayMs = 10;
         private readonly string _Header = "[ObjectReadService] ";
         private readonly IMetadataDatabaseDriver _Db;
         private readonly IExtentStorageDriver _Storage;
@@ -163,14 +165,29 @@ namespace PepperX.Core.Services
 
         #region Private-Methods
 
-        private Task<ObjectReadHandle?> ReadUncachedAsync(string containerId, string key, long? offset, long? count, CancellationToken token)
+        private async Task<ObjectReadHandle?> ReadUncachedAsync(string containerId, string key, long? offset, long? count, CancellationToken token)
         {
-            if (_Cluster.DeleteCoordinationMode == DeleteCoordinationModeEnum.Local)
+            // Under heavy replace churn a read can lease the active extent and then find its file already
+            // destroyed in the narrow window between a concurrent replace's drain check and its delete. The
+            // object still exists as a newer extent, so re-resolve and retry a bounded number of times;
+            // last-writer-wins means returning the current version is the correct outcome. A genuinely
+            // deleted object resolves to no active extent and returns null without throwing.
+            for (int attempt = 0; ; attempt++)
             {
-                return ReadLocalAsync(containerId, key, offset, count, token);
-            }
+                try
+                {
+                    if (_Cluster.DeleteCoordinationMode == DeleteCoordinationModeEnum.Local)
+                    {
+                        return await ReadLocalAsync(containerId, key, offset, count, token).ConfigureAwait(false);
+                    }
 
-            return ReadClusterAsync(containerId, key, offset, count, token);
+                    return await ReadClusterAsync(containerId, key, offset, count, token).ConfigureAwait(false);
+                }
+                catch (Exception ex) when ((ex is IOException || ex is ExtentCorruptException) && attempt < _ReadRaceRetryCount)
+                {
+                    await Task.Delay(_ReadRaceRetryDelayMs, token).ConfigureAwait(false);
+                }
+            }
         }
 
         private async Task<ObjectReadHandle?> ReadWithCacheAsync(Container container, string key, long? offset, long? count, CancellationToken token)
@@ -199,24 +216,28 @@ namespace PepperX.Core.Services
             ObjectReadHandle? handle = await ReadUncachedAsync(container.Id, key, offset, count, token).ConfigureAwait(false);
             if (handle == null) return null;
 
-            // Only a full read of a within-ceiling object hydrates the cache; ranges and over-ceiling
-            // objects stream straight through.
+            // Hydrate and serve from the extent the bytes actually came from (handle.Extent, the leased and
+            // opened extent), NOT the earlier ReadActiveAsync snapshot: a concurrent replace can move the
+            // active extent between the two lookups, and caching one extent's bytes under another's id would
+            // violate coherence. Only a full read of a within-ceiling object hydrates the cache; ranges and
+            // over-ceiling objects stream straight through.
+            Extent served = handle.Extent;
             long ceiling = container.Cache.MaxCacheableObjectBytes;
-            bool cacheable = !offset.HasValue && (ceiling <= 0 || active.SizeBytes <= ceiling);
+            bool cacheable = !offset.HasValue && (ceiling <= 0 || served.SizeBytes <= ceiling);
             if (!cacheable) return handle;
 
-            ObjectMetadata metadata = ToMetadata(active, container.Name);
+            ObjectMetadata metadata = ToMetadata(served, container.Name);
             metadata.Object = handle.Payload.Header.Object;
 
             byte[] bytes;
             await using (handle.ConfigureAwait(false))
             {
-                bytes = await DrainAsync(handle.Payload, active.SizeBytes, token).ConfigureAwait(false);
+                bytes = await DrainAsync(handle.Payload, served.SizeBytes, token).ConfigureAwait(false);
             }
 
             try
             {
-                cache.AddReplace(new CachedObject(key, active.Id, metadata, bytes));
+                cache.AddReplace(new CachedObject(key, served.Id, metadata, bytes));
             }
             catch (Exception ex)
             {
@@ -225,8 +246,8 @@ namespace PepperX.Core.Services
                 _Logging?.Debug(_Header + "cache insert failed for " + container.Id + "/" + key + ": " + ex.Message);
             }
 
-            ExtentPayloadStream memStream = ExtentPayloadStream.FromMemory(bytes, BuildHeader(active, container.Name, metadata));
-            return new ObjectReadHandle(active, memStream, static () => ValueTask.CompletedTask);
+            ExtentPayloadStream memStream = ExtentPayloadStream.FromMemory(bytes, BuildHeader(served, container.Name, metadata));
+            return new ObjectReadHandle(served, memStream, static () => ValueTask.CompletedTask);
         }
 
         private static byte[] SlicePayload(byte[] payload, long? offset, long? count)
