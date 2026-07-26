@@ -165,7 +165,9 @@
 
 .topbar-endpoint-text {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
+  align-items: baseline;
+  gap: var(--spacing-xs);
   min-width: 0;
   line-height: 1.2;
 }
@@ -176,9 +178,11 @@
   letter-spacing: 0.06em;
   color: var(--color-text-muted);
   white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .topbar-endpoint code {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

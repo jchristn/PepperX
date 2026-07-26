@@ -425,7 +425,7 @@ export default function ContainersView() {
         storageKey="containers"
         emptyMessage={t('containers.empty')}
         rowId={(item) => item.Id}
-        onRowClick={(item) => navigate(`/containers/${encodeURIComponent(item.Name)}`)}
+        onRowClick={(item) => openDetail(item, 'edit')}
       />
 
       <Modal
