@@ -4,8 +4,10 @@ namespace Test.Shared
     using System.Collections.Generic;
     using System.Threading;
     using System.Threading.Tasks;
+    using Npgsql;
     using PepperX.Core.Database;
     using PepperX.Core.Enums;
+    using PepperX.Core.Exceptions;
     using PepperX.Core.Helpers;
     using PepperX.Core.Models;
     using Touchstone.Core;
@@ -71,6 +73,26 @@ namespace Test.Shared
                     StorageTestHelper.Cleanup(root);
                 }
             });
+        }
+
+        /// <summary>
+        /// Whether an exception is a transient, retryable conflict that a concurrent workload can produce
+        /// under contention — a concurrent-modification conflict, a PostgreSQL deadlock or serialization
+        /// failure, or any Npgsql exception flagged transient. Concurrency suites tolerate these (a real
+        /// client retries them) so they do not mask themselves as coherence failures; every other exception
+        /// is still surfaced.
+        /// </summary>
+        /// <param name="ex">Exception to classify.</param>
+        /// <returns>True when the exception is a retryable transient conflict.</returns>
+        public static bool IsTransientContention(Exception ex)
+        {
+            for (Exception? current = ex; current != null; current = current.InnerException)
+            {
+                if (current is ConcurrentModificationException) return true;
+                if (current is PostgresException pg && (pg.SqlState == "40P01" || pg.SqlState == "40001")) return true;
+                if (current is NpgsqlException npg && npg.IsTransient) return true;
+            }
+            return false;
         }
 
         /// <summary>

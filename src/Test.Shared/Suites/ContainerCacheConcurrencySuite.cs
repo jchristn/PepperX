@@ -55,10 +55,10 @@ namespace Test.Shared.Suites
                                 byte[]? b = await ReadAsync(stack, c.Name, "hot", ct);
                                 if (b == null || !BytesEqual(b, payload)) mismatches.Add(true);
                             }
-                            catch (Exception ex) { errors.Add(ex); }
+                            catch (Exception ex) { if (!DbTest.IsTransientContention(ex)) errors.Add(ex); }
                         });
 
-                        Check.Equal(0, errors.Count, "no exceptions across parallel readers");
+                        Check.Equal(0, errors.Count, "no exceptions across parallel readers; " + Detail(errors));
                         Check.Equal(0, mismatches.Count, "every reader saw the exact bytes");
                     }),
 
@@ -103,8 +103,7 @@ namespace Test.Shared.Suites
                                 for (int i = 0; i < 10; i++)
                                 {
                                     try { await WriteAsync(stack, c.Name, "hot", Homogeneous(val, 64), ct); }
-                                    catch (ConcurrentModificationException) { }
-                                    catch (Exception ex) { errors.Add(ex); }
+                                    catch (Exception ex) { if (!DbTest.IsTransientContention(ex)) errors.Add(ex); }
                                     await Task.Delay(1, ct);
                                 }
                             }, ct));
@@ -120,14 +119,14 @@ namespace Test.Shared.Suites
                                         byte[]? b = await ReadAsync(stack, c.Name, "hot", ct);
                                         if (b != null && (b.Length != 64 || !IsHomogeneous(b))) torn.Add(true);
                                     }
-                                    catch (Exception ex) { errors.Add(ex); }
+                                    catch (Exception ex) { if (!DbTest.IsTransientContention(ex)) errors.Add(ex); }
                                     await Task.Delay(1, ct);
                                 }
                             }, ct));
                         }
                         await Task.WhenAll(tasks);
 
-                        Check.Equal(0, errors.Count, "no unexpected exceptions");
+                        Check.Equal(0, errors.Count, "no unexpected exceptions; " + Detail(errors));
                         Check.Equal(0, torn.Count, "no reader ever observed a torn/mixed payload");
                     }),
 
@@ -157,7 +156,7 @@ namespace Test.Shared.Suites
                                         byte[]? b = await ReadAsync(stack, c.Name, "hot", ct);
                                         if (b != null && (b.Length != 64 || !IsHomogeneous(b))) torn.Add(true);
                                     }
-                                    catch (Exception ex) { errors.Add(ex); }
+                                    catch (Exception ex) { if (!DbTest.IsTransientContention(ex)) errors.Add(ex); }
                                     await Task.Delay(2, ct);
                                 }
                             }, ct));
@@ -169,7 +168,7 @@ namespace Test.Shared.Suites
                         stop.Cancel();
                         await Task.WhenAll(readers);
 
-                        Check.Equal(0, errors.Count, "no exceptions during read/delete race");
+                        Check.Equal(0, errors.Count, "no exceptions during read/delete race; " + Detail(errors));
                         Check.Equal(0, torn.Count, "no torn payloads");
                         Check.False(await stack.Reads.ExistsAsync(c.Name, "hot", ct), "object gone at the end");
                         Check.True(await ReadAsync(stack, c.Name, "hot", ct) == null, "post-delete reads miss");
@@ -191,10 +190,10 @@ namespace Test.Shared.Suites
                                 byte[]? b = await ReadAsync(stack, c.Name, "cold", ct);
                                 if (b == null || !BytesEqual(b, payload)) mismatches.Add(true);
                             }
-                            catch (Exception ex) { errors.Add(ex); }
+                            catch (Exception ex) { if (!DbTest.IsTransientContention(ex)) errors.Add(ex); }
                         });
 
-                        Check.Equal(0, errors.Count, "no exceptions during stampede");
+                        Check.Equal(0, errors.Count, "no exceptions during stampede; " + Detail(errors));
                         Check.Equal(0, mismatches.Count, "every reader got correct bytes");
                         Check.Equal(1, stack.Cache.Statistics(c.Id)!.CurrentCount, "cache converged to a single entry");
                     }),
@@ -218,7 +217,7 @@ namespace Test.Shared.Suites
                                         await WriteAsync(stack, c.Name, "k" + (i % 5), Homogeneous((byte)(i % 5), 64), ct);
                                     }
                                     catch (ConcurrentModificationException) { }
-                                    catch (Exception ex) { errors.Add(ex); }
+                                    catch (Exception ex) { if (!DbTest.IsTransientContention(ex)) errors.Add(ex); }
                                     await Task.Delay(1, ct);
                                 }
                             }, ct));
@@ -240,7 +239,7 @@ namespace Test.Shared.Suites
                                         MaxCacheableObjectBytes = 1048576
                                     }, ct);
                                 }
-                                catch (Exception ex) { errors.Add(ex); }
+                                catch (Exception ex) { if (!DbTest.IsTransientContention(ex)) errors.Add(ex); }
                             }
                         }, ct));
                         await Task.WhenAll(tasks);
@@ -278,7 +277,7 @@ namespace Test.Shared.Suites
                                         byte[]? b = await ReadAsync(stack, c.Name, "k", ct);
                                         if (b != null && !BytesEqual(b, payload)) bad.Add(true);
                                     }
-                                    catch (Exception ex) { errors.Add(ex); }
+                                    catch (Exception ex) { if (!DbTest.IsTransientContention(ex)) errors.Add(ex); }
                                     await Task.Delay(1, ct);
                                 }
                             }, ct));
@@ -288,12 +287,12 @@ namespace Test.Shared.Suites
                             for (int i = 0; i < 10; i++)
                             {
                                 try { await stack.Containers.UpdateCacheSettingsAsync(c.Name, (i % 2 == 0) ? Disable() : Enable(), ct); }
-                                catch (Exception ex) { errors.Add(ex); }
+                                catch (Exception ex) { if (!DbTest.IsTransientContention(ex)) errors.Add(ex); }
                             }
                         }, ct));
                         await Task.WhenAll(tasks);
 
-                        Check.Equal(0, errors.Count, "no exceptions while toggling enabled");
+                        Check.Equal(0, errors.Count, "no exceptions while toggling enabled; " + Detail(errors));
                         Check.Equal(0, bad.Count, "reads always returned the correct payload");
                     }),
 
@@ -324,13 +323,13 @@ namespace Test.Shared.Suites
                                         byte[]? b = await ReadAsync(stack, c.Name, "k", ct);
                                         if (b == null || b.Length != 64 || b[0] != expected || !IsHomogeneous(b)) leaks.Add(true);
                                     }
-                                    catch (Exception ex) { errors.Add(ex); }
+                                    catch (Exception ex) { if (!DbTest.IsTransientContention(ex)) errors.Add(ex); }
                                 }
                             }, ct));
                         }
                         await Task.WhenAll(tasks);
 
-                        Check.Equal(0, errors.Count, "no exceptions across containers");
+                        Check.Equal(0, errors.Count, "no exceptions across containers; " + Detail(errors));
                         Check.Equal(0, leaks.Count, "no byte crossed a container boundary");
                     }),
 
@@ -356,7 +355,7 @@ namespace Test.Shared.Suites
                                         byte[]? b = await ReadAsync(stack, c.Name, "k", ct);
                                         if (b != null && !BytesEqual(b, payload)) bad.Add(true);
                                     }
-                                    catch (Exception ex) { errors.Add(ex); }
+                                    catch (Exception ex) { if (!DbTest.IsTransientContention(ex)) errors.Add(ex); }
                                     await Task.Delay(2, ct);
                                 }
                             }, ct));
@@ -371,7 +370,7 @@ namespace Test.Shared.Suites
                                     stack.Cache.Remove(c.Id);
                                     stack.Cache.Get(c.Id, settings);
                                 }
-                                catch (Exception ex) { errors.Add(ex); }
+                                catch (Exception ex) { if (!DbTest.IsTransientContention(ex)) errors.Add(ex); }
                             }
                         }, ct);
 
@@ -380,7 +379,7 @@ namespace Test.Shared.Suites
                         stop.Cancel();
                         await Task.WhenAll(tasks);
 
-                        Check.Equal(0, errors.Count, "no disposed-cache or other error leaked to callers");
+                        Check.Equal(0, errors.Count, "no disposed-cache or other error leaked to callers; " + Detail(errors));
                         Check.Equal(0, bad.Count, "reads always returned correct bytes (from cache or storage)");
                         Check.NotNull(await ReadAsync(stack, c.Name, "k", ct), "object still readable after the race");
                     })

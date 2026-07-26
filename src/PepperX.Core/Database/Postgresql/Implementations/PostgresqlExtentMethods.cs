@@ -23,6 +23,8 @@ namespace PepperX.Core.Database.Postgresql.Implementations
 
         private const string _Columns = "id, container_id, object_key, state, size_bytes, sha256, content_type, storage_driver, storage_location, has_metadata_object, created_utc, last_update_utc";
         private const string _UniqueViolation = "23505";
+        private const string _DeadlockDetected = "40P01";
+        private const string _SerializationFailure = "40001";
         private readonly NpgsqlDataSource _DataSource;
 
         #endregion
@@ -207,8 +209,12 @@ namespace PepperX.Core.Database.Postgresql.Implementations
                     await tx.CommitAsync(token).ConfigureAwait(false);
                     return oldId;
                 }
-                catch (PostgresException ex) when (ex.SqlState == _UniqueViolation)
+                catch (PostgresException ex) when (ex.SqlState == _UniqueViolation || ex.SqlState == _DeadlockDetected || ex.SqlState == _SerializationFailure)
                 {
+                    // A unique-index collision, a deadlock, or a serialization failure are all transient,
+                    // retryable conflicts between concurrent writers to the same key. Surface them as the
+                    // one retry signal the write path already understands so last-writer-wins holds without
+                    // leaking a raw database error to the caller.
                     await tx.RollbackAsync(token).ConfigureAwait(false);
                     throw new ConcurrentModificationException("A concurrent write to key '" + newExtent.Key + "' occurred; retry the operation.");
                 }
