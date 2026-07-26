@@ -65,7 +65,7 @@ namespace PepperX.Core.Database.Postgresql
         {
             if (reader == null) throw new ArgumentNullException(nameof(reader));
 
-            return new Container
+            Container container = new Container
             {
                 Id = reader.GetString(reader.GetOrdinal("id")),
                 Name = reader.GetString(reader.GetOrdinal("name")),
@@ -75,6 +75,43 @@ namespace PepperX.Core.Database.Postgresql
                 CreatedUtc = reader.GetDateTime(reader.GetOrdinal("created_utc")),
                 LastUpdateUtc = reader.GetDateTime(reader.GetOrdinal("last_update_utc"))
             };
+
+            // RESP database index (migration v3); nullable. Guarded so a projection that omits it, or a
+            // pre-migration read, leaves the model default (null) in place.
+            if (HasColumn(reader, "resp_database_index"))
+            {
+                int respIndexOrdinal = reader.GetOrdinal("resp_database_index");
+                container.RespDatabaseIndex = reader.IsDBNull(respIndexOrdinal) ? (int?)null : reader.GetInt32(respIndexOrdinal);
+            }
+
+            // Cache columns are present after migration v2. Guarded so a projection that omits them (or a
+            // pre-migration read) leaves the model's defaults in place. Every value routes through the
+            // clamped, null-safe setters on ContainerCacheSettings so a bad or legacy row is normalized
+            // on read rather than propagated.
+            if (HasColumn(reader, "cache_enabled"))
+            {
+                ContainerCacheSettings cache = new ContainerCacheSettings
+                {
+                    Enabled = reader.GetBoolean(reader.GetOrdinal("cache_enabled")),
+                    Policy = ContainerCacheSettings.ParsePolicy(reader.GetString(reader.GetOrdinal("cache_policy"))),
+                    MaxObjects = reader.GetInt32(reader.GetOrdinal("cache_max_objects")),
+                    MaxMemoryBytes = reader.GetInt64(reader.GetOrdinal("cache_max_memory_bytes")),
+                    EvictCount = reader.GetInt32(reader.GetOrdinal("cache_evict_count")),
+                    MaxCacheableObjectBytes = reader.GetInt64(reader.GetOrdinal("cache_max_object_bytes"))
+                };
+                container.Cache = cache;
+            }
+
+            return container;
+        }
+
+        private static bool HasColumn(NpgsqlDataReader reader, string columnName)
+        {
+            for (int i = 0; i < reader.FieldCount; i++)
+            {
+                if (String.Equals(reader.GetName(i), columnName, StringComparison.OrdinalIgnoreCase)) return true;
+            }
+            return false;
         }
 
         /// <summary>

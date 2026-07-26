@@ -20,6 +20,12 @@ format may still change before 1.0.
   wins and in-flight readers finish safely against the old extent.
 - **Dual persistence** — PostgreSQL indexes metadata for search; extent files are the system of
   record. `POST /v1.0/admin/rehydrate` verifies, repairs, or fully rebuilds the database from storage.
+- **Per-container caching.** An optional in-memory read/write-through cache per container (FIFO or
+  LRU, bounded by object count and memory, with a per-object admission ceiling), enabled by default
+  on new containers. Reads are served from memory on a hit and validated against the active extent so
+  the cache stays coherent across nodes; writes are write-through and deletes evict first. Configured
+  per container via `PUT /v1.0/containers/{container}/cache`, the dashboard, or the create request;
+  settings persist in the metadata database via a startup migration.
 
 ### Protocols
 
@@ -28,7 +34,10 @@ format may still change before 1.0.
   AWS streaming-signature upload format.
 - **WebSockets** (8002) — REST-equivalent operations over one connection, correlated by `RequestId`.
 - **MCP** (8003 HTTP / 8004 TCP) — 16 tools for LLM agents, each publishing a full JSON Schema.
-- **RESP** (6379) — Redis string commands over durable storage. Any Redis client works.
+- **RESP** (6379) — Redis string commands over durable storage. Any Redis client works. A database
+  index maps to the container `resp{n}` by default; a container may also claim a specific RESP database
+  index (`PUT /v1.0/containers/{container}/resp-index`, unique across containers) so a numeric `SELECT`
+  reaches an arbitrarily named container.
 
 All five share one namespace: an object written over any protocol is readable over the others.
 
@@ -43,7 +52,7 @@ All five share one namespace: an object written over any protocol is readable ov
 
 - React admin dashboard: containers and objects, cross-container metadata search, capacity and
   cluster health, request history with a traffic chart, and an API explorer driven by the node's own
-  OpenAPI document. English, German, and Japanese, plus pseudo-locales for layout and RTL testing.
+  OpenAPI document. Available in English, Spanish, French, German, Chinese, and Japanese.
 - Request history capture with time-bucketed summaries, body truncation limits, and path exclusions.
 - `GET /v1.0/admin/settings` — non-secret configuration view, deliberately omitting the database
   password and S3 static keys.

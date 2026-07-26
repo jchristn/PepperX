@@ -37,6 +37,35 @@ Default port: **6379**.
 Containers are created on first write. A `GET` against a database whose container does not exist
 returns a nil reply rather than an error, which is what a Redis client expects from a missing key.
 
+### Addressing an arbitrarily named container
+
+Redis addresses databases by **integer only** — `SELECT <n>` — so a client such as RedisInsight can
+never send a container *name*. By default an index therefore resolves to `{prefix}{index}`, and names
+like `foo` or `bar` are unreachable over RESP (use REST, S3, or the dashboard for those).
+
+When you want a specific index to reach a specific named container, assign that container a **RESP
+database index** — a property of the container, stored in the metadata database. A Redis client that
+issues `SELECT n` with a container's assigned index then addresses that container; every index no
+container has claimed still resolves to `resp{index}`.
+
+Assign it over REST (or in the dashboard, or at create time):
+
+```bash
+# Make SELECT 5 address the container "foo"
+curl -X PUT http://localhost:8000/v1.0/containers/foo/resp-index \
+  -H 'Content-Type: application/json' -d '{"Index":5}'
+
+# Clear the mapping
+curl -X PUT http://localhost:8000/v1.0/containers/foo/resp-index \
+  -H 'Content-Type: application/json' -d '{"Index":null}'
+```
+
+The index is **unique across containers** — the database enforces it, so claiming an index another
+container already holds fails with `409 Conflict`. A negative index is rejected with `400`. The index
+must also be within `Resp.DatabaseCount` (16 by default) to be selectable by a client. In RedisInsight,
+pick database index `5` and you are working in `foo`. See
+[`REST_API.md`](REST_API.md#put-v10containerscontainerresp-index) for the full endpoint.
+
 Objects written over RESP carry no labels and no metadata object, but they are ordinary PepperX
 objects: visible over REST, listed in the dashboard, and searchable by key prefix.
 

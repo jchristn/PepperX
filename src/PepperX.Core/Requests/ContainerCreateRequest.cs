@@ -21,6 +21,21 @@ namespace PepperX.Core.Requests
         /// </summary>
         public Dictionary<string, string>? Tags { get; set; } = null;
 
+        /// <summary>
+        /// Optional cache settings. When null, the container is created with the enabled-by-default cache
+        /// configuration (LRU with reasonable sizes). Supply an explicit block to override, including one
+        /// with <see cref="UpdateCacheSettingsRequest.Enabled"/> set to false to opt out.
+        /// </summary>
+        public UpdateCacheSettingsRequest? Cache { get; set; } = null;
+
+        /// <summary>
+        /// Optional RESP database index to claim for this container. When set, a Redis client issuing
+        /// <c>SELECT n</c> with this index addresses this container. Must be unique across containers; a
+        /// conflict fails the create with 409. Null (the default) leaves the container unaddressable by an
+        /// explicit RESP index.
+        /// </summary>
+        public int? RespDatabaseIndex { get; set; } = null;
+
         #endregion
 
         #region Constructors-and-Factories

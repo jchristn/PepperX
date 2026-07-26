@@ -69,7 +69,7 @@ namespace PepperX.Core.Services
             report.ContainersDiscovered = manifests.Count;
             foreach (ContainerManifest manifest in manifests)
             {
-                await EnsureContainerAsync(manifest.Id, manifest.Name, manifest.Tags, mutate, report, token).ConfigureAwait(false);
+                await EnsureContainerAsync(manifest.Id, manifest.Name, manifest.Tags, manifest.Cache, manifest.RespDatabaseIndex, mutate, report, token).ConfigureAwait(false);
                 if (!targetCount.ContainsKey(manifest.Id)) { targetCount[manifest.Id] = 0; targetBytes[manifest.Id] = 0; }
             }
 
@@ -88,7 +88,7 @@ namespace PepperX.Core.Services
                 }
 
                 report.ExtentsDiscovered++;
-                await EnsureContainerAsync(header.ContainerId, header.ContainerName, null, mutate, report, token).ConfigureAwait(false);
+                await EnsureContainerAsync(header.ContainerId, header.ContainerName, null, null, null, mutate, report, token).ConfigureAwait(false);
 
                 if (!targetCount.ContainsKey(header.ContainerId)) { targetCount[header.ContainerId] = 0; targetBytes[header.ContainerId] = 0; }
                 targetCount[header.ContainerId] += 1;
@@ -123,12 +123,14 @@ namespace PepperX.Core.Services
 
         #region Private-Methods
 
-        private async Task EnsureContainerAsync(string containerId, string containerName, Dictionary<string, string>? tags, bool mutate, RehydrationReport report, CancellationToken token)
+        private async Task EnsureContainerAsync(string containerId, string containerName, Dictionary<string, string>? tags, ContainerCacheSettings? cache, int? respIndex, bool mutate, RehydrationReport report, CancellationToken token)
         {
             Container? existing = await _Db.Containers.ReadByIdAsync(containerId, token).ConfigureAwait(false);
             if (existing != null)
             {
                 if (mutate && tags != null) await _Db.Containers.UpdateTagsAsync(containerId, tags, token).ConfigureAwait(false);
+                if (mutate && cache != null) await _Db.Containers.UpdateCacheSettingsAsync(containerId, cache, token).ConfigureAwait(false);
+                if (mutate && respIndex.HasValue) await RestoreRespIndexAsync(containerId, containerName, respIndex.Value, report, token).ConfigureAwait(false);
                 return;
             }
 
@@ -146,13 +148,45 @@ namespace PepperX.Core.Services
 
             Container container = new Container { Id = containerId, Name = containerName };
             if (tags != null) container.Tags = tags;
+            if (cache != null) container.Cache = cache;
+            if (respIndex.HasValue) container.RespDatabaseIndex = respIndex.Value;
             try
             {
                 await _Db.Containers.CreateAsync(container, token).ConfigureAwait(false);
             }
             catch (Exception ex)
             {
-                report.Drift.Add("Could not recreate container " + containerName + ": " + ex.Message);
+                // A RESP-index collision must not sink the whole container: retry without the index and note
+                // the drift, so the container is still recreated (just not addressable over RESP by index).
+                if (respIndex.HasValue)
+                {
+                    report.Drift.Add("RESP database index " + respIndex.Value + " for container " + containerName + " could not be restored (" + ex.Message + "); recreating without it.");
+                    container.RespDatabaseIndex = null;
+                    try
+                    {
+                        await _Db.Containers.CreateAsync(container, token).ConfigureAwait(false);
+                    }
+                    catch (Exception inner)
+                    {
+                        report.Drift.Add("Could not recreate container " + containerName + ": " + inner.Message);
+                    }
+                }
+                else
+                {
+                    report.Drift.Add("Could not recreate container " + containerName + ": " + ex.Message);
+                }
+            }
+        }
+
+        private async Task RestoreRespIndexAsync(string containerId, string containerName, int respIndex, RehydrationReport report, CancellationToken token)
+        {
+            try
+            {
+                await _Db.Containers.UpdateRespDatabaseIndexAsync(containerId, respIndex, token).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                report.Drift.Add("RESP database index " + respIndex + " for container " + containerName + " could not be restored: " + ex.Message);
             }
         }
 

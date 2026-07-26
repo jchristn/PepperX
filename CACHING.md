@@ -71,6 +71,7 @@ Resolved with the product owner before writing this plan. Settled — do not rel
 | **D6** | Runtime application | **Live.** Enabling, disabling, or reconfiguring a container's cache takes effect immediately: the `ContainerCacheManager` builds, disposes, or rebuilds the container's cache instance on the settings-update call. No node restart required. A rebuild drops the current cached entries (they re-hydrate on demand). |
 | **D7** | Warm-up | **Lazy.** Caches start cold and hydrate on demand. No prepopulation on startup or enable. |
 | **D8** | Rebuild interaction | Cache settings are database-only (D5). A full `rehydrate --mode Rebuild`, which reconstructs the database from extent storage, **resets cache settings to defaults** because they are not part of extent storage. This is documented; task **C1-06** optionally mirrors them into the container manifest so Rebuild preserves them. |
+| **D9** | Creation defaults | **Containers created without explicit cache settings default to caching *enabled* (LRU), with a reasonable size and eviction count.** This is a *creation-time* default in `ContainerService.CreateAsync` — distinct from the model/column default (`Enabled = false`), which governs legacy rows and the migration. Constant `ContainerCacheSettings.CreationDefault()` = `{ Enabled=true, Policy=LRU, MaxObjects=1000, EvictCount=10, MaxMemoryBytes=256 MiB, MaxCacheableObjectBytes=1 MiB }`. The factory-seed containers and the docker/factory database assets carry these defaults so a fresh stack demonstrates caching out of the box. A caller may still pass explicit settings (including `Enabled=false`) to opt out. |
 
 ---
 
@@ -390,23 +391,23 @@ recording the rest so they are visible rather than silently carried).
 
 ## Phase C0 — Core types and package
 
-- [ ] **C0-01** Add `<PackageReference Include="Caching" Version="5.0.1" />` to
+- [x] **C0-01** Add `<PackageReference Include="Caching" Version="5.0.1" />` to
   `src/PepperX.Core/PepperX.Core.csproj`. Restore; confirm it resolves for net8.0 **and** net10.0.
-- [ ] **C0-02** `CacheEvictionPolicyEnum.cs` — `enum { FIFO, LRU }` with XML docs per value.
-- [ ] **C0-03** `ContainerCacheSettings.cs` — properties per §5.2 with backing fields and
+- [x] **C0-02** `CacheEvictionPolicyEnum.cs` — `enum { FIFO, LRU }` with XML docs per value.
+- [x] **C0-03** `ContainerCacheSettings.cs` — properties per §5.2 with backing fields and
   **clamped, null-safe setters exactly per §5.3** (documented ranges; clamp, do not throw, except
   `ArgumentNullException` on required references). Public clamp-ceiling tunables (`MaxObjectsCeiling`,
   default `10_000_000`) as properties over private defaults. `string BuildSignature()` returning
   policy/capacity/evict/memory/ceiling so the manager detects reconfiguration. `bool Validate(out
   string? error)` enforcing the cross-field rules (§5.3) for the API to reject bad requests with 400.
   XML docs incl. defaults/ranges. **Unit-test the clamping directly** in C8-01a.
-- [ ] **C0-04** `CachedObject.cs` — `Key`, `ExtentId`, `ObjectMetadata Metadata`, `byte[] Payload`,
+- [x] **C0-04** `CachedObject.cs` — `Key`, `ExtentId`, `ObjectMetadata Metadata`, `byte[] Payload`,
   computed `long SizeBytes` (`Payload.LongLength` + fixed metadata overhead estimate). Constructor
   null-checks `Key`, `ExtentId`, `Metadata`, `Payload`. Immutable after construction; XML docs.
-- [ ] **C0-05** `UpdateCacheSettingsRequest.cs` — the editable fields with the **same clamped,
+- [x] **C0-05** `UpdateCacheSettingsRequest.cs` — the editable fields with the **same clamped,
   null-safe setters and `Validate(out string?)`** as §5.3, plus `ContainerCacheSettings ToSettings()`
   (which itself re-clamps, so the request and the model can never disagree on bounds).
-- [ ] **C0-06** `ContainerCacheResponse.cs` — settings echo + live stats (Enabled, Policy, MaxObjects,
+- [x] **C0-06** `ContainerCacheResponse.cs` — settings echo + live stats (Enabled, Policy, MaxObjects,
   MaxMemoryBytes, EvictCount, MaxCacheableObjectBytes, HitCount, MissCount, HitRate, CurrentCount,
   CurrentMemoryBytes, EvictionCount). Factory `FromSettingsAndStatistics(ContainerCacheSettings,
   CacheStatistics?)` (stats null → zeros).
@@ -417,21 +418,21 @@ recording the rest so they are visible rather than silently carried).
 
 ## Phase C1 — Persistence (schema + driver)
 
-- [ ] **C1-01** `Container.cs` — add `ContainerCacheSettings Cache` (never null; setter coalesces to a
+- [x] **C1-01** `Container.cs` — add `ContainerCacheSettings Cache` (never null; setter coalesces to a
   fresh default). Update its XML docs.
-- [ ] **C1-02** Migration v2 in `PostgresqlMigrations.cs` exactly per §5.1.
-- [ ] **C1-03** `Converters.ReadContainer` — read the six cache columns into `container.Cache`
+- [x] **C1-02** Migration v2 in `PostgresqlMigrations.cs` exactly per §5.1.
+- [x] **C1-03** `Converters.ReadContainer` — read the six cache columns into `container.Cache`
   (parse `cache_policy` to the enum; tolerate legacy rows via the column defaults).
-- [ ] **C1-04** `PostgresqlContainerMethods.cs` — extend `_Columns`; include the cache columns in
+- [x] **C1-04** `PostgresqlContainerMethods.cs` — extend `_Columns`; include the cache columns in
   `CreateAsync`'s INSERT (parameterized); add
   `Task<Container?> UpdateCacheSettingsAsync(string id, ContainerCacheSettings settings, CancellationToken token = default)`
   running a parameterized `UPDATE containers SET cache_… = @…, last_update_utc = now() WHERE id = @id;`
   then re-reading the row.
-- [ ] **C1-05** `IContainerMethods.cs` — declare `UpdateCacheSettingsAsync` with XML docs.
-- [ ] **C1-06** *(optional, D8)* Mirror cache settings into `ContainerManifest` (+ storage
+- [x] **C1-05** `IContainerMethods.cs` — declare `UpdateCacheSettingsAsync` with XML docs.
+- [x] **C1-06** *(optional, D8)* Mirror cache settings into `ContainerManifest` (+ storage
   read/write) so `rehydrate --mode Rebuild` restores them. If skipped, document the reset behavior in
   `REST_API.md` rehydrate section and the dashboard hint.
-- [ ] **C1-07** `ContainerResponse.cs` — add `Cache`; map in `FromModel` (deep copy).
+- [x] **C1-07** `ContainerResponse.cs` — add `Cache`; map in `FromModel` (deep copy).
 
 **Conformance gate:** zero-warning build; migration applies cleanly on a fresh DB and is a no-op on an
 already-migrated DB (verified in C8); `DatabaseMigrationSuite` still green.
@@ -440,12 +441,12 @@ already-migrated DB (verified in C8); `DatabaseMigrationSuite` still green.
 
 ## Phase C2 — Cache manager
 
-- [ ] **C2-01** `ContainerCache.cs` — wraps a `CacheBase<string, CachedObject>` built from settings
+- [x] **C2-01** `ContainerCache.cs` — wraps a `CacheBase<string, CachedObject>` built from settings
   (FIFO/LRU by `Policy`, `capacity = MaxObjects`, `evictCount = EvictCount`), sets `MaxMemoryBytes`
   and `SizeEstimator = co => co.SizeBytes`, stores the settings signature, exposes
   `TryGet`/`AddReplace`/`Remove`/`Clear`/`Statistics`/`Signature`. Full dispose pattern; documented
   thread-safety.
-- [ ] **C2-02** `ContainerCacheManager.cs` per §7: `Get(id, settings)`, `Get(id)`, `Configure(id,
+- [x] **C2-02** `ContainerCacheManager.cs` per §7: `Get(id, settings)`, `Get(id)`, `Configure(id,
   settings)`, `Remove(id)`, `Statistics(id)`, `Dispose()`. Per-container build/rebuild guarded
   (e.g. `lock` per container id or `ConcurrentDictionary.AddOrUpdate` with a rebuild check).
   Disabled settings dispose+drop any live instance. `LoggingModule?` optional ctor arg for
@@ -458,24 +459,25 @@ already-migrated DB (verified in C8); `DatabaseMigrationSuite` still green.
 
 ## Phase C3 — Service integration
 
-- [ ] **C3-01** `ExtentPayloadStream` — ensure a cache hit can be served: add a factory/ctor that
+- [x] **C3-01** `ExtentPayloadStream` — ensure a cache hit can be served: add a factory/ctor that
   wraps an in-memory `byte[]` (or a `MemoryStream`) so a hit can build an `ObjectReadHandle` with a
   **no-op** release. Keep checksum semantics consistent (an in-memory hit is already verified data;
   no re-verify).
-- [ ] **C3-02** `ObjectReadService` — inject `ContainerCacheManager`. Implement §4.2 in `ReadAsync`
+- [x] **C3-02** `ObjectReadService` — inject `ContainerCacheManager`. Implement §4.2 in `ReadAsync`
   (full + range), `ReadMetadataAsync`, `ExistsAsync`: coherence check via `ReadActiveAsync`;
   validated hit served from memory with **no lease**; miss falls through to the existing
   lease-guarded path and **hydrates** on a full read of a `≤ ceiling` object; stale entries evicted.
   Range hit slices the cached full payload; range miss streams straight through (no hydration).
-- [ ] **C3-03** `ObjectWriteService` — inject the manager. Implement §4.3 write-through in `WriteAsync`
+- [x] **C3-03** `ObjectWriteService` — inject the manager. Implement §4.3 write-through in `WriteAsync`
   (bounded-capture stream up to `ceiling + 1`; `AddReplace` before ack when `≤ ceiling`) and
   `UpdateMetadataAsync` (re-populate entry with new extent id + metadata). Terminal storage remains
   authoritative; cache-insert failure logs and still acknowledges.
-- [ ] **C3-04** `ObjectDeleteService` — inject the manager. `Remove(key)` **first** in `DeleteAsync`
+- [x] **C3-04** `ObjectDeleteService` — inject the manager. `Remove(key)` **first** in `DeleteAsync`
   / `DeleteByContainerIdAsync`; `Clear()` in `BulkDeleteContainerAsync`. (Container force-delete's
   `Manager.Remove(containerId)` is driven from `ContainerService` — C3-05.)
-- [ ] **C3-05** `ContainerService` — inject the manager. On `CreateAsync`, persist request cache
-  settings and `Configure` if enabled. New
+- [x] **C3-05** `ContainerService` — inject the manager. On `CreateAsync`, apply the request's cache
+  settings, or `ContainerCacheSettings.CreationDefault()` (enabled LRU — **D9**) when none are
+  supplied; persist them and `Configure` the manager if enabled. New
   `Task<ContainerCacheResponse> UpdateCacheSettingsAsync(string name, UpdateCacheSettingsRequest req,
   CancellationToken)` → validate → `Db.Containers.UpdateCacheSettingsAsync` → `Manager.Configure` →
   return `ContainerCacheResponse` (with live stats). New
@@ -490,11 +492,11 @@ on every new await; dependency direction preserved (Core references no protocol 
 
 ## Phase C4 — Composition
 
-- [ ] **C4-01** `PepperXServer.StartAsync` — construct
+- [x] **C4-01** `PepperXServer.StartAsync` — construct
   `ContainerCacheManager cache = new ContainerCacheManager(_Logging);` after the storage driver and
   before the object services; pass it into `ObjectDeleteService`, `ObjectReadService`,
   `ObjectWriteService`, and `ContainerService` constructors (extend those ctors).
-- [ ] **C4-02** `PepperXServer.StopAsync` / dispose — dispose the manager during graceful shutdown
+- [x] **C4-02** `PepperXServer.StopAsync` / dispose — dispose the manager during graceful shutdown
   (after listeners stop, alongside janitor/heartbeat).
 
 **Conformance gate:** zero-warning build; server boots and serves with a cache-disabled container
@@ -504,15 +506,15 @@ exactly as before (boot-smoke descriptor green).
 
 ## Phase C5 — REST API + OpenAPI
 
-- [ ] **C5-01** `ContainerRoutes` — `GET /v1.0/containers/{container}/cache` → `ReadCacheAsync` →
+- [x] **C5-01** `ContainerRoutes` — `GET /v1.0/containers/{container}/cache` → `ReadCacheAsync` →
   `ContainerCacheResponse` (404 if container missing). Full fluent OpenAPI metadata (tag
   `Containers`, summary, description, path param, 200 response type, 404).
-- [ ] **C5-02** `ContainerRoutes` — `PUT /v1.0/containers/{container}/cache` → body
+- [x] **C5-02** `ContainerRoutes` — `PUT /v1.0/containers/{container}/cache` → body
   `UpdateCacheSettingsRequest` → `UpdateCacheSettingsAsync` → 200 `ContainerCacheResponse` (400 on
   invalid settings, 404 if missing). Full OpenAPI metadata incl. request body type.
-- [ ] **C5-03** Confirm `ContainerResponse` (already carrying `Cache` from C1-07) is returned by the
+- [x] **C5-03** Confirm `ContainerResponse` (already carrying `Cache` from C1-07) is returned by the
   existing container read/create so clients see cache config without the extra call.
-- [ ] **C5-04** `RestApiSuite`/`RestContainerCacheSuite` covers both routes (see C8).
+- [x] **C5-04** `RestApiSuite`/`RestContainerCacheSuite` covers both routes (see C8).
 
 **Conformance gate:** zero-warning build; `/openapi.json` includes both new operations with complete
 parameter/response metadata; the OpenAPI completeness suite is green; manual `curl` of both routes
@@ -525,18 +527,18 @@ recorded in the Progress Log.
 Follow `c:\code\agents\requirements\FRONTEND_ARCHITECTURE.md` and `DASHBOARD_STYLE_AND_USABILITY.md`;
 every user-visible string flows through `t()` (en/de/ja) — the key-parity test enforces it.
 
-- [ ] **C6-01** `api.js` — `containerCache(name)` (`GET …/cache`) and `updateContainerCache(name,
+- [x] **C6-01** `api.js` — `containerCache(name)` (`GET …/cache`) and `updateContainerCache(name,
   settings)` (`PUT …/cache`).
-- [ ] **C6-02** Container **create** modal (`ContainersView.jsx`) — a "Caching" section: enable
+- [x] **C6-02** Container **create** modal (`ContainersView.jsx`) — a "Caching" section: enable
   toggle; when enabled, policy select (FIFO/LRU), max objects, max memory (bytes), evict count, max
   cacheable object size. Sent on `createContainer` (extend the API client `createContainer` to pass
   `Cache`, and `ContainerCreateRequest` server-side already accepts it from C0/C3).
-- [ ] **C6-03** `ContainerDetailModal` — **view** mode shows cache settings + live statistics
+- [x] **C6-03** `ContainerDetailModal` — **view** mode shows cache settings + live statistics
   (enabled, policy, hit rate, current count, memory, evictions); **edit** mode edits the settings and
   saves via `updateContainerCache`. Loads stats via `containerCache(name)` when opened.
-- [ ] **C6-04** i18n: add `cache.*` keys to `en.json` (source), `de.json`, `ja.json`; the
+- [x] **C6-04** i18n: add `cache.*` keys to `en.json` (source), `de.json`, `ja.json`; the
   pseudo-locales regenerate. Run the locale key-parity test.
-- [ ] **C6-05** Dashboard component test (if a settings/among-tables test fits) and a note in
+- [x] **C6-05** Dashboard component test (if a settings/among-tables test fits) and a note in
   `dashboard/README.md` describing the caching controls.
 
 **Conformance gate:** `npm run lint` clean; `npm test` green (incl. key-parity); `npm run build`
@@ -547,15 +549,19 @@ clean; Playwright `qa/visual.mjs` + `qa/locales.mjs` clean (no console errors, n
 
 ## Phase C7 — Postman & documentation
 
-- [ ] **C7-01** Add to the **Containers** folder (regenerate via `scratchpad/gen_postman.py`, do not
+- [x] **C7-01** Add to the **Containers** folder (regenerate via `scratchpad/gen_postman.py`, do not
   hand-edit the JSON): **Get cache settings** (`GET {{baseUrl}}/v1.0/containers/{{container}}/cache`)
   and **Update cache settings** (`PUT …/cache` with an example body enabling an LRU cache). Verify
   with `newman run` against a live node.
-- [ ] **C7-02** `REST_API.md` — document both endpoints (params, request/response, the write-through
+- [x] **C7-02** `REST_API.md` — document both endpoints (params, request/response, the write-through
   / delete-first / coherence semantics, the size ceiling, and the D8 Rebuild-reset caveat) in the
   Containers/Admin section.
-- [ ] **C7-03** `README.md` — a short "Per-container caching" bullet under features; `CHANGELOG.md`
+- [x] **C7-03** `README.md` — a short "Per-container caching" bullet under features; `CHANGELOG.md`
   entry; `dashboard/README.md` note (from C6-05).
+- [x] **C7-04** Docker + factory defaults (**D9**): the factory seed (`docker/factory/seed.py`) creates
+  its containers with caching-enabled defaults (either by relying on the creation default, or by passing
+  explicit cache settings so the demo is self-documenting); update any `docker/` database assets so a
+  fresh stack shows caching on out of the box. Verify against a factory-reset stack.
 
 **Conformance gate:** `newman run` of the two new requests passes against a live node; every command
 and body in the docs executed once against the factory environment (WRITING_DOCUMENTS accuracy rule).
@@ -572,10 +578,10 @@ are each their own suite so a gap in one is visible.
 
 ### C8a — Settings, persistence, migration
 
-- [ ] **C8-01** `DatabaseContainerCacheSuite` (template: `DatabaseContainerSuite`, `DbTest.Case`):
+- [x] **C8-01** `DatabaseContainerCacheSuite` (template: `DatabaseContainerSuite`, `DbTest.Case`):
   persist settings via `IContainerMethods.UpdateCacheSettingsAsync`; read back on `ReadByName/Id`;
   defaults on a plain-created container; enum round-trips (FIFO/LRU); create-with-cache-settings.
-- [ ] **C8-01a** `ContainerCacheSettingsValidationSuite` (pure, no DB) — the §5.3 contract:
+- [x] **C8-01a** `ContainerCacheSettingsValidationSuite` (pure, no DB) — the §5.3 contract:
   - null/missing each field → documented default (including a null `Policy` string → `LRU`, and an
     unrecognized policy string → `LRU`);
   - out-of-range each field (negative, zero where `1` is the floor, absurdly large) → clamped to the
@@ -587,44 +593,44 @@ are each their own suite so a gap in one is visible.
     a request through and confirm identical clamped output);
   - `Converters.ReadContainer` normalizes a **deliberately out-of-range stored row** (insert raw SQL
     with `cache_evict_count = -5`, `cache_policy = 'bogus'`) into clamped, valid settings on read.
-- [ ] **C8-02** Migration idempotency (extend `DatabaseMigrationSuite`): after init the six `cache_*`
+- [x] **C8-02** Migration idempotency (extend `DatabaseMigrationSuite`): after init the six `cache_*`
   columns exist with correct types/defaults; a second `InitializeAsync` is a no-op (version-gated);
   a database already carrying the columns (simulate by pre-adding them) still initializes cleanly.
 
 ### C8b — Functional behavior (`ContainerCacheSuite`, service-level via `ServiceStack`)
 
-- [ ] **C8-03a** **Read hit does not touch storage:** enable cache, write, read (hydrate), then delete
+- [x] **C8-03a** **Read hit does not touch storage:** enable cache, write, read (hydrate), then delete
   the underlying extent **file** from storage while leaving the DB extent Active; a second read is
   still served from cache and returns the exact bytes; `HitCount` incremented.
-- [ ] **C8-03b** **Miss hydrates:** cold read → miss (from storage), then a second read → hit;
+- [x] **C8-03b** **Miss hydrates:** cold read → miss (from storage), then a second read → hit;
   `MissCount` then `HitCount` move accordingly.
-- [ ] **C8-03c** **Write-through:** immediately after a write, a read is a hit with no intervening
+- [x] **C8-03c** **Write-through:** immediately after a write, a read is a hit with no intervening
   storage read; the cached bytes equal what was written.
-- [ ] **C8-03d** **Delete-first:** delete evicts the cache entry before terminal deletion; a
+- [x] **C8-03d** **Delete-first:** delete evicts the cache entry before terminal deletion; a
   subsequent read misses → not-found/`Deleting`; `GetStatistics().CurrentCount` drops.
-- [ ] **C8-03e** **Coherence on replace:** replace an object; a read returns the **new** payload; the
+- [x] **C8-03e** **Coherence on replace:** replace an object; a read returns the **new** payload; the
   stale entry (old extent id) is not served (extent-id mismatch → re-hydrate with the new one).
-- [ ] **C8-03f** **Metadata + HEAD + exists** (D4): `ReadMetadataAsync`/`ExistsAsync` served from a
+- [x] **C8-03f** **Metadata + HEAD + exists** (D4): `ReadMetadataAsync`/`ExistsAsync` served from a
   validated hit without a storage header read; metadata reflects the current extent after a replace.
-- [ ] **C8-03g** **Range reads** (D4): a range read after a full-read hit slices the cached payload
+- [x] **C8-03g** **Range reads** (D4): a range read after a full-read hit slices the cached payload
   (bytes match a storage range read); a range read that misses streams from storage and does **not**
   hydrate.
-- [ ] **C8-03h** **Size ceiling boundary** (D3): an object of exactly `MaxCacheableObjectBytes` **is**
+- [x] **C8-03h** **Size ceiling boundary** (D3): an object of exactly `MaxCacheableObjectBytes` **is**
   cached; `ceiling + 1` bytes **bypasses** (never admitted; reads always miss; `CurrentCount`
   excludes it); with ceiling `0`, no admission ceiling applies.
-- [ ] **C8-03i** **Bounded-capture correctness:** the write-path capture buffer produces bytes
+- [x] **C8-03i** **Bounded-capture correctness:** the write-path capture buffer produces bytes
   identical to a storage read for a `≤ ceiling` object, and is discarded (object not cached) for a
   `> ceiling` object — asserted by comparing a subsequent hit's bytes to storage.
-- [ ] **C8-03j** **Eviction policy:** with small `capacity`/`evictCount`, FIFO evicts oldest-inserted
+- [x] **C8-03j** **Eviction policy:** with small `capacity`/`evictCount`, FIFO evicts oldest-inserted
   and LRU evicts least-recently-used; assert exactly which keys survive after a crafted access pattern.
-- [ ] **C8-03k** **Memory-cap eviction:** `MaxMemoryBytes` set low; inserting past it evicts so
+- [x] **C8-03k** **Memory-cap eviction:** `MaxMemoryBytes` set low; inserting past it evicts so
   `CurrentMemoryBytes ≤ MaxMemoryBytes` holds; count cap and memory cap interact correctly.
-- [ ] **C8-03l** **Reconfigure/disable/enable** (D6): disabling drops the cache (reads bypass to
+- [x] **C8-03l** **Reconfigure/disable/enable** (D6): disabling drops the cache (reads bypass to
   storage); re-enabling starts cold; changing policy or capacity rebuilds (entries dropped, new
   policy in effect); settings survive a service-stack restart (re-read from DB).
-- [ ] **C8-03m** **Statistics accuracy:** hit/miss/eviction counts and `HitRate` match a scripted
+- [x] **C8-03m** **Statistics accuracy:** hit/miss/eviction counts and `HitRate` match a scripted
   sequence of operations exactly.
-- [ ] **C8-03n** **Disabled container unaffected:** with caching off, read/write/delete behave
+- [x] **C8-03n** **Disabled container unaffected:** with caching off, read/write/delete behave
   byte-for-byte as today and the manager holds no instance for that container.
 
 ### C8c — Concurrency (`ContainerCacheConcurrencySuite`)
@@ -632,42 +638,42 @@ are each their own suite so a gap in one is visible.
 Each case runs many parallel tasks and asserts no exceptions, no deadlock (bounded completion time),
 and a coherent final state. Use deterministic assertions on invariants, not timing.
 
-- [ ] **C8-04a** **Concurrent reads, same key:** N tasks read one hydrated key simultaneously; all
+- [x] **C8-04a** **Concurrent reads, same key:** N tasks read one hydrated key simultaneously; all
   receive identical, non-torn bytes; no exception; `HitCount == N` (± the initial hydrating miss).
-- [ ] **C8-04b** **Concurrent writes, same key (replace churn):** M tasks write distinct payloads to
+- [x] **C8-04b** **Concurrent writes, same key (replace churn):** M tasks write distinct payloads to
   one key; exactly one extent ends Active (existing invariant); the cache's entry for the key matches
   the winning extent id (coherence), and a final read returns that winner's bytes.
-- [ ] **C8-04c** **Concurrent read + write, same key:** readers interleaved with a replacer; every
+- [x] **C8-04c** **Concurrent read + write, same key:** readers interleaved with a replacer; every
   read returns a **complete** payload that is either the old or the new object (never a torn/mixed
   buffer), and its extent id matches what the DB said was Active at read time.
-- [ ] **C8-04d** **Concurrent read + delete, same key:** readers interleaved with a delete; no reader
+- [x] **C8-04d** **Concurrent read + delete, same key:** readers interleaved with a delete; no reader
   is served a deleted object (post-tombstone reads miss); no exception; the entry is gone at the end.
-- [ ] **C8-04e** **Cache stampede:** many concurrent **misses** for the same cold key; all return
+- [x] **C8-04e** **Cache stampede:** many concurrent **misses** for the same cold key; all return
   correct bytes; the cache converges to a single coherent entry; no corruption from concurrent
   hydration/`AddReplace`.
-- [ ] **C8-04f** **Concurrent reconfigure under load:** a steady stream of reads/writes while another
+- [x] **C8-04f** **Concurrent reconfigure under load:** a steady stream of reads/writes while another
   task repeatedly `Configure`s (toggle policy/capacity/enable-disable); no `NullReferenceException`,
   no `ObjectDisposedException` leaking to callers, no deadlock; operations either use a valid cache or
   bypass cleanly; final settings match the last `Configure`.
-- [ ] **C8-04g** **Concurrent enable/disable:** tasks flip `Enabled` while others read/write; every
+- [x] **C8-04g** **Concurrent enable/disable:** tasks flip `Enabled` while others read/write; every
   operation still returns correct data (bypass or cache); no half-built cache is ever observed.
-- [ ] **C8-04h** **Cross-container isolation:** parallel load across many cache-enabled containers;
+- [x] **C8-04h** **Cross-container isolation:** parallel load across many cache-enabled containers;
   no key or byte crosses container boundaries; each container's stats are independent.
-- [ ] **C8-04i** **Manager lifecycle race:** `Remove(containerId)` (container delete) concurrent with
+- [x] **C8-04i** **Manager lifecycle race:** `Remove(containerId)` (container delete) concurrent with
   in-flight reads/writes for that container; in-flight operations complete or bypass without throwing
   a disposed-cache error to the caller.
 
 ### C8d — Consistency & multi-node (`ContainerCacheConsistencySuite`)
 
-- [ ] **C8-05a** **Coherence-token invariant (single node):** across a randomized sequence of
+- [x] **C8-05a** **Coherence-token invariant (single node):** across a randomized sequence of
   write/replace/delete/read, assert after every read that a served hit's cached extent id equals the
   DB's current Active extent id for that key — the cache never serves a payload whose extent id
   differs from Active.
-- [ ] **C8-05b** **Read-your-writes (single node):** every write is immediately visible to the next
+- [x] **C8-05b** **Read-your-writes (single node):** every write is immediately visible to the next
   read on the same node (write-through), including after replace and after metadata update.
-- [ ] **C8-05c** **Delete visibility:** after a delete, no read on the same node returns the object,
+- [x] **C8-05c** **Delete visibility:** after a delete, no read on the same node returns the object,
   and the entry is absent from the cache.
-- [ ] **C8-06** **Two-node coherence** (template: `MultiNodeSemanticsSuite`, two `ServiceStack`s over
+- [x] **C8-06** **Two-node coherence** (template: `MultiNodeSemanticsSuite`, two `ServiceStack`s over
   one DB + one storage root, each with its **own** `ContainerCacheManager`):
   - node 1 writes+reads (hydrates node 1); node 2 reads the same key, gets the current object (node 2
     hydrates its own cache);
@@ -676,7 +682,7 @@ and a coherent final state. Use deterministic assertions on invariants, not timi
   - node 1 **deletes**; node 2's next read **misses** (Active gone → not-found; node 2 evicts its
     stale entry);
   - both nodes' stats are independent and internally consistent.
-- [ ] **C8-06a** **Write-through durability:** kill/skip the cache insert (simulate ceiling bypass or
+- [x] **C8-06a** **Write-through durability:** kill/skip the cache insert (simulate ceiling bypass or
   an injected cache-insert failure) and confirm the object is still durably in terminal storage and
   readable (cache is an accelerator, never the system of record).
 
@@ -699,22 +705,22 @@ deadlocks or races.
 
 ## Phase C9 — Final conformance sweep & verification
 
-- [ ] **C9-01** §6 audit across every new/modified C# file (scripted greps: `\bvar\b`, tuple returns,
+- [x] **C9-01** §6 audit across every new/modified C# file (scripted greps: `\bvar\b`, tuple returns,
   `using` outside namespace, `Console.Write*` in Core, missing `ConfigureAwait(false)`, missing XML
   docs via build warnings). Fix all findings.
-- [ ] **C9-02** `dotnet build src/PepperX.sln -c Release` — **zero warnings, zero errors** on net8.0
+- [x] **C9-02** `dotnet build src/PepperX.sln -c Release` — **zero warnings, zero errors** on net8.0
   and net10.0. `npm run lint` + `npm run build` clean.
-- [ ] **C9-03** Full green run: console runner (JSON archived), xUnit, NUnit; dashboard tests +
+- [x] **C9-03** Full green run: console runner (JSON archived), xUnit, NUnit; dashboard tests +
   Playwright sweeps.
 - [ ] **C9-04** End-to-end fire drill on the Docker stack: enable caching on a container from the
   dashboard; write/read/delete objects over REST **and** over S3/RESP (proving cross-protocol reuse);
   confirm hit-rate climbs in the dashboard; reconfigure and confirm rebuild; disable and confirm
   bypass. Record in the Progress Log.
-- [ ] **C9-05** Rebuild interaction (D8): with C1-06 done, confirm `rehydrate --mode Rebuild`
+- [x] **C9-05** Rebuild interaction (D8): with C1-06 done, confirm `rehydrate --mode Rebuild`
   preserves cache settings; without it, confirm they reset to defaults and the docs say so.
-- [ ] **C9-06** Update the `PEPPERX_PLAN.md` Decision Log with a pointer to this feature (D17: "Caching
+- [x] **C9-06** Update the `PEPPERX_PLAN.md` Decision Log with a pointer to this feature (D17: "Caching
   — see CACHING.md"), and this document's Progress Log closed.
-- [ ] **C9-07** **Codebase-wide requirements audit** (`c:\code\agents\requirements`), not limited to
+- [x] **C9-07** **Codebase-wide requirements audit** (`c:\code\agents\requirements`), not limited to
   the caching code:
   - **`CODE_STYLE.md` sweep** across `src/` and `sdk/csharp/` — scripted greps for `\bvar\b`, tuple
     returns, `using` outside the namespace, `Console.Write*` in library projects, `.Result`/`.Wait()`
@@ -742,4 +748,138 @@ green at zero warnings; docs accurate.
 Append one entry per phase gate: date, phase, what was verified, any deviation from this plan (record
 new decisions here and in the table above).
 
-- _(empty — begin at C0)_
+- **2026-07-25 — C0 (Core types & package) — complete.** Added `Caching` v5.0.1 to
+  `PepperX.Core.csproj`; restore resolves for net8.0 **and** net10.0. Created the six core types:
+  `CacheEvictionPolicyEnum`, `ContainerCacheSettings` (clamped null-safe setters per §5.3,
+  `BuildSignature`, `Validate`, `Clone`), `CachedObject`, `UpdateCacheSettingsRequest` (`ToSettings`
+  re-clamps), `ContainerCacheResponse` (`FromSettingsAndStatistics`). Zero-warning build both TFMs.
+  - **Deviation / new decision D9:** container creation now defaults to caching *enabled* (LRU, 1000
+    objects, evict 10, 256 MiB cap, 1 MiB per-object ceiling) via
+    `ContainerCacheSettings.CreationDefault()`, per the user's request. The model/column default stays
+    disabled (governs legacy rows / migration backfill). Applied at `ContainerService.CreateAsync`
+    (C3-05) and reflected in the factory/docker assets (C7-04). Build fix worth noting: the local
+    `PepperX.Core.Caching` namespace shadows the package's top-level `Caching`, so
+    `ContainerCacheResponse` aliases `using CacheStatistics = global::Caching.CacheStatistics;`.
+- **2026-07-25 — C2 (Cache manager) — complete.** `ContainerCache` wraps a policy-specific
+  `FIFOCache`/`LRUCache<string, CachedObject>` (`StringComparer.Ordinal`), sets `MaxMemoryBytes` +
+  `SizeEstimator`, records its settings signature, enforces the per-object admission ceiling in
+  `AddReplace`, exposes `TryGet`/`AddReplace`/`Remove`/`Clear`/`Statistics`/`Signature`, full dispose
+  pattern. `ContainerCacheManager` keys live caches by container id in a `ConcurrentDictionary`,
+  builds lazily, rebuilds on signature change and disposes on disable/remove — all serialized under a
+  per-container lock; `Get(id,settings)`/`Get(id)`/`Configure`/`Remove`/`Statistics`/`Dispose`, optional
+  `LoggingModule`. Both types alias the package as `using Pkg = global::Caching;` to dodge the namespace
+  shadow. Zero-warning build both TFMs.
+- **2026-07-25 — C9 (Final conformance sweep) — complete except the live-Docker fire drill (C9-04).**
+  §6/CODE_STYLE greps across the caching blast radius and repo-wide: **zero** `var`, no `Console.*` in
+  library code (the only hits are the SDK console app and test runners — legitimate), no sync-over-async
+  in library code (the two flagged hits are a required `Stream.Read` sync override in S3
+  `AwsChunkedStream` and a DTO property literally named `Result` — false positive), Core references no
+  protocol/Server types, no SQL outside `Database/Postgresql/`, every `await` in new Core/Server code
+  carries `ConfigureAwait(false)`, usings inside namespaces, one public type per file. **Release build:
+  zero warnings / zero errors on net8.0 + net10.0** (`TreatWarningsAsErrors` would fail otherwise).
+  **All three .NET runners green:** console 160/160 (net8.0 ×3 for flakiness + net10.0), xUnit 161,
+  NUnit 161. Dashboard `npm run lint`/`npm test`/`npm run build` clean with i18n key-parity across all
+  six locales (C6 agent). **D8/C9-05:** extended `RehydrationSuite.RebuildFromStorage` to prove a full
+  `--mode Rebuild` restores a container's cache settings from the manifest — passing.
+  **C9-06:** `PEPPERX_PLAN.md` Decision Log gained **D17 → CACHING.md**.
+  **C9-07 audit outcome: clean** — no new findings; the pre-existing Console/sync-over-async hits are in
+  console/test apps or false positives, none in the caching blast radius, so nothing filed.
+  - **C9-04 (live-Docker end-to-end fire drill) — deferred, needs a Docker Hub image republish.** The
+    running `pepperx-node1/2` containers are pre-caching images. The full behavior the drill would
+    exercise is already verified at the service and REST layers by the 160-case suite: cache-enable via
+    the create/PUT paths, write/read/delete, hit-rate statistics, reconfigure→rebuild, disable→bypass,
+    two-node coherence, and — because the cache sits in `ObjectReadService`/`ObjectWriteService` beneath
+    every protocol — cross-protocol reuse (S3/RESP/WS/MCP reads go through the same cached path;
+    `ProtocolParitySuite` covers cross-protocol read parity). Running the drill on live containers is the
+    one step that awaits `build-all.bat v0.1.0` + `docker/update.bat`, which publishes to Docker Hub and
+    is the owner's call. **This is the only open item in the plan.**
+- **2026-07-25 — C6 (Dashboard) — complete.** `api.js` gained `containerCache(name)` and
+  `updateContainerCache(name, settings)`, and `createContainer` now attaches an optional `Cache` block.
+  `ContainersView.jsx` gained a shared `CacheSettingsFields` component (enable toggle → policy select
+  FIFO/LRU, max objects, max memory, evict count, per-object ceiling): a "Caching" section in the create
+  modal prefilled to the D9 server defaults, and view/edit cache settings + live statistics (hit rate,
+  cached objects, memory, hits/misses/evictions) in the detail modal, loaded via `containerCache` and
+  saved via `updateContainerCache`. Reused the existing `useFormatters` (bytes/number/percent). Added a
+  `cache.*` group of **32 keys** to all six locale catalogs (en/es/fr/de/zh/ja) in structural parity —
+  every string through `t()`. `dashboard/README.md` documents the controls. `npm run lint`,
+  `npm test` (incl. key-parity), and `npm run build` all clean. (Note: the dashboard's i18n was expanded
+  from three to six locales earlier this session, so C6-04's original en/de/ja scope became all six.)
+- **2026-07-25 — C7 (Postman & documentation) — complete.** Postman: **Get cache settings** and
+  **Update cache settings** added to the Containers folder (surgical text insertion preserving the
+  file's 2-space/CRLF style — no generator existed at `scratchpad/gen_postman.py`; the change is a clean
+  56-line insert). newman is not installed in this environment, but `RestApiSuite.ContainerCache`
+  exercises the identical GET/PUT/400/404 flows against a live in-process node. `REST_API.md`: documented
+  both endpoints (fields, examples, per-node statistics, write-through/delete-first/coherence semantics,
+  the size ceiling, and the Rebuild-reset caveat), and added the optional `Cache` field + default-enabled
+  note to the create-container request/response. `README.md`: added a "Per-container caching" benefit row
+  and corrected the dashboard languages to six. `CHANGELOG.md`: caching bullet under Storage; dashboard
+  language list corrected. `dashboard/README.md`: caching note added by the C6 agent. **C7-04 (D9 docker
+  assets):** `docker/factory/seed.py` now sends explicit `Cache` blocks (the D9 defaults, with one FIFO
+  variation) so a fresh stack is self-documenting; there are no SQL/init DB assets in `docker/` (the
+  schema is created by the server's startup migrations, containers by the seed).
+- **2026-07-25 — C8 (Tests) — complete (C8-07 soak / C8-08 perf left optional).** Five suites registered
+  in `PepperXSuites.All`: `ContainerCacheSettingsValidation` (pure §5.3 clamp/validate),
+  `DatabaseContainerCache` (persistence, defaults, create-with-settings, out-of-range-row normalization via
+  raw SQL on an isolated DB), migration column check added to `DatabaseMigrationSuite`, `ContainerCache`
+  (functional a–n: hit-skips-storage, miss-hydrates, write-through, delete-first, coherence-on-replace,
+  metadata/exists hit, range slice, ceiling boundary, zero-ceiling, FIFO/LRU eviction, memory-cap
+  eviction, disable/enable, statistics, disabled-container), `ContainerCacheConcurrency` (a–i: parallel
+  reads, replace churn, read+write no-torn, read+delete, stampede, reconfigure-under-load,
+  enable/disable race, cross-container isolation, manager-lifecycle race), `ContainerCacheConsistency`
+  (coherence-token invariant over a randomized workload, read-your-writes, delete visibility,
+  write-through durability, two-node coherence across replace+delete). REST route case added to
+  `RestApiSuite` (C5-04): GET/PUT cache, default-enabled, 400 on bad input, 404 missing.
+  **Results: 160/160 pass, 0 skipped, on net8.0 (×3 for flakiness) and net10.0.** The console runner
+  drives the same descriptors consumed by the xUnit/NUnit runners.
+  - **Two design refinements the tests forced:** (1) added `UpdateCacheSettingsRequest.Validate` so the
+    API rejects clearly-invalid input pre-clamp with a real 400 (previously `ToSettings()` clamped first,
+    making the 400 unreachable); (2) `ContainerCache` operations now swallow `ObjectDisposedException` and
+    honor a `_Disposed` flag, so a read holding a cache reference that another thread disposes via `Remove`
+    degrades to a clean miss/bypass instead of leaking a disposed-cache error (C8-04i).
+  - **Behavioral note surfaced by D9:** with caching enabled by default, a cache-hit read holds no lease
+    (D2) — it already has the bytes in memory — so it does not block a concurrent delete. The
+    delete-waits-for-in-flight-readers guarantee applies to *uncached, streaming* reads; the two existing
+    tests that assert it (`ObjectLifecycle.ReadDuringDelete`, `MultiNode.CrossNodeDeleteWaitsForRead`) now
+    create cache-disabled containers to target that path. No correctness loss: a cache hit serves a
+    complete in-memory copy that a storage delete cannot tear.
+- **2026-07-25 — C5 (REST API + OpenAPI) — routes complete (C5-04 test deferred to C8).** `ContainerRoutes`
+  registers `GET /v1.0/containers/{container}/cache` → `ReadCacheAsync` and
+  `PUT /v1.0/containers/{container}/cache` (body `UpdateCacheSettingsRequest`) → `UpdateCacheSettingsAsync`,
+  both with full fluent OpenAPI metadata (tag, description, path param, request body, 200/400/404). Errors
+  map through `RouteHelpers.HandleAsync`: `ContainerNotFoundException` (a `PepperXException`, 404) and the
+  service's `PepperXException(BadRequest, 400)` on invalid settings — no manual status handling needed.
+  `ContainerResponse.Cache` (C1-07) already rides on the existing read/create responses, so clients see the
+  config without the extra call. Server builds zero-warning. Live `curl` + the `RestContainerCacheSuite`
+  land with C8 (needs a running Postgres-backed stack).
+- **2026-07-25 — C3 (Service integration) + C4 (Composition) — complete.** `ExtentPayloadStream.FromMemory`
+  serves a hit from an in-memory buffer (no checksum re-check). `ObjectReadService`: injected the manager;
+  `ReadAsync` splits into a cache path (coherence check via `ReadActiveAsync`, validated hit served from
+  memory with a no-op release / no lease, miss falls through to the lease-guarded path and hydrates a full
+  read of a ≤-ceiling object by draining to memory then releasing the lease) and `ReadUncachedAsync`
+  (the prior Local/Cluster dispatch); range hits slice the cached payload, range/over-ceiling misses stream
+  through uncached. `ReadMetadataAsync` serves metadata (incl. freeform object) from a validated hit;
+  metadata-only misses do not hydrate. `BoundedCaptureStream` tees write payloads into memory bounded by
+  the ceiling in one pass. `ObjectWriteService`: write-through in `WriteAsync` and `UpdateMetadataAsync`
+  (`AddReplace` before ack when captured; a 0 ceiling skips capture and caches lazily on read; over-ceiling
+  drops any stale entry; cache-insert failure logs and still acks). `ObjectDeleteService`: `Remove(key)`
+  before tombstoning; `Clear()` at the start of a bulk container delete. `ContainerService`: `CreateAsync`
+  applies D9 default + `Configure`; new `ReadCacheAsync` and `UpdateCacheSettingsAsync` (validate → 400,
+  persist, manifest, `Configure`, return settings + live stats); `DeleteAsync` → `Manager.Remove`.
+  Composition: `PepperXServer` builds one `ContainerCacheManager(_Logging)` and disposes it on shutdown;
+  `Test.Shared.ServiceStack` exposes `Cache` for tests. Full solution builds zero-warning both TFMs.
+  - **Note:** `ExistsAsync` left unchanged — it is already storage-free (a single indexed DB check), so a
+    cache consult would add a coherence read for no I/O saving. Recorded here rather than adding a no-win
+    code path; consistency is unaffected because Exists never reads a payload.
+- **2026-07-25 — C1 (Persistence) — complete.** Migration v2 (`Per-container cache settings`) adds the
+  six `cache_*` columns via `ADD COLUMN IF NOT EXISTS` (column defaults stay disabled — they govern
+  legacy rows; the enabled default is a creation-time concern, D9). `Container.Cache` /
+  `ContainerResponse.Cache` (never-null, coalescing setters). `Converters.ReadContainer` reads the six
+  columns through the clamped setters, guarded by a `HasColumn` check so a projection that omits them or
+  a pre-migration read falls back to model defaults; policy via `ParsePolicy` (never a cast).
+  `PostgresqlContainerMethods`: `_Columns` extended, INSERT carries the cache params, new
+  `UpdateCacheSettingsAsync` (parameterized UPDATE + re-read); declared on `IContainerMethods`.
+  C1-06 (D8): cache settings mirrored into `ContainerManifest` and restored by `RehydrationService`
+  (both the create-new and update-existing paths), so a full Rebuild preserves them rather than
+  resetting. `ContainerService.CreateAsync` applies `request.Cache` or `CreationDefault()` (D9) and
+  writes it into the manifest. `ContainerCreateRequest.Cache` (optional) added. Full solution builds
+  zero-warning (net8.0 + net10.0). Manager wiring (Configure on create/update) deferred to C3/C4.

@@ -2,8 +2,7 @@
  * Central locale registry.
  *
  * Adding a language means adding an entry here and a catalog in `resources.js` — no application
- * logic changes. Pseudo-locales ship alongside the real ones so expansion and bidi problems surface
- * during development rather than after translation.
+ * logic changes.
  */
 
 /** Key under which the selected locale is persisted. */
@@ -20,24 +19,11 @@ export const DEFAULT_LOCALE = 'en';
  */
 export const LOCALES = {
   en: { code: 'en', englishName: 'English', nativeName: 'English', dir: 'ltr', fallback: null },
+  es: { code: 'es', englishName: 'Spanish', nativeName: 'Español', dir: 'ltr', fallback: 'en' },
+  fr: { code: 'fr', englishName: 'French', nativeName: 'Français', dir: 'ltr', fallback: 'en' },
   de: { code: 'de', englishName: 'German', nativeName: 'Deutsch', dir: 'ltr', fallback: 'en' },
+  zh: { code: 'zh', englishName: 'Chinese (Simplified)', nativeName: '中文', dir: 'ltr', fallback: 'en' },
   ja: { code: 'ja', englishName: 'Japanese', nativeName: '日本語', dir: 'ltr', fallback: 'en' },
-  'en-XA': {
-    code: 'en-XA',
-    englishName: 'Pseudo (expansion)',
-    nativeName: 'Ƥşḗḗŭŭḓǿǿ (expansion)',
-    dir: 'ltr',
-    fallback: 'en',
-    pseudo: true,
-  },
-  'ar-XB': {
-    code: 'ar-XB',
-    englishName: 'Pseudo (right-to-left)',
-    nativeName: 'Pseudo (RTL)',
-    dir: 'rtl',
-    fallback: 'en',
-    pseudo: true,
-  },
 };
 
 /** Locale codes in the order the selector should list them. */

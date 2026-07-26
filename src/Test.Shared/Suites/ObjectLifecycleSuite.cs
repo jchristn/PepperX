@@ -97,7 +97,11 @@ namespace Test.Shared.Suites
 
                     DbTest.StackCase("ObjectLifecycle", "ReadDuringDelete", "A delete waits for an in-flight read and blocks new reads", async (stack, ct) =>
                     {
-                        string container = await NewContainerAsync(stack, ct);
+                        // Caching is disabled here on purpose: the delete-waits-for-readers guarantee protects a
+                        // read that is streaming from storage under a lease. A cache hit holds no lease (D2)
+                        // because it already has the bytes in memory, so it does not — and need not — block a
+                        // delete. This case exercises the uncached streaming path.
+                        string container = await NewDisabledCacheContainerAsync(stack, ct);
                         await WriteAsync(stack, container, "k", "content", null, null, null, false, ct);
 
                         ObjectReadHandle? reader = await stack.Reads.ReadAsync(container, "k", null, null, ct);
@@ -144,6 +148,13 @@ namespace Test.Shared.Suites
         {
             string name = DbTest.NewContainerName();
             await stack.Containers.CreateAsync(new ContainerCreateRequest { Name = name }, ct);
+            return name;
+        }
+
+        private static async Task<string> NewDisabledCacheContainerAsync(ServiceStack stack, CancellationToken ct)
+        {
+            string name = DbTest.NewContainerName();
+            await stack.Containers.CreateAsync(new ContainerCreateRequest { Name = name, Cache = new UpdateCacheSettingsRequest { Enabled = false } }, ct);
             return name;
         }
 

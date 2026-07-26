@@ -2,8 +2,8 @@
  * Component tests.
  *
  * These cover the logic that is easy to get subtly wrong and invisible in a screenshot: paging
- * arithmetic, byte and duration formatting across locales, pseudo-locale generation, and the
- * bucket-merge that keeps the chart's bar count stable.
+ * arithmetic, byte and duration formatting across locales, translation-catalog completeness, and
+ * the bucket-merge that keeps the chart's bar count stable.
  */
 
 import React from 'react';
@@ -56,22 +56,19 @@ describe('locale registry', () => {
     expect(normalizeLocale(undefined)).toBe('en');
   });
 
-  it('reports right-to-left only for the RTL pseudo-locale', () => {
-    expect(directionFor('en')).toBe('ltr');
-    expect(directionFor('ar-XB')).toBe('rtl');
+  it('reports left-to-right for every supported locale', () => {
+    for (const locale of ['en', 'es', 'fr', 'de', 'zh', 'ja']) {
+      expect(directionFor(locale)).toBe('ltr');
+    }
   });
 });
 
-describe('pseudo-locales', () => {
-  it('expands strings so truncation shows up during development', () => {
-    const source = resources.en.translation.nav.containers;
-    const pseudo = resources['en-XA'].translation.nav.containers;
-    expect(pseudo.length).toBeGreaterThan(source.length * 1.3);
-  });
-
-  it('preserves interpolation placeholders', () => {
-    expect(resources['en-XA'].translation.table.showing).toContain('{{total}}');
-    expect(resources['ar-XB'].translation.table.showing).toContain('{{from}}');
+describe('translation catalogs', () => {
+  it('preserves interpolation placeholders in every locale', () => {
+    for (const locale of ['es', 'fr', 'de', 'zh', 'ja']) {
+      expect(resources[locale].translation.table.showing).toContain('{{total}}');
+      expect(resources[locale].translation.table.showing).toContain('{{from}}');
+    }
   });
 
   it('covers every key present in the source catalog', () => {
@@ -81,7 +78,7 @@ describe('pseudo-locales', () => {
       );
 
     const source = keys(resources.en.translation);
-    for (const locale of ['de', 'ja', 'en-XA', 'ar-XB']) {
+    for (const locale of ['es', 'fr', 'de', 'zh', 'ja']) {
       expect(keys(resources[locale].translation).sort()).toEqual(source.sort());
     }
   });

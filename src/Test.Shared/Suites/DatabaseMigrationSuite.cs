@@ -4,6 +4,7 @@ namespace Test.Shared.Suites
     using System.Collections.Generic;
     using System.Threading;
     using System.Threading.Tasks;
+    using Npgsql;
     using PepperX.Core.Database;
     using PepperX.Core.Models;
     using Touchstone.Core;
@@ -57,6 +58,80 @@ namespace Test.Shared.Suites
                                 Check.NotNull(await second.Containers.ReadByNameAsync("first", ct), "existing data intact after re-init");
                                 await second.Containers.CreateAsync(new Container { Name = "second" }, ct);
                             }
+                        }
+                        finally
+                        {
+                            await PostgresTestFixture.DropDatabaseAsync(dbName, ct);
+                        }
+                    }),
+
+                    MigrationCase("CacheColumnsPresent", "Migration v2 adds the cache columns with correct defaults and is idempotent", async ct =>
+                    {
+                        string dbName = await PostgresTestFixture.CreateDatabaseAsync(ct);
+                        try
+                        {
+                            // First init runs migration v2. A second init must be a version-gated no-op.
+                            await using (IMetadataDatabaseDriver first = await MetadataDatabaseDriverFactory.CreateAndInitializeAsync(TestEnvironment.SettingsFor(dbName), null, ct)) { }
+                            await using (IMetadataDatabaseDriver second = await MetadataDatabaseDriverFactory.CreateAndInitializeAsync(TestEnvironment.SettingsFor(dbName), null, ct)) { }
+
+                            string connString = "Host=" + TestEnvironment.Host + ";Port=" + TestEnvironment.Port + ";Database=" + dbName +
+                                ";Username=" + TestEnvironment.User + ";Password=" + TestEnvironment.Password + ";";
+                            Dictionary<string, string> types = new Dictionary<string, string>();
+                            await using (NpgsqlConnection conn = new NpgsqlConnection(connString))
+                            {
+                                await conn.OpenAsync(ct);
+                                await using (NpgsqlCommand cmd = new NpgsqlCommand(
+                                    "SELECT column_name, data_type FROM information_schema.columns WHERE table_name = 'containers' AND column_name LIKE 'cache_%';", conn))
+                                await using (NpgsqlDataReader reader = await cmd.ExecuteReaderAsync(ct))
+                                {
+                                    while (await reader.ReadAsync(ct)) types[reader.GetString(0)] = reader.GetString(1);
+                                }
+                            }
+
+                            Check.Equal("boolean", types["cache_enabled"], "cache_enabled type");
+                            Check.True(types.ContainsKey("cache_policy"), "cache_policy present");
+                            Check.Equal("integer", types["cache_max_objects"], "cache_max_objects type");
+                            Check.Equal("bigint", types["cache_max_memory_bytes"], "cache_max_memory_bytes type");
+                            Check.Equal("integer", types["cache_evict_count"], "cache_evict_count type");
+                            Check.Equal("bigint", types["cache_max_object_bytes"], "cache_max_object_bytes type");
+                        }
+                        finally
+                        {
+                            await PostgresTestFixture.DropDatabaseAsync(dbName, ct);
+                        }
+                    }),
+
+                    MigrationCase("RespIndexColumn", "Migration v3 adds the RESP index column and its unique index, idempotently", async ct =>
+                    {
+                        string dbName = await PostgresTestFixture.CreateDatabaseAsync(ct);
+                        try
+                        {
+                            await using (IMetadataDatabaseDriver first = await MetadataDatabaseDriverFactory.CreateAndInitializeAsync(TestEnvironment.SettingsFor(dbName), null, ct)) { }
+                            await using (IMetadataDatabaseDriver second = await MetadataDatabaseDriverFactory.CreateAndInitializeAsync(TestEnvironment.SettingsFor(dbName), null, ct)) { }
+
+                            string connString = "Host=" + TestEnvironment.Host + ";Port=" + TestEnvironment.Port + ";Database=" + dbName +
+                                ";Username=" + TestEnvironment.User + ";Password=" + TestEnvironment.Password + ";";
+                            string? columnType = null;
+                            bool indexPresent = false;
+                            await using (NpgsqlConnection conn = new NpgsqlConnection(connString))
+                            {
+                                await conn.OpenAsync(ct);
+                                await using (NpgsqlCommand cmd = new NpgsqlCommand(
+                                    "SELECT data_type FROM information_schema.columns WHERE table_name = 'containers' AND column_name = 'resp_database_index';", conn))
+                                {
+                                    object? result = await cmd.ExecuteScalarAsync(ct);
+                                    columnType = result as string;
+                                }
+                                await using (NpgsqlCommand cmd = new NpgsqlCommand(
+                                    "SELECT 1 FROM pg_indexes WHERE tablename = 'containers' AND indexname = 'ux_containers_resp_db_index';", conn))
+                                {
+                                    object? result = await cmd.ExecuteScalarAsync(ct);
+                                    indexPresent = result != null;
+                                }
+                            }
+
+                            Check.Equal("integer", columnType ?? "(missing)", "resp_database_index column type");
+                            Check.True(indexPresent, "partial unique index present");
                         }
                         finally
                         {

@@ -111,6 +111,24 @@ namespace PepperX.Core.Database.Postgresql
                     @"CREATE INDEX IF NOT EXISTS ix_reqhist_created ON request_history (created_utc DESC);",
                     @"CREATE INDEX IF NOT EXISTS ix_reqhist_status ON request_history (status_code);",
                     @"CREATE INDEX IF NOT EXISTS ix_reqhist_method ON request_history (method);"
+                }),
+
+                new SchemaMigration(2, "Per-container cache settings", new List<string>
+                {
+                    @"ALTER TABLE containers ADD COLUMN IF NOT EXISTS cache_enabled boolean NOT NULL DEFAULT false;",
+                    @"ALTER TABLE containers ADD COLUMN IF NOT EXISTS cache_policy varchar(8) NOT NULL DEFAULT 'LRU';",
+                    @"ALTER TABLE containers ADD COLUMN IF NOT EXISTS cache_max_objects integer NOT NULL DEFAULT 1000;",
+                    @"ALTER TABLE containers ADD COLUMN IF NOT EXISTS cache_max_memory_bytes bigint NOT NULL DEFAULT 0;",
+                    @"ALTER TABLE containers ADD COLUMN IF NOT EXISTS cache_evict_count integer NOT NULL DEFAULT 10;",
+                    @"ALTER TABLE containers ADD COLUMN IF NOT EXISTS cache_max_object_bytes bigint NOT NULL DEFAULT 1048576;"
+                }),
+
+                new SchemaMigration(3, "Per-container RESP database index", new List<string>
+                {
+                    @"ALTER TABLE containers ADD COLUMN IF NOT EXISTS resp_database_index integer;",
+                    // A container may claim at most one RESP database index, and an index maps to at most one
+                    // container: a partial unique index enforces both, leaving unmapped containers (NULL) free.
+                    @"CREATE UNIQUE INDEX IF NOT EXISTS ux_containers_resp_db_index ON containers (resp_database_index) WHERE resp_database_index IS NOT NULL;"
                 })
             };
         }

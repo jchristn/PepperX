@@ -92,6 +92,29 @@ namespace PepperX.Server.Api.Rest
                 .WithParameter(OpenApiParameterMetadata.Query("force", "Delete contents when not empty", false))
                 .WithResponse(204, OpenApiResponseMetadata.NoContent())
                 .WithResponse(409, OpenApiResponseMetadata.Create("Container not empty")));
+
+            server.Get("/v1.0/containers/{container}/cache", ReadCacheAsync, openApi => openApi
+                .WithTag("Containers").WithDescription("Read a container's cache settings and this node's live cache statistics.")
+                .WithParameter(OpenApiParameterMetadata.Path("container", "Container name"))
+                .WithResponse(200, OpenApiResponseMetadata.Json("Cache settings and statistics", null))
+                .WithResponse(404, OpenApiResponseMetadata.NotFound()));
+
+            server.Put<UpdateCacheSettingsRequest>("/v1.0/containers/{container}/cache", UpdateCacheAsync, openApi => openApi
+                .WithTag("Containers").WithDescription("Replace a container's cache settings and apply them to the live cache.")
+                .WithParameter(OpenApiParameterMetadata.Path("container", "Container name"))
+                .WithRequestBody(OpenApiRequestBodyMetadata.Json(null, "Cache settings", true))
+                .WithResponse(200, OpenApiResponseMetadata.Json("Applied cache settings and statistics", null))
+                .WithResponse(400, OpenApiResponseMetadata.Create("Invalid cache settings"))
+                .WithResponse(404, OpenApiResponseMetadata.NotFound()));
+
+            server.Put<UpdateRespIndexRequest>("/v1.0/containers/{container}/resp-index", UpdateRespIndexAsync, openApi => openApi
+                .WithTag("Containers").WithDescription("Assign or clear the container's RESP (Redis) database index. A Redis client issuing SELECT n with the assigned index addresses this container. The index must be unique across containers; a null index clears the mapping.")
+                .WithParameter(OpenApiParameterMetadata.Path("container", "Container name"))
+                .WithRequestBody(OpenApiRequestBodyMetadata.Json(null, "The RESP database index to claim, or null to clear", true))
+                .WithResponse(200, OpenApiResponseMetadata.Json("Updated container", null))
+                .WithResponse(400, OpenApiResponseMetadata.Create("Negative index"))
+                .WithResponse(404, OpenApiResponseMetadata.NotFound())
+                .WithResponse(409, OpenApiResponseMetadata.Create("Index already assigned to another container")));
         }
 
         #endregion
@@ -174,6 +197,35 @@ namespace PepperX.Server.Api.Rest
                 await _Containers.DeleteAsync(name, force, request.CancellationToken).ConfigureAwait(false);
                 request.Http.Response.StatusCode = 204;
                 return null!;
+            });
+        }
+
+        private Task<object> ReadCacheAsync(ApiRequest request)
+        {
+            return RouteHelpers.HandleAsync(request, async () =>
+            {
+                string name = RouteHelpers.Container(request);
+                return await _Containers.ReadCacheAsync(name, request.CancellationToken).ConfigureAwait(false);
+            });
+        }
+
+        private Task<object> UpdateCacheAsync(ApiRequest request)
+        {
+            return RouteHelpers.HandleAsync(request, async () =>
+            {
+                string name = RouteHelpers.Container(request);
+                UpdateCacheSettingsRequest body = request.GetData<UpdateCacheSettingsRequest>() ?? new UpdateCacheSettingsRequest();
+                return await _Containers.UpdateCacheSettingsAsync(name, body, request.CancellationToken).ConfigureAwait(false);
+            });
+        }
+
+        private Task<object> UpdateRespIndexAsync(ApiRequest request)
+        {
+            return RouteHelpers.HandleAsync(request, async () =>
+            {
+                string name = RouteHelpers.Container(request);
+                UpdateRespIndexRequest body = request.GetData<UpdateRespIndexRequest>() ?? new UpdateRespIndexRequest();
+                return await _Containers.SetRespDatabaseIndexAsync(name, body.Index, request.CancellationToken).ConfigureAwait(false);
             });
         }
 

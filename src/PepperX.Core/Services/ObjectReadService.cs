@@ -1,8 +1,10 @@
 namespace PepperX.Core.Services
 {
     using System;
+    using System.IO;
     using System.Threading;
     using System.Threading.Tasks;
+    using PepperX.Core.Caching;
     using PepperX.Core.Database;
     using PepperX.Core.Enums;
     using PepperX.Core.Exceptions;
@@ -28,6 +30,7 @@ namespace PepperX.Core.Services
         private readonly StorageSettings _StorageSettings;
         private readonly ClusterSettings _Cluster;
         private readonly LocalLockRegistry _LocalLocks;
+        private readonly ContainerCacheManager _Cache;
         private readonly string _NodeId;
         private readonly LoggingModule? _Logging;
 
@@ -42,10 +45,11 @@ namespace PepperX.Core.Services
         /// <param name="storage">Extent storage driver.</param>
         /// <param name="settings">Application settings.</param>
         /// <param name="localLocks">Local lock registry (used only in Local coordination mode).</param>
+        /// <param name="cache">Per-container cache manager.</param>
         /// <param name="nodeId">This node's identifier.</param>
         /// <param name="logging">Optional logging module.</param>
         /// <exception cref="ArgumentNullException">A required argument is null.</exception>
-        public ObjectReadService(IMetadataDatabaseDriver db, IExtentStorageDriver storage, PepperXSettings settings, LocalLockRegistry localLocks, string nodeId, LoggingModule? logging = null)
+        public ObjectReadService(IMetadataDatabaseDriver db, IExtentStorageDriver storage, PepperXSettings settings, LocalLockRegistry localLocks, ContainerCacheManager cache, string nodeId, LoggingModule? logging = null)
         {
             if (settings == null) throw new ArgumentNullException(nameof(settings));
             _Db = db ?? throw new ArgumentNullException(nameof(db));
@@ -53,6 +57,7 @@ namespace PepperX.Core.Services
             _StorageSettings = settings.Storage;
             _Cluster = settings.Cluster;
             _LocalLocks = localLocks ?? throw new ArgumentNullException(nameof(localLocks));
+            _Cache = cache ?? throw new ArgumentNullException(nameof(cache));
             _NodeId = String.IsNullOrEmpty(nodeId) ? throw new ArgumentNullException(nameof(nodeId)) : nodeId;
             _Logging = logging;
         }
@@ -75,12 +80,12 @@ namespace PepperX.Core.Services
         {
             Container container = await RequireContainerAsync(containerName, token).ConfigureAwait(false);
 
-            if (_Cluster.DeleteCoordinationMode == DeleteCoordinationModeEnum.Local)
+            if (container.Cache.Enabled)
             {
-                return await ReadLocalAsync(container.Id, key, offset, count, token).ConfigureAwait(false);
+                return await ReadWithCacheAsync(container, key, offset, count, token).ConfigureAwait(false);
             }
 
-            return await ReadClusterAsync(container.Id, key, offset, count, token).ConfigureAwait(false);
+            return await ReadUncachedAsync(container.Id, key, offset, count, token).ConfigureAwait(false);
         }
 
         /// <summary>
@@ -97,6 +102,25 @@ namespace PepperX.Core.Services
             Container container = await RequireContainerAsync(containerName, token).ConfigureAwait(false);
 
             Extent? extent = await _Db.Extents.ReadActiveAsync(container.Id, key, token).ConfigureAwait(false);
+
+            // Cache path (D1/D4): a validated hit serves metadata (including the freeform object) from
+            // memory without touching storage. A metadata-only miss does not hydrate the payload cache.
+            if (container.Cache.Enabled)
+            {
+                ContainerCache? cache = _Cache.Get(container.Id, container.Cache);
+                if (extent == null)
+                {
+                    cache?.Remove(key);
+                    return null;
+                }
+                if (cache != null && cache.TryGet(key, out CachedObject? entry) && entry != null
+                    && String.Equals(entry.ExtentId, extent.Id, StringComparison.Ordinal))
+                {
+                    return CloneMetadata(entry.Metadata);
+                }
+                cache?.Remove(key);
+            }
+
             if (extent == null) return null;
 
             ObjectMetadata metadata = ToMetadata(extent, container.Name);
@@ -138,6 +162,130 @@ namespace PepperX.Core.Services
         #endregion
 
         #region Private-Methods
+
+        private Task<ObjectReadHandle?> ReadUncachedAsync(string containerId, string key, long? offset, long? count, CancellationToken token)
+        {
+            if (_Cluster.DeleteCoordinationMode == DeleteCoordinationModeEnum.Local)
+            {
+                return ReadLocalAsync(containerId, key, offset, count, token);
+            }
+
+            return ReadClusterAsync(containerId, key, offset, count, token);
+        }
+
+        private async Task<ObjectReadHandle?> ReadWithCacheAsync(Container container, string key, long? offset, long? count, CancellationToken token)
+        {
+            ContainerCache? cache = _Cache.Get(container.Id, container.Cache);
+            if (cache == null) return await ReadUncachedAsync(container.Id, key, offset, count, token).ConfigureAwait(false);
+
+            Extent? active = await _Db.Extents.ReadActiveAsync(container.Id, key, token).ConfigureAwait(false);
+            if (active == null)
+            {
+                cache.Remove(key);
+                return null;
+            }
+
+            // HIT: cached entry still refers to the active extent (D1). Serve from memory, no lease (D2).
+            if (cache.TryGet(key, out CachedObject? entry) && entry != null
+                && String.Equals(entry.ExtentId, active.Id, StringComparison.Ordinal))
+            {
+                byte[] slice = SlicePayload(entry.Payload, offset, count);
+                ExtentPayloadStream hitStream = ExtentPayloadStream.FromMemory(slice, BuildHeader(active, container.Name, entry.Metadata));
+                return new ObjectReadHandle(active, hitStream, static () => ValueTask.CompletedTask);
+            }
+
+            // MISS or stale: drop any stale entry, then take the normal lease-guarded path.
+            cache.Remove(key);
+            ObjectReadHandle? handle = await ReadUncachedAsync(container.Id, key, offset, count, token).ConfigureAwait(false);
+            if (handle == null) return null;
+
+            // Only a full read of a within-ceiling object hydrates the cache; ranges and over-ceiling
+            // objects stream straight through.
+            long ceiling = container.Cache.MaxCacheableObjectBytes;
+            bool cacheable = !offset.HasValue && (ceiling <= 0 || active.SizeBytes <= ceiling);
+            if (!cacheable) return handle;
+
+            ObjectMetadata metadata = ToMetadata(active, container.Name);
+            metadata.Object = handle.Payload.Header.Object;
+
+            byte[] bytes;
+            await using (handle.ConfigureAwait(false))
+            {
+                bytes = await DrainAsync(handle.Payload, active.SizeBytes, token).ConfigureAwait(false);
+            }
+
+            try
+            {
+                cache.AddReplace(new CachedObject(key, active.Id, metadata, bytes));
+            }
+            catch (Exception ex)
+            {
+                // Terminal storage already served the durable bytes; a cache-insert failure (effectively
+                // only OOM) must not fail the read.
+                _Logging?.Debug(_Header + "cache insert failed for " + container.Id + "/" + key + ": " + ex.Message);
+            }
+
+            ExtentPayloadStream memStream = ExtentPayloadStream.FromMemory(bytes, BuildHeader(active, container.Name, metadata));
+            return new ObjectReadHandle(active, memStream, static () => ValueTask.CompletedTask);
+        }
+
+        private static byte[] SlicePayload(byte[] payload, long? offset, long? count)
+        {
+            if (!offset.HasValue) return payload;
+
+            long start = Math.Clamp(offset.Value, 0, payload.LongLength);
+            long length = count ?? (payload.LongLength - start);
+            if (length < 0) length = 0;
+            if (start + length > payload.LongLength) length = payload.LongLength - start;
+
+            byte[] slice = new byte[length];
+            Array.Copy(payload, start, slice, 0, length);
+            return slice;
+        }
+
+        private static async Task<byte[]> DrainAsync(Stream source, long expectedLength, CancellationToken token)
+        {
+            using (MemoryStream ms = new MemoryStream(expectedLength > 0 && expectedLength <= int.MaxValue ? (int)expectedLength : 0))
+            {
+                await source.CopyToAsync(ms, token).ConfigureAwait(false);
+                return ms.ToArray();
+            }
+        }
+
+        private static ExtentHeader BuildHeader(Extent extent, string containerName, ObjectMetadata metadata)
+        {
+            return new ExtentHeader
+            {
+                ExtentId = extent.Id,
+                ContainerId = extent.ContainerId,
+                ContainerName = containerName,
+                Key = extent.Key,
+                ContentType = extent.ContentType,
+                SizeBytes = extent.SizeBytes,
+                Sha256 = extent.Sha256,
+                Object = metadata.Object,
+                CreatedUtc = extent.CreatedUtc
+            };
+        }
+
+        private static ObjectMetadata CloneMetadata(ObjectMetadata source)
+        {
+            return new ObjectMetadata
+            {
+                Key = source.Key,
+                ExtentId = source.ExtentId,
+                ContainerId = source.ContainerId,
+                ContainerName = source.ContainerName,
+                SizeBytes = source.SizeBytes,
+                Sha256 = source.Sha256,
+                ContentType = source.ContentType,
+                Labels = new System.Collections.Generic.List<string>(source.Labels),
+                Tags = new System.Collections.Generic.Dictionary<string, string>(source.Tags),
+                Object = source.Object,
+                HasMetadataObject = source.HasMetadataObject,
+                CreatedUtc = source.CreatedUtc
+            };
+        }
 
         private async Task<ObjectReadHandle?> ReadClusterAsync(string containerId, string key, long? offset, long? count, CancellationToken token)
         {

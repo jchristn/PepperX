@@ -18,11 +18,26 @@ import random
 import sys
 import urllib.parse
 
+# The server enables per-container caching by default when no cache block is supplied. The seed sends the
+# defaults explicitly so a fresh stack is self-documenting -- the dashboard's cache view shows real
+# settings rather than leaving you to guess what "default" means -- and so one container can demonstrate a
+# non-default policy.
+CACHE_DEFAULT = {
+    "Enabled": True,
+    "Policy": "LRU",
+    "MaxObjects": 1000,
+    "MaxMemoryBytes": 268435456,   # 256 MiB
+    "EvictCount": 10,
+    "MaxCacheableObjectBytes": 1048576,   # 1 MiB
+}
+
+CACHE_FIFO = dict(CACHE_DEFAULT, Policy="FIFO", MaxObjects=500)
+
 CONTAINERS = [
-    ("telemetry", {"team": "platform", "env": "prod"}),
-    ("documents", {"team": "legal", "retention": "7y"}),
-    ("images", {"env": "staging"}),
-    ("backups", {}),
+    ("telemetry", {"team": "platform", "env": "prod"}, CACHE_DEFAULT),
+    ("documents", {"team": "legal", "retention": "7y"}, CACHE_DEFAULT),
+    ("images", {"env": "staging"}, CACHE_FIFO),
+    ("backups", {}, CACHE_DEFAULT),
 ]
 
 OBJECTS = [
@@ -84,10 +99,12 @@ def main():
         print(f"No PepperX node at {base_url} (status {status})", file=sys.stderr)
         return 1
 
-    for name, tags in CONTAINERS:
+    for name, tags, cache in CONTAINERS:
         body = {"Name": name}
         if tags:
             body["Tags"] = tags
+        if cache:
+            body["Cache"] = cache
         status, payload = client.request("PUT", "/v1.0/containers", body)
         if status not in (200, 201, 409):
             print(f"  container {name}: {status} {payload[:120]!r}", file=sys.stderr)

@@ -95,6 +95,40 @@ namespace PepperX.Core.Models
         }
 
         /// <summary>
+        /// Optional RESP (Redis) database index this container answers to. When set, a Redis client that
+        /// issues <c>SELECT n</c> with this index addresses this container instead of the default
+        /// <c>resp{n}</c>. Null means the container is not reachable over RESP by an explicit index.
+        /// A negative value is coerced to null. Uniqueness across containers is enforced by the database.
+        /// </summary>
+        public int? RespDatabaseIndex
+        {
+            get
+            {
+                return _RespDatabaseIndex;
+            }
+            set
+            {
+                _RespDatabaseIndex = (value.HasValue && value.Value < 0) ? null : value;
+            }
+        }
+
+        /// <summary>
+        /// Per-container cache configuration, persisted in the metadata database. Never null; a null
+        /// assignment is coalesced to a fresh default so downstream code never null-checks it.
+        /// </summary>
+        public ContainerCacheSettings Cache
+        {
+            get
+            {
+                return _Cache;
+            }
+            set
+            {
+                _Cache = value ?? new ContainerCacheSettings();
+            }
+        }
+
+        /// <summary>
         /// UTC creation timestamp.
         /// </summary>
         public DateTime CreatedUtc { get; set; } = DateTime.UtcNow;
@@ -115,6 +149,8 @@ namespace PepperX.Core.Models
         private Dictionary<string, string> _Tags = new Dictionary<string, string>();
         private long _ObjectCount = 0;
         private long _TotalBytes = 0;
+        private int? _RespDatabaseIndex = null;
+        private ContainerCacheSettings _Cache = new ContainerCacheSettings();
 
         #endregion
 

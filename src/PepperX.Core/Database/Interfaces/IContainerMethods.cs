@@ -4,6 +4,7 @@ namespace PepperX.Core.Database.Interfaces
     using System.Threading;
     using System.Threading.Tasks;
     using PepperX.Core.Enumeration;
+    using PepperX.Core.Exceptions;
     using PepperX.Core.Models;
     using PepperX.Core.Responses;
 
@@ -60,6 +61,34 @@ namespace PepperX.Core.Database.Interfaces
         /// <param name="token">Cancellation token.</param>
         /// <returns>The updated container, or null if not found.</returns>
         Task<Container?> UpdateTagsAsync(string id, Dictionary<string, string> tags, CancellationToken token = default);
+
+        /// <summary>
+        /// Read the container that claims a given RESP database index, if any.
+        /// </summary>
+        /// <param name="respDatabaseIndex">RESP database index.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The container mapped to the index, or null if none.</returns>
+        Task<Container?> ReadByRespDatabaseIndexAsync(int respDatabaseIndex, CancellationToken token = default);
+
+        /// <summary>
+        /// Assign (or clear, with null) a container's RESP database index.
+        /// </summary>
+        /// <param name="id">Container identifier.</param>
+        /// <param name="respDatabaseIndex">The index to claim, or null to clear.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The updated container, or null if not found.</returns>
+        /// <exception cref="PepperXException">The index is already assigned to another container (409).</exception>
+        Task<Container?> UpdateRespDatabaseIndexAsync(string id, int? respDatabaseIndex, CancellationToken token = default);
+
+        /// <summary>
+        /// Replace a container's cache settings.
+        /// </summary>
+        /// <param name="id">Container identifier.</param>
+        /// <param name="settings">New cache settings. The caller is responsible for clamping and
+        /// validation; the persisted row reflects the supplied values as-is.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The updated container, or null if not found.</returns>
+        Task<Container?> UpdateCacheSettingsAsync(string id, ContainerCacheSettings settings, CancellationToken token = default);
 
         /// <summary>
         /// Delete a container by identifier. The caller is responsible for ensuring it is empty or that its

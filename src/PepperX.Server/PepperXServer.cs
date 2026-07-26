@@ -4,6 +4,7 @@ namespace PepperX.Server
     using System.Threading;
     using System.Threading.Tasks;
     using PepperX.Core;
+    using PepperX.Core.Caching;
     using PepperX.Core.Database;
     using PepperX.Core.Helpers;
     using PepperX.Core.Services;
@@ -45,6 +46,7 @@ namespace PepperX.Server
         private IMetadataDatabaseDriver? _Db;
         private DiskExtentStorageDriver? _Storage;
         private LocalLockRegistry? _LocalLocks;
+        private ContainerCacheManager? _Cache;
         private NodeHeartbeatService? _Heartbeat;
         private JanitorService? _Janitor;
         private RequestHistoryCaptureService? _Capture;
@@ -88,10 +90,11 @@ namespace PepperX.Server
             await _Storage.InitializeAsync(token).ConfigureAwait(false);
 
             _LocalLocks = new LocalLockRegistry();
-            ObjectDeleteService deletes = new ObjectDeleteService(_Db, _Storage, _Settings, _LocalLocks, _Logging);
-            ObjectReadService reads = new ObjectReadService(_Db, _Storage, _Settings, _LocalLocks, _NodeId, _Logging);
-            ObjectWriteService writes = new ObjectWriteService(_Db, _Storage, _Settings, reads, deletes);
-            ContainerService containers = new ContainerService(_Db, _Storage, deletes);
+            _Cache = new ContainerCacheManager(_Logging);
+            ObjectDeleteService deletes = new ObjectDeleteService(_Db, _Storage, _Settings, _LocalLocks, _Cache, _Logging);
+            ObjectReadService reads = new ObjectReadService(_Db, _Storage, _Settings, _LocalLocks, _Cache, _NodeId, _Logging);
+            ObjectWriteService writes = new ObjectWriteService(_Db, _Storage, _Settings, reads, deletes, _Cache, _Logging);
+            ContainerService containers = new ContainerService(_Db, _Storage, deletes, _Cache);
             SearchService search = new SearchService(_Db);
             StatisticsService statistics = new StatisticsService(_Db, _Storage, _Settings);
             RehydrationService rehydration = new RehydrationService(_Db, _Storage, _Logging);
@@ -176,6 +179,7 @@ namespace PepperX.Server
 
             _Janitor?.Dispose();
             _Heartbeat?.Dispose();
+            _Cache?.Dispose();
             _LocalLocks?.Dispose();
 
             if (_Db != null) await _Db.DisposeAsync().ConfigureAwait(false);

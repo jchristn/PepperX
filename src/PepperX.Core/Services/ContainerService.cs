@@ -4,8 +4,10 @@ namespace PepperX.Core.Services
     using System.Collections.Generic;
     using System.Threading;
     using System.Threading.Tasks;
+    using PepperX.Core.Caching;
     using PepperX.Core.Database;
     using PepperX.Core.Enumeration;
+    using PepperX.Core.Enums;
     using PepperX.Core.Exceptions;
     using PepperX.Core.Models;
     using PepperX.Core.Requests;
@@ -23,6 +25,7 @@ namespace PepperX.Core.Services
         private readonly IMetadataDatabaseDriver _Db;
         private readonly IExtentStorageDriver _Storage;
         private readonly ObjectDeleteService _DeleteService;
+        private readonly ContainerCacheManager _Cache;
 
         #endregion
 
@@ -34,12 +37,14 @@ namespace PepperX.Core.Services
         /// <param name="db">Metadata database driver.</param>
         /// <param name="storage">Extent storage driver.</param>
         /// <param name="deleteService">Object delete service (used for forced container deletion).</param>
+        /// <param name="cache">Per-container cache manager.</param>
         /// <exception cref="ArgumentNullException">An argument is null.</exception>
-        public ContainerService(IMetadataDatabaseDriver db, IExtentStorageDriver storage, ObjectDeleteService deleteService)
+        public ContainerService(IMetadataDatabaseDriver db, IExtentStorageDriver storage, ObjectDeleteService deleteService, ContainerCacheManager cache)
         {
             _Db = db ?? throw new ArgumentNullException(nameof(db));
             _Storage = storage ?? throw new ArgumentNullException(nameof(storage));
             _DeleteService = deleteService ?? throw new ArgumentNullException(nameof(deleteService));
+            _Cache = cache ?? throw new ArgumentNullException(nameof(cache));
         }
 
         #endregion
@@ -60,8 +65,25 @@ namespace PepperX.Core.Services
             Container container = new Container { Name = request.Name };
             if (request.Tags != null) container.Tags = request.Tags;
 
+            // Cache defaults (D9): when the caller supplies no cache settings, a new container gets caching
+            // enabled (LRU) with reasonable sizes; an explicit block (including one that disables caching)
+            // is honored as-is after re-clamping.
+            container.Cache = request.Cache != null
+                ? request.Cache.ToSettings()
+                : ContainerCacheSettings.CreationDefault();
+
+            if (request.RespDatabaseIndex.HasValue)
+            {
+                if (request.RespDatabaseIndex.Value < 0)
+                {
+                    throw new PepperXException(ApiErrorEnum.BadRequest, 400, "RespDatabaseIndex cannot be negative.");
+                }
+                container.RespDatabaseIndex = request.RespDatabaseIndex.Value;
+            }
+
             await _Db.Containers.CreateAsync(container, token).ConfigureAwait(false);
             await _Storage.WriteContainerManifestAsync(ToManifest(container), token).ConfigureAwait(false);
+            _Cache.Configure(container.Id, container.Cache);
 
             return ContainerResponse.FromModel(container);
         }
@@ -136,6 +158,81 @@ namespace PepperX.Core.Services
         }
 
         /// <summary>
+        /// Assign or clear a container's RESP database index. Passing null clears it. The index must be
+        /// unique across containers; a conflict is reported as 409. Reachability over RESP additionally
+        /// requires the index to be within <c>Resp.DatabaseCount</c> on the serving node.
+        /// </summary>
+        /// <param name="name">Container name.</param>
+        /// <param name="respDatabaseIndex">The index to claim, or null to clear.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The updated container.</returns>
+        /// <exception cref="ContainerNotFoundException">The container does not exist.</exception>
+        /// <exception cref="PepperXException">The index is negative (400) or already claimed (409).</exception>
+        public async Task<ContainerResponse> SetRespDatabaseIndexAsync(string name, int? respDatabaseIndex, CancellationToken token = default)
+        {
+            Container container = await RequireAsync(name, token).ConfigureAwait(false);
+
+            if (respDatabaseIndex.HasValue && respDatabaseIndex.Value < 0)
+            {
+                throw new PepperXException(ApiErrorEnum.BadRequest, 400, "RespDatabaseIndex cannot be negative.");
+            }
+
+            Container? updated = await _Db.Containers.UpdateRespDatabaseIndexAsync(container.Id, respDatabaseIndex, token).ConfigureAwait(false);
+            if (updated == null) throw new ContainerNotFoundException(name);
+
+            await _Storage.WriteContainerManifestAsync(ToManifest(updated), token).ConfigureAwait(false);
+            return ContainerResponse.FromModel(updated);
+        }
+
+        /// <summary>
+        /// Read a container's cache settings together with this node's live cache statistics.
+        /// </summary>
+        /// <param name="name">Container name.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The cache settings and statistics.</returns>
+        /// <exception cref="ContainerNotFoundException">The container does not exist.</exception>
+        public async Task<ContainerCacheResponse> ReadCacheAsync(string name, CancellationToken token = default)
+        {
+            Container container = await RequireAsync(name, token).ConfigureAwait(false);
+            return ContainerCacheResponse.FromSettingsAndStatistics(container.Cache, _Cache.Statistics(container.Id));
+        }
+
+        /// <summary>
+        /// Replace a container's cache settings, persist them, and apply them to the live cache. When the
+        /// request is internally inconsistent (for example an eviction count greater than the object
+        /// maximum), a 400 is raised rather than silently normalizing beyond the per-field clamps.
+        /// </summary>
+        /// <param name="name">Container name.</param>
+        /// <param name="request">The new cache settings.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The applied settings and live statistics.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="request"/> is null.</exception>
+        /// <exception cref="ContainerNotFoundException">The container does not exist.</exception>
+        /// <exception cref="PepperXException">The request is invalid.</exception>
+        public async Task<ContainerCacheResponse> UpdateCacheSettingsAsync(string name, UpdateCacheSettingsRequest request, CancellationToken token = default)
+        {
+            if (request == null) throw new ArgumentNullException(nameof(request));
+
+            Container container = await RequireAsync(name, token).ConfigureAwait(false);
+
+            // Reject a clearly-invalid request pre-clamp with a 400; the settings' own setters then re-clamp
+            // as a second line of defense for anything that slips through (e.g. DB-loaded legacy rows).
+            if (!request.Validate(out string? error))
+            {
+                throw new PepperXException(ApiErrorEnum.BadRequest, 400, error ?? "Invalid cache settings.");
+            }
+
+            ContainerCacheSettings settings = request.ToSettings();
+            Container? updated = await _Db.Containers.UpdateCacheSettingsAsync(container.Id, settings, token).ConfigureAwait(false);
+            if (updated == null) throw new ContainerNotFoundException(name);
+
+            await _Storage.WriteContainerManifestAsync(ToManifest(updated), token).ConfigureAwait(false);
+            _Cache.Configure(updated.Id, updated.Cache);
+
+            return ContainerCacheResponse.FromSettingsAndStatistics(updated.Cache, _Cache.Statistics(updated.Id));
+        }
+
+        /// <summary>
         /// Delete a container. When it still holds objects, deletion requires <paramref name="force"/>, which
         /// deletes the container's contents first.
         /// </summary>
@@ -157,6 +254,7 @@ namespace PepperX.Core.Services
 
             await _Db.Containers.DeleteAsync(container.Id, token).ConfigureAwait(false);
             await _Storage.DeleteContainerAsync(container.Id, token).ConfigureAwait(false);
+            _Cache.Remove(container.Id);
         }
 
         /// <summary>
@@ -184,7 +282,9 @@ namespace PepperX.Core.Services
                 Id = container.Id,
                 Name = container.Name,
                 Tags = new Dictionary<string, string>(container.Tags),
-                CreatedUtc = container.CreatedUtc
+                CreatedUtc = container.CreatedUtc,
+                RespDatabaseIndex = container.RespDatabaseIndex,
+                Cache = container.Cache.Clone()
             };
         }
 

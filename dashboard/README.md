@@ -130,6 +130,31 @@ for a working configuration.
 
 ---
 
+## Per-container caching
+
+Each container has an in-memory read cache, configured from the Containers view. The **create**
+modal exposes a Caching section that mirrors the server's defaults (enabled, LRU, 1,000 objects, a
+256 MiB memory cap, evict 10, and a 1 MiB per-object ceiling); leaving it on creates the container
+exactly as the server would by default. The container **detail** modal reads the live settings and
+per-node statistics through `ApiClient.containerCache(name)` — hit rate, cached-object count, cache
+memory, hits, misses, and evictions — and its **edit** mode saves changes via
+`ApiClient.updateContainerCache(name, settings)` and refreshes the displayed stats. A memory cap or
+per-object ceiling of `0` means no limit. All labels live under the `cache.*` translation keys.
+
+## RESP (Redis) database index
+
+A container can be addressed over the RESP protocol by an explicit database index: a Redis client
+that issues `SELECT n` with a container's assigned index reaches that container instead of the
+default `resp{n}`. The index is unique across all containers and must fall within the node's
+`Resp.DatabaseCount` (16 by default) to be reachable. The Containers view exposes this in both the
+**create** modal (an optional field, blank means unset) and the container **detail** modal — read in
+view mode ("Not set" when unassigned) and editable in edit mode, where clearing the field releases
+the index. Edits save through `ApiClient.updateContainerRespIndex(name, index)` (`null` to clear); a
+`409` means the index is already claimed by another container and a `400` means it was negative. The
+dashboard validates only that the value is a whole number `>= 0` — it does not know the node's
+`DatabaseCount`, so the upper bound is left to the server. All strings live under the `resp.*`
+translation keys.
+
 ## Known gaps
 
 - **No focus trap in modals.** Escape closes them and focus moves into the dialog on open, but Tab

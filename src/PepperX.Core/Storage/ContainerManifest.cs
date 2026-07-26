@@ -2,10 +2,12 @@ namespace PepperX.Core.Storage
 {
     using System;
     using System.Collections.Generic;
+    using PepperX.Core.Models;
 
     /// <summary>
-    /// A small per-container manifest persisted alongside a container's extents. Container tags cannot be
-    /// derived from extent headers, so this manifest keeps them recoverable during rehydration.
+    /// A small per-container manifest persisted alongside a container's extents. Container tags and cache
+    /// settings cannot be derived from extent headers, so this manifest keeps them recoverable during
+    /// rehydration (including a full <c>Rebuild</c>).
     /// </summary>
     public class ContainerManifest
     {
@@ -41,11 +43,32 @@ namespace PepperX.Core.Storage
         /// </summary>
         public DateTime CreatedUtc { get; set; } = DateTime.UtcNow;
 
+        /// <summary>
+        /// Optional RESP database index, mirrored here so a full rebuild can restore it. Null when unset.
+        /// </summary>
+        public int? RespDatabaseIndex { get; set; } = null;
+
+        /// <summary>
+        /// Per-container cache configuration, mirrored here so a full rebuild restores it. Never null.
+        /// </summary>
+        public ContainerCacheSettings Cache
+        {
+            get
+            {
+                return _Cache;
+            }
+            set
+            {
+                _Cache = value ?? new ContainerCacheSettings();
+            }
+        }
+
         #endregion
 
         #region Private-Members
 
         private Dictionary<string, string> _Tags = new Dictionary<string, string>();
+        private ContainerCacheSettings _Cache = new ContainerCacheSettings();
 
         #endregion
 

@@ -91,6 +91,24 @@ namespace PepperX.Core.Storage
             _Consumed = 0;
         }
 
+        /// <summary>
+        /// Create a payload stream over an in-memory buffer, for serving a cache hit. The buffer is exposed
+        /// read-only and its full length is the payload window; disposing the stream disposes the wrapping
+        /// <see cref="MemoryStream"/>. The bytes are already-verified cached data, so no checksum re-check is
+        /// performed.
+        /// </summary>
+        /// <param name="payload">The full (or range-sliced) payload bytes to serve.</param>
+        /// <param name="header">Parsed extent header describing the object.</param>
+        /// <returns>A payload stream over the buffer.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="payload"/> or <paramref name="header"/> is null.</exception>
+        public static ExtentPayloadStream FromMemory(byte[] payload, ExtentHeader header)
+        {
+            if (payload == null) throw new ArgumentNullException(nameof(payload));
+            if (header == null) throw new ArgumentNullException(nameof(header));
+            MemoryStream inner = new MemoryStream(payload, false);
+            return new ExtentPayloadStream(inner, header, payload.LongLength);
+        }
+
         #endregion
 
         #region Public-Methods

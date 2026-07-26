@@ -5,6 +5,7 @@ namespace PepperX.Core.Services
     using System.Diagnostics;
     using System.Threading;
     using System.Threading.Tasks;
+    using PepperX.Core.Caching;
     using PepperX.Core.Database;
     using PepperX.Core.Enumeration;
     using PepperX.Core.Enums;
@@ -28,6 +29,7 @@ namespace PepperX.Core.Services
         private readonly IExtentStorageDriver _Storage;
         private readonly ClusterSettings _Cluster;
         private readonly LocalLockRegistry _LocalLocks;
+        private readonly ContainerCacheManager _Cache;
         private readonly LoggingModule? _Logging;
 
         #endregion
@@ -41,15 +43,17 @@ namespace PepperX.Core.Services
         /// <param name="storage">Extent storage driver.</param>
         /// <param name="settings">Application settings.</param>
         /// <param name="localLocks">Local lock registry (used only in Local coordination mode).</param>
+        /// <param name="cache">Per-container cache manager.</param>
         /// <param name="logging">Optional logging module.</param>
         /// <exception cref="ArgumentNullException">A required argument is null.</exception>
-        public ObjectDeleteService(IMetadataDatabaseDriver db, IExtentStorageDriver storage, PepperXSettings settings, LocalLockRegistry localLocks, LoggingModule? logging = null)
+        public ObjectDeleteService(IMetadataDatabaseDriver db, IExtentStorageDriver storage, PepperXSettings settings, LocalLockRegistry localLocks, ContainerCacheManager cache, LoggingModule? logging = null)
         {
             if (settings == null) throw new ArgumentNullException(nameof(settings));
             _Db = db ?? throw new ArgumentNullException(nameof(db));
             _Storage = storage ?? throw new ArgumentNullException(nameof(storage));
             _Cluster = settings.Cluster;
             _LocalLocks = localLocks ?? throw new ArgumentNullException(nameof(localLocks));
+            _Cache = cache ?? throw new ArgumentNullException(nameof(cache));
             _Logging = logging;
         }
 
@@ -83,6 +87,10 @@ namespace PepperX.Core.Services
         /// <returns>True if an object was deleted; false if it did not exist.</returns>
         public async Task<bool> DeleteByContainerIdAsync(string containerId, string key, CancellationToken token = default)
         {
+            // Delete from cache first (D-goal): drop the entry before tombstoning so a same-node read cannot
+            // serve a soon-to-be-destroyed payload. Other nodes self-heal via the D1 coherence check.
+            _Cache.Get(containerId)?.Remove(key);
+
             if (_Cluster.DeleteCoordinationMode == DeleteCoordinationModeEnum.Local)
             {
                 string lockKey = LockKey(containerId, key);
@@ -148,6 +156,9 @@ namespace PepperX.Core.Services
         public async Task<int> BulkDeleteContainerAsync(string containerId, CancellationToken token = default)
         {
             if (String.IsNullOrEmpty(containerId)) throw new ArgumentNullException(nameof(containerId));
+
+            // Clear the whole container cache up front; per-key deletes below also evict individually.
+            _Cache.Get(containerId)?.Clear();
 
             int deleted = 0;
             while (true)

@@ -382,7 +382,7 @@ namespace PepperX.Server.Api.Resp
         private async Task<byte[]> ExistsAsync(RespConnectionState state, List<string> args, CancellationToken ct)
         {
             long count = 0;
-            string container = ContainerName(state);
+            string container = await ContainerNameAsync(state, ct).ConfigureAwait(false);
             for (int i = 1; i < args.Count; i++)
             {
                 if (await _Reads.ExistsAsync(container, args[i], ct).ConfigureAwait(false)) count++;
@@ -393,21 +393,21 @@ namespace PepperX.Server.Api.Resp
         private async Task<byte[]> StrLenAsync(RespConnectionState state, List<string> args, CancellationToken ct)
         {
             if (args.Count < 2) return RespWire.Error("ERR wrong number of arguments for 'strlen'");
-            ObjectMetadata? meta = await _Reads.ReadMetadataAsync(ContainerName(state), args[1], ct).ConfigureAwait(false);
+            ObjectMetadata? meta = await _Reads.ReadMetadataAsync(await ContainerNameAsync(state, ct).ConfigureAwait(false), args[1], ct).ConfigureAwait(false);
             return RespWire.Integer(meta?.SizeBytes ?? 0);
         }
 
         private async Task<byte[]> TypeAsync(RespConnectionState state, List<string> args, CancellationToken ct)
         {
             if (args.Count < 2) return RespWire.Error("ERR wrong number of arguments for 'type'");
-            bool exists = await _Reads.ExistsAsync(ContainerName(state), args[1], ct).ConfigureAwait(false);
+            bool exists = await _Reads.ExistsAsync(await ContainerNameAsync(state, ct).ConfigureAwait(false), args[1], ct).ConfigureAwait(false);
             return RespWire.SimpleString(exists ? "string" : "none");
         }
 
         private async Task<byte[]> TtlAsync(RespConnectionState state, List<string> args, CancellationToken ct)
         {
             if (args.Count < 2) return RespWire.Error("ERR wrong number of arguments for 'ttl'");
-            bool exists = await _Reads.ExistsAsync(ContainerName(state), args[1], ct).ConfigureAwait(false);
+            bool exists = await _Reads.ExistsAsync(await ContainerNameAsync(state, ct).ConfigureAwait(false), args[1], ct).ConfigureAwait(false);
             return RespWire.Integer(exists ? -1 : -2);
         }
 
@@ -452,7 +452,7 @@ namespace PepperX.Server.Api.Resp
         {
             if (string.IsNullOrEmpty(key)) return RespWire.Error("ERR wrong number of arguments");
 
-            string container = ContainerName(state);
+            string container = await ContainerNameAsync(state, ct).ConfigureAwait(false);
             SemaphoreSlim gate = _KeyLocks.GetOrAdd(container + "\n" + key, _ => new SemaphoreSlim(1, 1));
             await gate.WaitAsync(ct).ConfigureAwait(false);
             try
@@ -482,7 +482,7 @@ namespace PepperX.Server.Api.Resp
             if (!double.TryParse(args[2], NumberStyles.Float, CultureInfo.InvariantCulture, out double delta))
                 return RespWire.Error("ERR value is not a valid float");
 
-            string container = ContainerName(state);
+            string container = await ContainerNameAsync(state, ct).ConfigureAwait(false);
             SemaphoreSlim gate = _KeyLocks.GetOrAdd(container + "\n" + key, _ => new SemaphoreSlim(1, 1));
             await gate.WaitAsync(ct).ConfigureAwait(false);
             try
@@ -509,14 +509,27 @@ namespace PepperX.Server.Api.Resp
 
         #region Private-Methods-Helpers
 
-        private string ContainerName(RespConnectionState state)
+        private async Task<string> ContainerNameAsync(RespConnectionState state, CancellationToken ct)
         {
-            return _Settings.ContainerPrefix + state.DatabaseIndex;
+            // Resolved once per SELECT and cached on the connection: a container that claims this RESP
+            // database index is addressed by name; otherwise fall back to the default {prefix}{index}. This
+            // is the only way a numeric RESP SELECT can reach an arbitrarily named container, since the
+            // Redis protocol addresses databases by integer only.
+            if (state.ResolvedForIndex == state.DatabaseIndex && state.ResolvedContainer != null)
+            {
+                return state.ResolvedContainer;
+            }
+
+            Container? mapped = await _Db.Containers.ReadByRespDatabaseIndexAsync(state.DatabaseIndex, ct).ConfigureAwait(false);
+            string name = mapped != null ? mapped.Name : _Settings.ContainerPrefix + state.DatabaseIndex;
+            state.ResolvedContainer = name;
+            state.ResolvedForIndex = state.DatabaseIndex;
+            return name;
         }
 
         private async Task EnsureContainerAsync(RespConnectionState state, CancellationToken ct)
         {
-            string name = ContainerName(state);
+            string name = await ContainerNameAsync(state, ct).ConfigureAwait(false);
 
             // The mapped container is created once per database index; caching that avoids a database
             // round trip on every write.
@@ -541,7 +554,7 @@ namespace PepperX.Server.Api.Resp
         {
             try
             {
-                await using (ObjectReadHandle? handle = await _Reads.ReadAsync(ContainerName(state), key, null, null, ct).ConfigureAwait(false))
+                await using (ObjectReadHandle? handle = await _Reads.ReadAsync(await ContainerNameAsync(state, ct).ConfigureAwait(false), key, null, null, ct).ConfigureAwait(false))
                 {
                     if (handle == null) return null;
                     using (MemoryStream ms = new MemoryStream())
@@ -560,7 +573,7 @@ namespace PepperX.Server.Api.Resp
         private async Task<bool> WriteValueAsync(RespConnectionState state, string key, byte[] value, bool nx, bool xx, CancellationToken ct)
         {
             await EnsureContainerAsync(state, ct).ConfigureAwait(false);
-            string container = ContainerName(state);
+            string container = await ContainerNameAsync(state, ct).ConfigureAwait(false);
 
             if (xx && !await _Reads.ExistsAsync(container, key, ct).ConfigureAwait(false)) return false;
 
@@ -582,7 +595,7 @@ namespace PepperX.Server.Api.Resp
         {
             try
             {
-                return await _Deletes.DeleteAsync(ContainerName(state), key, ct).ConfigureAwait(false);
+                return await _Deletes.DeleteAsync(await ContainerNameAsync(state, ct).ConfigureAwait(false), key, ct).ConfigureAwait(false);
             }
             catch (ContainerNotFoundException)
             {
@@ -592,14 +605,14 @@ namespace PepperX.Server.Api.Resp
 
         private async Task<long> CountAsync(RespConnectionState state, CancellationToken ct)
         {
-            Container? container = await _Db.Containers.ReadByNameAsync(ContainerName(state), ct).ConfigureAwait(false);
+            Container? container = await _Db.Containers.ReadByNameAsync(await ContainerNameAsync(state, ct).ConfigureAwait(false), ct).ConfigureAwait(false);
             if (container == null) return 0;
             return await _Db.Extents.CountActiveAsync(container.Id, ct).ConfigureAwait(false);
         }
 
         private async Task<byte[]> FlushDbAsync(RespConnectionState state, CancellationToken ct)
         {
-            Container? container = await _Db.Containers.ReadByNameAsync(ContainerName(state), ct).ConfigureAwait(false);
+            Container? container = await _Db.Containers.ReadByNameAsync(await ContainerNameAsync(state, ct).ConfigureAwait(false), ct).ConfigureAwait(false);
             if (container != null) await _Deletes.BulkDeleteContainerAsync(container.Id, ct).ConfigureAwait(false);
             return RespWire.SimpleString("OK");
         }
@@ -607,7 +620,7 @@ namespace PepperX.Server.Api.Resp
         private async Task<List<string>> ListKeysAsync(RespConnectionState state, CancellationToken ct)
         {
             List<string> keys = new List<string>();
-            Container? container = await _Db.Containers.ReadByNameAsync(ContainerName(state), ct).ConfigureAwait(false);
+            Container? container = await _Db.Containers.ReadByNameAsync(await ContainerNameAsync(state, ct).ConfigureAwait(false), ct).ConfigureAwait(false);
             if (container == null) return keys;
 
             string? continuation = null;

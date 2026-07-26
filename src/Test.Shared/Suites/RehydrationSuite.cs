@@ -42,9 +42,19 @@ namespace Test.Shared.Suites
                             ServiceStack stack = await ServiceStack.CreateAsync(source, root, DeleteCoordinationModeEnum.Cluster, "srcnode", ct);
                             string cA = await NewContainerAsync(stack, ct);
                             string cB = await NewContainerAsync(stack, ct);
+                            // A container with a distinctive, non-default cache config to confirm a Rebuild
+                            // restores cache settings from the manifest (D8/C1-06), not the disabled default.
+                            string cC = DbTest.NewContainerName();
+                            await stack.Containers.CreateAsync(new ContainerCreateRequest
+                            {
+                                Name = cC,
+                                Cache = new UpdateCacheSettingsRequest { Enabled = true, Policy = CacheEvictionPolicyEnum.FIFO, MaxObjects = 333, EvictCount = 9, MaxCacheableObjectBytes = 4096 },
+                                RespDatabaseIndex = 11
+                            }, ct);
                             await Write(stack, cA, "photo1", "aaa", new List<string> { "animal" }, new Dictionary<string, string> { { "team", "a" } }, new Dictionary<string, object> { { "meta", 1 } }, ct);
                             await Write(stack, cA, "photo2", "bbbb", new List<string> { "plant" }, null, null, ct);
                             await Write(stack, cB, "doc1", "cc", null, new Dictionary<string, string> { { "tier", "gold" } }, null, ct);
+                            await Write(stack, cC, "cached", "dd", null, null, null, ct);
 
                             await using (IMetadataDatabaseDriver target = await MetadataDatabaseDriverFactory.CreateAndInitializeAsync(TestEnvironment.SettingsFor(targetDb), null, ct))
                             {
@@ -54,8 +64,8 @@ namespace Test.Shared.Suites
 
                                 RehydrationReport report = await rehydration.RehydrateAsync(RehydrationModeEnum.Rebuild, ct);
                                 Check.True(report.Success, "rebuild succeeded");
-                                Check.Equal(3L, report.ExtentsDiscovered, "three extents discovered");
-                                Check.Equal(3L, report.RowsAdded, "three rows added");
+                                Check.Equal(4L, report.ExtentsDiscovered, "four extents discovered");
+                                Check.Equal(4L, report.RowsAdded, "four rows added");
 
                                 Container? rebuiltA = await target.Containers.ReadByNameAsync(cA, ct);
                                 Check.NotNull(rebuiltA, "container A rebuilt");
@@ -69,6 +79,15 @@ namespace Test.Shared.Suites
 
                                 Container? rebuiltB = await target.Containers.ReadByNameAsync(cB, ct);
                                 Check.Equal("gold", (await target.Extents.ReadActiveAsync(rebuiltB!.Id, "doc1", ct))!.Tags["tier"], "container B tag rebuilt");
+
+                                // D8: cache settings are mirrored into the manifest, so a Rebuild restores them.
+                                Container? rebuiltC = await target.Containers.ReadByNameAsync(cC, ct);
+                                Check.True(rebuiltC!.Cache.Enabled, "container C cache enabled restored");
+                                Check.Equal(CacheEvictionPolicyEnum.FIFO, rebuiltC.Cache.Policy, "cache policy restored");
+                                Check.Equal(333, rebuiltC.Cache.MaxObjects, "cache max objects restored");
+                                Check.Equal(9, rebuiltC.Cache.EvictCount, "cache evict count restored");
+                                Check.Equal(4096L, rebuiltC.Cache.MaxCacheableObjectBytes, "cache ceiling restored");
+                                Check.Equal(11, rebuiltC.RespDatabaseIndex ?? -1, "RESP database index restored from the manifest");
                             }
                         }
                         finally

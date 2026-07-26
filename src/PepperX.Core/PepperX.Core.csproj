@@ -6,6 +6,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="Caching" Version="5.0.1" />
     <PackageReference Include="Npgsql" Version="9.0.3" />
     <PackageReference Include="PrettyId" Version="2.0.1" />
     <PackageReference Include="SerializationHelper" Version="2.0.3" />

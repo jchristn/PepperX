@@ -94,9 +94,10 @@ others — no leader election, no resharding.
 | **Metadata search** | Filter by label, tag, key prefix, suffix, and creation window — within a container or across all of them. |
 | **Rehydration** | `POST /v1.0/admin/rehydrate` verifies, repairs, or fully rebuilds the metadata database from raw storage. |
 | **Safe deletes** | Deletes tombstone, drain in-flight read leases cluster-wide, then destroy. A read that has begun always completes. |
+| **Per-container caching** | An optional in-memory read/write-through cache per container (FIFO or LRU, size- and memory-bounded), on by default. Hits are served from memory and stay coherent across nodes via the active-extent check. |
 | **Checksums** | SHA-256 on every payload, returned on every read, optionally verified on read. |
 | **Observability** | Every request captured with timing, headers, and bodies, plus time-bucketed traffic summaries. |
-| **Admin dashboard** | React console in English, German, and Japanese, with light and dark themes. |
+| **Admin dashboard** | React console in six languages (English, Spanish, French, German, Chinese, Japanese), with light and dark themes. |
 
 ---
 

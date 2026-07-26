@@ -32,8 +32,11 @@ namespace Test.Shared.Suites
                 {
                     TwoNodeCase("CrossNodeDeleteWaitsForRead", "A delete on one node waits for a read on another", async (driver, node1, node2, ct) =>
                     {
+                        // Caching disabled: the cross-node delete-waits-for-readers guarantee protects a read
+                        // that streams from storage under a database lease. A cache hit holds no lease (D2), so
+                        // this case exercises the uncached path where the lease drain is observable.
                         string container = DbTest.NewContainerName();
-                        await node1.Containers.CreateAsync(new ContainerCreateRequest { Name = container }, ct);
+                        await node1.Containers.CreateAsync(new ContainerCreateRequest { Name = container, Cache = new UpdateCacheSettingsRequest { Enabled = false } }, ct);
                         await WriteAsync(node1, container, "k", "content", ct);
 
                         ObjectReadHandle? reader = await node1.Reads.ReadAsync(container, "k", null, null, ct);

@@ -261,6 +261,97 @@
             }
           },
           "response": []
+        },
+        {
+          "name": "Get cache settings",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1.0/containers/{{container}}/cache",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1.0",
+                "containers",
+                "{{container}}",
+                "cache"
+              ]
+            },
+            "description": "The container's cache configuration plus this node's live cache statistics (hit rate, resident objects and memory, evictions). A container created without a cache block defaults to caching enabled (LRU)."
+          },
+          "response": []
+        },
+        {
+          "name": "Update cache settings",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1.0/containers/{{container}}/cache",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1.0",
+                "containers",
+                "{{container}}",
+                "cache"
+              ]
+            },
+            "description": "Replace the container's cache settings and apply them to the live cache. Reads are cache-first (a validated hit is served from memory with no lease), writes are write-through, deletes evict first. Policy is FIFO or LRU. MaxMemoryBytes 0 means no memory cap; MaxCacheableObjectBytes 0 means no per-object ceiling. Invalid input (e.g. EvictCount greater than MaxObjects) returns 400. A full rehydrate --mode Rebuild resets cache settings to defaults.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"Enabled\": true,\n  \"Policy\": \"LRU\",\n  \"MaxObjects\": 1000,\n  \"MaxMemoryBytes\": 268435456,\n  \"EvictCount\": 10,\n  \"MaxCacheableObjectBytes\": 1048576\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Set RESP database index",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1.0/containers/{{container}}/resp-index",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1.0",
+                "containers",
+                "{{container}}",
+                "resp-index"
+              ]
+            },
+            "description": "Assign or clear the container's RESP (Redis) database index. A Redis client that issues SELECT n with the assigned index addresses this container instead of the default resp{n}. The index is unique across containers (409 on conflict); a negative index is 400. Send {\"Index\": null} to clear the mapping. To be selectable the index must be within Resp.DatabaseCount (16 by default).",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"Index\": 5\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
         }
       ]
     },

@@ -118,6 +118,8 @@ curl -X PUT http://localhost:8000/v1.0/containers \
 |---|---|---|---|
 | `Name` | string | yes | Must satisfy the naming rules above |
 | `Tags` | object | no | String-to-string map |
+| `Cache` | object | no | Per-container [cache settings](#put-v10containerscontainercache). **When omitted, the container defaults to caching enabled (LRU).** Pass `{"Enabled":false}` to opt out |
+| `RespDatabaseIndex` | int | no | Claim a [RESP database index](#put-v10containerscontainerresp-index) for this container. Must be unique across containers; a conflict fails with `409` |
 
 `201` with the container on success. `409 Conflict` if the name is taken.
 
@@ -129,7 +131,16 @@ curl -X PUT http://localhost:8000/v1.0/containers \
   "ObjectCount": 0,
   "TotalBytes": 0,
   "CreatedUtc": "2026-07-23T23:07:00.682678Z",
-  "LastUpdateUtc": "2026-07-23T23:07:00.682678Z"
+  "LastUpdateUtc": "2026-07-23T23:07:00.682678Z",
+  "RespDatabaseIndex": null,
+  "Cache": {
+    "Enabled": true,
+    "Policy": "LRU",
+    "MaxObjects": 1000,
+    "MaxMemoryBytes": 268435456,
+    "EvictCount": 10,
+    "MaxCacheableObjectBytes": 1048576
+  }
 }
 ```
 
@@ -160,6 +171,94 @@ curl -X PUT http://localhost:8000/v1.0/containers/telemetry/tags \
   -H 'Content-Type: application/json' \
   -d '{"team":"platform","env":"staging"}'
 ```
+
+### `GET /v1.0/containers/{container}/cache`
+
+Read a container's cache configuration together with this node's live cache statistics. `404` if the
+container does not exist.
+
+```json
+{
+  "Enabled": true,
+  "Policy": "LRU",
+  "MaxObjects": 1000,
+  "MaxMemoryBytes": 268435456,
+  "EvictCount": 10,
+  "MaxCacheableObjectBytes": 1048576,
+  "HitCount": 42,
+  "MissCount": 8,
+  "HitRate": 0.84,
+  "CurrentCount": 37,
+  "CurrentMemoryBytes": 5242880,
+  "EvictionCount": 3
+}
+```
+
+Statistics are per node: each node maintains its own cache, so `HitCount`, `CurrentCount`, and the
+rest reflect only the node that answered the request.
+
+### `PUT /v1.0/containers/{container}/cache`
+
+Replace a container's cache settings and apply them to the live cache immediately.
+
+```bash
+curl -X PUT http://localhost:8000/v1.0/containers/telemetry/cache \
+  -H 'Content-Type: application/json' \
+  -d '{"Enabled":true,"Policy":"LRU","MaxObjects":1000,"MaxMemoryBytes":268435456,"EvictCount":10,"MaxCacheableObjectBytes":1048576}'
+```
+
+| Field | Type | Default | Notes |
+|---|---|---|---|
+| `Enabled` | bool | `false` | Whether to cache this container's objects. New containers default to `true` |
+| `Policy` | string | `LRU` | `FIFO` or `LRU`; an unrecognized value falls back to `LRU` |
+| `MaxObjects` | int | `1000` | Maximum resident objects; clamped to at least 1 |
+| `MaxMemoryBytes` | long | `0` | Memory cap in bytes; `0` means no cap |
+| `EvictCount` | int | `10` | Objects evicted on contention; clamped to at most `MaxObjects` |
+| `MaxCacheableObjectBytes` | long | `1048576` | Per-object admission ceiling; objects larger than this are never cached. `0` means no ceiling |
+
+Returns `200` with the same shape as the `GET` above. A clearly-invalid request — for example
+`EvictCount` greater than `MaxObjects`, or a positive `MaxMemoryBytes` smaller than
+`MaxCacheableObjectBytes` — is rejected with `400`; `404` if the container does not exist.
+
+**Semantics.** Reads are cache-first: a hit is validated against the object's current active extent
+and served from memory with no read lease, so it is strictly cheaper than a miss; a miss (or a stale
+entry) falls through to storage and, on a full read of a within-ceiling object, hydrates the cache.
+Writes are **write-through** — the object lands in both storage and cache before the write is
+acknowledged. Deletes evict from the cache first, then tombstone storage. Coherence across nodes is
+maintained by the active-extent check, so a replace or delete on one node is never served stale from
+another node's cache. Range reads slice a cached full payload but a range miss streams straight
+through without hydrating.
+
+> **Rebuild caveat.** Cache settings live in the metadata database (and are mirrored into the
+> container manifest so a normal rehydrate preserves them). A full `rehydrate --mode Rebuild`, which
+> reconstructs the database from extent storage, resets a container's cache settings to the enabled
+> default.
+
+### `PUT /v1.0/containers/{container}/resp-index`
+
+Assign or clear the container's **RESP (Redis) database index**. A Redis client that issues `SELECT n`
+with the assigned index addresses this container instead of the default `resp{n}` — the one way a
+numeric Redis `SELECT` can reach an arbitrarily named container.
+
+```bash
+# Claim index 5 for this container
+curl -X PUT http://localhost:8000/v1.0/containers/foo/resp-index \
+  -H 'Content-Type: application/json' -d '{"Index":5}'
+
+# Clear the mapping
+curl -X PUT http://localhost:8000/v1.0/containers/foo/resp-index \
+  -H 'Content-Type: application/json' -d '{"Index":null}'
+```
+
+| Field | Type | Notes |
+|---|---|---|
+| `Index` | int or null | The RESP database index to claim, or `null` to clear. Must be non-negative |
+
+Returns `200` with the updated container. The index is **unique across containers** (enforced by the
+database): claiming one another container already holds returns `409 Conflict`. A negative index returns
+`400`; a missing container returns `404`. To be selectable by a client the index must also be within
+`Resp.DatabaseCount` (16 by default). The assignment is mirrored into the container manifest, so a full
+`rehydrate --mode Rebuild` preserves it. See [`RESP_API.md`](RESP_API.md#addressing-an-arbitrarily-named-container).
 
 ### `DELETE /v1.0/containers/{container}`
 

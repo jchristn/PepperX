@@ -23,6 +23,18 @@ namespace PepperX.Server.Api.Resp
         /// </summary>
         public string Name { get; set; } = string.Empty;
 
+        /// <summary>
+        /// The container name resolved for <see cref="DatabaseIndex"/>, cached to avoid a database lookup on
+        /// every command. Null until first resolved.
+        /// </summary>
+        public string? ResolvedContainer { get; set; } = null;
+
+        /// <summary>
+        /// The database index <see cref="ResolvedContainer"/> was resolved for. -1 until first resolved; a
+        /// mismatch with <see cref="DatabaseIndex"/> (after a SELECT) forces re-resolution.
+        /// </summary>
+        public int ResolvedForIndex { get; set; } = -1;
+
         #endregion
 
         #region Constructors-and-Factories

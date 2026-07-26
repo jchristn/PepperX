@@ -97,6 +97,28 @@ namespace Test.Shared.Suites
                         await db.StringSetAsync(key, "resp-cross");
                         System.Net.Http.HttpResponseMessage read = await (await SharedServer.GetAsync(ct)).Client.GetAsync("/v1.0/containers/resp0/object?key=" + key, ct);
                         Check.Equal("resp-cross", await read.Content.ReadAsStringAsync(ct), "RESP value read via REST");
+                    }),
+
+                    new TestCaseDescriptor("RespInterop", "ContainerMapOverride", "A container claiming a RESP index is addressed by SELECT", async ct =>
+                    {
+                        RestTestServer server = await SharedServer.GetAsync(ct);
+
+                        // Give the container "mappedfoo" the RESP database index 5.
+                        System.Net.Http.StringContent body = new System.Net.Http.StringContent(
+                            "{\"Name\":\"mappedfoo\",\"RespDatabaseIndex\":5}", System.Text.Encoding.UTF8, "application/json");
+                        System.Net.Http.HttpResponseMessage create = await server.Client.PutAsync("/v1.0/containers", body, ct);
+                        Check.True((int)create.StatusCode == 201 || (int)create.StatusCode == 409, "container created (or already present)");
+
+                        // SELECT 5 now addresses "mappedfoo".
+                        IDatabase db = (await RedisAsync(ct)).GetDatabase(5);
+                        string key = NewKey("mapkey");
+                        await db.StringSetAsync(key, "mapped-value");
+
+                        System.Net.Http.HttpResponseMessage mapped = await server.Client.GetAsync("/v1.0/containers/mappedfoo/object?key=" + key, ct);
+                        Check.Equal("mapped-value", await mapped.Content.ReadAsStringAsync(ct), "SELECT 5 wrote to container 'mappedfoo'");
+
+                        System.Net.Http.HttpResponseMessage notResp5 = await server.Client.GetAsync("/v1.0/containers/resp5/object?key=" + key, ct);
+                        Check.Equal(404, (int)notResp5.StatusCode, "nothing was written to the default 'resp5' container");
                     })
                 });
         }

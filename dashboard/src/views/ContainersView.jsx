@@ -26,6 +26,186 @@ import { persistedPageSize } from '@components/TablePagination.jsx';
 /** Mirrors the server's container naming rule, so bad names fail before a round trip. */
 const NAME_PATTERN = /^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$/;
 
+/**
+ * The server's own container-cache defaults, mirrored here so the create modal shows exactly what an
+ * omitted `Cache` object would produce on the server.
+ */
+const CACHE_DEFAULTS = {
+  Enabled: true,
+  Policy: 'LRU',
+  MaxObjects: 1000,
+  MaxMemoryBytes: 256 * 1024 * 1024,
+  EvictCount: 10,
+  MaxCacheableObjectBytes: 1048576,
+};
+
+const CACHE_POLICIES = ['LRU', 'FIFO'];
+
+/** Pull cache settings out of a response (or container) into editable form state. */
+function cacheToDraft(cache) {
+  return {
+    Enabled: cache?.Enabled ?? CACHE_DEFAULTS.Enabled,
+    Policy: cache?.Policy || CACHE_DEFAULTS.Policy,
+    MaxObjects: cache?.MaxObjects ?? CACHE_DEFAULTS.MaxObjects,
+    MaxMemoryBytes: cache?.MaxMemoryBytes ?? CACHE_DEFAULTS.MaxMemoryBytes,
+    EvictCount: cache?.EvictCount ?? CACHE_DEFAULTS.EvictCount,
+    MaxCacheableObjectBytes: cache?.MaxCacheableObjectBytes ?? CACHE_DEFAULTS.MaxCacheableObjectBytes,
+  };
+}
+
+/** Turn form state into the numeric request body the server expects. */
+function draftToCacheRequest(draft) {
+  return {
+    Enabled: Boolean(draft.Enabled),
+    Policy: draft.Policy,
+    MaxObjects: Number(draft.MaxObjects),
+    MaxMemoryBytes: Number(draft.MaxMemoryBytes),
+    EvictCount: Number(draft.EvictCount),
+    MaxCacheableObjectBytes: Number(draft.MaxCacheableObjectBytes),
+  };
+}
+
+/** Light client-side validation, mirroring the server's rules so obvious mistakes fail fast. */
+function validateCacheDraft(draft, t) {
+  if (!draft.Enabled) return null;
+  const maxObjects = Number(draft.MaxObjects);
+  const evict = Number(draft.EvictCount);
+  const memory = Number(draft.MaxMemoryBytes);
+  const objectSize = Number(draft.MaxCacheableObjectBytes);
+
+  if (!Number.isInteger(maxObjects) || maxObjects < 1) return t('cache.validationMaxObjects');
+  if (!Number.isInteger(evict) || evict < 1) return t('cache.validationEvictCount');
+  if (evict > maxObjects) return t('cache.validationEvictTooLarge');
+  if (!Number.isInteger(memory) || memory < 0) return t('cache.validationMemory');
+  if (!Number.isInteger(objectSize) || objectSize < 0) return t('cache.validationObjectSize');
+  return null;
+}
+
+/**
+ * Normalize a RESP-index input string: blank/whitespace means "clear" (null), otherwise the numeric
+ * value the server expects. Kept separate from validation so callers can build the request body.
+ */
+function respIndexToRequest(value) {
+  const trimmed = String(value ?? '').trim();
+  if (trimmed === '') return null;
+  return Number(trimmed);
+}
+
+/** Turn a container's RESP index into editable input state (null becomes an empty string). */
+function respIndexToDraft(index) {
+  return index === undefined || index === null ? '' : String(index);
+}
+
+/** Validate a RESP-index draft: blank clears it, otherwise it must be a whole number >= 0. */
+function validateRespIndexDraft(value, t) {
+  const trimmed = String(value ?? '').trim();
+  if (trimmed === '') return null;
+  const parsed = Number(trimmed);
+  if (!Number.isInteger(parsed) || parsed < 0) return t('resp.negative');
+  return null;
+}
+
+/**
+ * The editable cache-settings fields, shared by the create modal and the detail modal's edit mode.
+ *
+ * The toggle gates the rest: when caching is off the numeric knobs are irrelevant, so they collapse.
+ */
+function CacheSettingsFields({ idPrefix, draft, onChange }) {
+  const { t } = useTranslation();
+  const set = (field, value) => onChange({ ...draft, [field]: value });
+
+  return (
+    <>
+      <Field id={`${idPrefix}-enabled`} label={t('cache.enable')} hint={t('cache.enableHint')}>
+        <label className="checkbox-row" htmlFor={`${idPrefix}-enabled-input`}>
+          <input
+            id={`${idPrefix}-enabled-input`}
+            type="checkbox"
+            checked={draft.Enabled}
+            onChange={(event) => set('Enabled', event.target.checked)}
+          />
+          <span>{draft.Enabled ? t('common.yes') : t('common.no')}</span>
+        </label>
+      </Field>
+
+      {draft.Enabled ? (
+        <div className="settings-form">
+          <Field id={`${idPrefix}-policy`} label={t('cache.policy')}>
+            <select id={`${idPrefix}-policy`} value={draft.Policy} onChange={(event) => set('Policy', event.target.value)}>
+              {CACHE_POLICIES.map((policy) => (
+                <option key={policy} value={policy}>
+                  {t(policy === 'LRU' ? 'cache.policyLru' : 'cache.policyFifo')}
+                </option>
+              ))}
+            </select>
+          </Field>
+
+          <Field id={`${idPrefix}-max-objects`} label={t('cache.maxObjects')} hint={t('cache.maxObjectsHint')}>
+            <input
+              id={`${idPrefix}-max-objects`}
+              type="number"
+              min="1"
+              value={draft.MaxObjects}
+              onChange={(event) => set('MaxObjects', event.target.value)}
+            />
+          </Field>
+
+          <Field id={`${idPrefix}-evict`} label={t('cache.evictCount')} hint={t('cache.evictCountHint')}>
+            <input
+              id={`${idPrefix}-evict`}
+              type="number"
+              min="1"
+              value={draft.EvictCount}
+              onChange={(event) => set('EvictCount', event.target.value)}
+            />
+          </Field>
+
+          <Field id={`${idPrefix}-max-memory`} label={t('cache.maxMemory')} hint={t('cache.maxMemoryHint')}>
+            <input
+              id={`${idPrefix}-max-memory`}
+              type="number"
+              min="0"
+              value={draft.MaxMemoryBytes}
+              onChange={(event) => set('MaxMemoryBytes', event.target.value)}
+            />
+          </Field>
+
+          <Field id={`${idPrefix}-max-object-size`} label={t('cache.maxObjectSize')} hint={t('cache.maxObjectSizeHint')}>
+            <input
+              id={`${idPrefix}-max-object-size`}
+              type="number"
+              min="0"
+              value={draft.MaxCacheableObjectBytes}
+              onChange={(event) => set('MaxCacheableObjectBytes', event.target.value)}
+            />
+          </Field>
+        </div>
+      ) : null}
+    </>
+  );
+}
+
+/**
+ * The editable RESP (Redis) database-index field, shared by the create modal and the detail modal's
+ * edit mode. Blank clears the index; any whole number >= 0 claims it (uniqueness is enforced server-side).
+ */
+function RespIndexField({ idPrefix, value, onChange, error }) {
+  const { t } = useTranslation();
+  return (
+    <Field id={`${idPrefix}-resp-index`} label={t('resp.label')} hint={t('resp.hint')} error={error}>
+      <input
+        id={`${idPrefix}-resp-index`}
+        type="number"
+        min="0"
+        step="1"
+        value={value}
+        placeholder={t('resp.placeholder')}
+        onChange={(event) => onChange(event.target.value)}
+      />
+    </Field>
+  );
+}
+
 export default function ContainersView() {
   const { t } = useTranslation();
   const { client, notify } = useApp();
@@ -41,7 +221,11 @@ export default function ContainersView() {
   const [createOpen, setCreateOpen] = useState(false);
   const [newName, setNewName] = useState('');
   const [newTags, setNewTags] = useState({});
+  const [newCache, setNewCache] = useState(cacheToDraft(CACHE_DEFAULTS));
+  const [newRespIndex, setNewRespIndex] = useState('');
   const [nameError, setNameError] = useState(null);
+  const [cacheError, setCacheError] = useState(null);
+  const [respError, setRespError] = useState(null);
   const [saving, setSaving] = useState(false);
 
   // One modal renders both View and Edit; `detailMode` decides whether the tags are editable.
@@ -78,7 +262,11 @@ export default function ContainersView() {
   const openCreate = () => {
     setNewName('');
     setNewTags({});
+    setNewCache(cacheToDraft(CACHE_DEFAULTS));
+    setNewRespIndex('');
     setNameError(null);
+    setCacheError(null);
+    setRespError(null);
     setCreateOpen(true);
   };
 
@@ -89,15 +277,42 @@ export default function ContainersView() {
       return;
     }
 
+    const cacheValidation = validateCacheDraft(newCache, t);
+    if (cacheValidation) {
+      setCacheError(cacheValidation);
+      return;
+    }
+
+    const respValidation = validateRespIndexDraft(newRespIndex, t);
+    if (respValidation) {
+      setRespError(respValidation);
+      return;
+    }
+
     setSaving(true);
     try {
-      await client.createContainer(name, cleanTags(newTags));
+      await client.createContainer(
+        name,
+        cleanTags(newTags),
+        draftToCacheRequest(newCache),
+        respIndexToRequest(newRespIndex),
+      );
       setCreateOpen(false);
       notify(t('containers.create'), 'success');
       setPageNumber(1);
       await load(1, pageSize);
     } catch (caught) {
-      setNameError(caught.status === 409 ? t('containers.nameTaken') : caught.message);
+      // A create can 409 on a duplicate name or on an already-claimed RESP index; when the operator
+      // supplied an index, attribute the conflict to it and surface it beside that field.
+      if (caught.status === 409 && respIndexToRequest(newRespIndex) !== null) {
+        setRespError(caught.message || t('resp.conflict'));
+      } else if (caught.status === 409) {
+        setNameError(t('containers.nameTaken'));
+      } else if (caught.status === 400) {
+        setCacheError(caught.message);
+      } else {
+        setNameError(caught.message);
+      }
     } finally {
       setSaving(false);
     }
@@ -255,6 +470,28 @@ export default function ContainersView() {
             addLabel={t('containers.addTag')}
           />
         </Field>
+
+        <h3 className="detail-heading">{t('cache.section')}</h3>
+        <CacheSettingsFields
+          idPrefix="create-cache"
+          draft={newCache}
+          onChange={(next) => {
+            setNewCache(next);
+            setCacheError(null);
+          }}
+        />
+        {cacheError ? <p className="field-error">{cacheError}</p> : null}
+
+        <h3 className="detail-heading">{t('resp.section')}</h3>
+        <RespIndexField
+          idPrefix="create"
+          value={newRespIndex}
+          error={respError}
+          onChange={(next) => {
+            setNewRespIndex(next);
+            setRespError(null);
+          }}
+        />
       </Modal>
 
       <ContainerDetailModal
@@ -312,20 +549,83 @@ function ContainerDetailModal({ container, mode, onClose, onSaved }) {
   const [tags, setTags] = useState({});
   const [busy, setBusy] = useState(false);
 
+  // The live cache settings and per-node statistics, loaded when the modal opens. `cacheDraft` holds
+  // the editable copy; `cacheError` surfaces client validation and the server's 400 message.
+  const [cache, setCache] = useState(null);
+  const [cacheDraft, setCacheDraft] = useState(cacheToDraft(CACHE_DEFAULTS));
+  const [cacheLoading, setCacheLoading] = useState(false);
+  const [cacheError, setCacheError] = useState(null);
+
+  // The container's RESP database index, edited alongside the cache settings.
+  const [respIndexDraft, setRespIndexDraft] = useState('');
+  const [respError, setRespError] = useState(null);
+
   useEffect(() => {
-    if (container) setTags({ ...(container.Tags ?? {}) });
-  }, [container]);
+    if (!container) return undefined;
+    setTags({ ...(container.Tags ?? {}) });
+    setRespIndexDraft(respIndexToDraft(container.RespDatabaseIndex));
+    setRespError(null);
+    setCache(null);
+    setCacheError(null);
+    setCacheLoading(true);
+
+    let active = true;
+    client
+      .containerCache(container.Name)
+      .then((loaded) => {
+        if (!active) return;
+        setCache(loaded);
+        setCacheDraft(cacheToDraft(loaded));
+      })
+      .catch(() => {
+        // Fall back to whatever the container response carried, so edit mode still has values.
+        if (!active) return;
+        setCache(null);
+        setCacheDraft(cacheToDraft(container.Cache));
+      })
+      .finally(() => {
+        if (active) setCacheLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [container, client]);
 
   if (!container) return null;
 
   const submit = async () => {
+    const cacheValidation = validateCacheDraft(cacheDraft, t);
+    if (cacheValidation) {
+      setCacheError(cacheValidation);
+      return;
+    }
+
+    const respValidation = validateRespIndexDraft(respIndexDraft, t);
+    if (respValidation) {
+      setRespError(respValidation);
+      return;
+    }
+
     setBusy(true);
     try {
       await client.updateContainerTags(container.Name, cleanTags(tags));
-      notify(t('common.save'), 'success');
+      const updated = await client.updateContainerCache(container.Name, draftToCacheRequest(cacheDraft));
+      setCache(updated);
+      setCacheDraft(cacheToDraft(updated));
+      // The RESP-index endpoint returns the refreshed container; keep the draft in sync with it.
+      const refreshed = await client.updateContainerRespIndex(
+        container.Name,
+        respIndexToRequest(respIndexDraft),
+      );
+      setRespIndexDraft(respIndexToDraft(refreshed?.RespDatabaseIndex));
+      notify(t('cache.saved'), 'success');
       await onSaved();
     } catch (caught) {
-      notify(caught.message, 'danger');
+      // Only the RESP-index update can 409 (its index is unique across containers).
+      if (caught.status === 409) setRespError(caught.message || t('resp.conflict'));
+      else if (caught.status === 400) setCacheError(caught.message);
+      else notify(caught.message, 'danger');
     } finally {
       setBusy(false);
     }
@@ -389,6 +689,90 @@ function ContainerDetailModal({ container, mode, onClose, onSaved }) {
         </div>
       ) : (
         <p className="muted">{t('common.none')}</p>
+      )}
+
+      <h3 className="detail-heading">{t('cache.settings')}</h3>
+      {editable ? (
+        <>
+          <CacheSettingsFields
+            idPrefix="edit-cache"
+            draft={cacheDraft}
+            onChange={(next) => {
+              setCacheDraft(next);
+              setCacheError(null);
+            }}
+          />
+          {cacheError ? <p className="field-error">{cacheError}</p> : null}
+        </>
+      ) : cacheLoading ? (
+        <p className="muted">{t('common.loading')}</p>
+      ) : (
+        <>
+          <dl className="detail-grid">
+            <dt>{t('cache.enabledLabel')}</dt>
+            <dd>{cache?.Enabled ? t('common.yes') : t('common.no')}</dd>
+            {cache?.Enabled ? (
+              <>
+                <dt>{t('cache.policy')}</dt>
+                <dd>{cache.Policy}</dd>
+                <dt>{t('cache.maxObjects')}</dt>
+                <dd>{formatters.number(cache.MaxObjects)}</dd>
+                <dt>{t('cache.maxMemory')}</dt>
+                <dd>{cache.MaxMemoryBytes > 0 ? formatters.bytes(cache.MaxMemoryBytes) : t('cache.noCap')}</dd>
+                <dt>{t('cache.evictCount')}</dt>
+                <dd>{formatters.number(cache.EvictCount)}</dd>
+                <dt>{t('cache.maxObjectSize')}</dt>
+                <dd>
+                  {cache.MaxCacheableObjectBytes > 0 ? formatters.bytes(cache.MaxCacheableObjectBytes) : t('cache.noCeiling')}
+                </dd>
+              </>
+            ) : null}
+          </dl>
+
+          {cache?.Enabled ? (
+            <>
+              <h3 className="detail-heading">{t('cache.statistics')}</h3>
+              <dl className="detail-grid">
+                <dt>{t('cache.hitRate')}</dt>
+                <dd>{formatters.percent(cache.HitRate)}</dd>
+                <dt>{t('cache.currentCount')}</dt>
+                <dd>{formatters.number(cache.CurrentCount)}</dd>
+                <dt>{t('cache.currentMemory')}</dt>
+                <dd>{formatters.bytes(cache.CurrentMemoryBytes)}</dd>
+                <dt>{t('cache.hits')}</dt>
+                <dd>{formatters.number(cache.HitCount)}</dd>
+                <dt>{t('cache.misses')}</dt>
+                <dd>{formatters.number(cache.MissCount)}</dd>
+                <dt>{t('cache.evictions')}</dt>
+                <dd>{formatters.number(cache.EvictionCount)}</dd>
+              </dl>
+            </>
+          ) : (
+            <p className="muted">{t('cache.disabled')}</p>
+          )}
+        </>
+      )}
+
+      <h3 className="detail-heading">{t('resp.section')}</h3>
+      {editable ? (
+        <RespIndexField
+          idPrefix="edit"
+          value={respIndexDraft}
+          error={respError}
+          onChange={(next) => {
+            setRespIndexDraft(next);
+            setRespError(null);
+          }}
+        />
+      ) : (
+        <dl className="detail-grid">
+          <dt>{t('resp.label')}</dt>
+          <dd>
+            {container.RespDatabaseIndex === undefined || container.RespDatabaseIndex === null
+              ? t('resp.notSet')
+              : formatters.number(container.RespDatabaseIndex)}
+          </dd>
+        </dl>
       )}
     </Modal>
   );

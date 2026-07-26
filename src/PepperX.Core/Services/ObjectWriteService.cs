@@ -6,6 +6,7 @@ namespace PepperX.Core.Services
     using System.Text;
     using System.Threading;
     using System.Threading.Tasks;
+    using PepperX.Core.Caching;
     using PepperX.Core.Database;
     using PepperX.Core.Exceptions;
     using PepperX.Core.Models;
@@ -15,6 +16,7 @@ namespace PepperX.Core.Services
     using PepperX.Core.Settings;
     using PepperX.Core.Storage;
     using PepperX.Core.Storage.Format;
+    using SyslogLogging;
 
     /// <summary>
     /// Writes objects. A create with no-overwrite fails when the key exists; otherwise a write is an atomic
@@ -31,6 +33,9 @@ namespace PepperX.Core.Services
         private readonly StorageSettings _StorageSettings;
         private readonly ObjectReadService _ReadService;
         private readonly ObjectDeleteService _DeleteService;
+        private readonly ContainerCacheManager _Cache;
+        private readonly LoggingModule? _Logging;
+        private readonly string _Header = "[ObjectWriteService] ";
 
         #endregion
 
@@ -44,8 +49,10 @@ namespace PepperX.Core.Services
         /// <param name="settings">Application settings.</param>
         /// <param name="readService">Read service (used to stream the payload during a metadata rewrite).</param>
         /// <param name="deleteService">Delete service (used to destroy a replaced extent).</param>
+        /// <param name="cache">Per-container cache manager.</param>
+        /// <param name="logging">Optional logging module.</param>
         /// <exception cref="ArgumentNullException">A required argument is null.</exception>
-        public ObjectWriteService(IMetadataDatabaseDriver db, IExtentStorageDriver storage, PepperXSettings settings, ObjectReadService readService, ObjectDeleteService deleteService)
+        public ObjectWriteService(IMetadataDatabaseDriver db, IExtentStorageDriver storage, PepperXSettings settings, ObjectReadService readService, ObjectDeleteService deleteService, ContainerCacheManager cache, LoggingModule? logging = null)
         {
             if (settings == null) throw new ArgumentNullException(nameof(settings));
             _Db = db ?? throw new ArgumentNullException(nameof(db));
@@ -53,6 +60,8 @@ namespace PepperX.Core.Services
             _StorageSettings = settings.Storage;
             _ReadService = readService ?? throw new ArgumentNullException(nameof(readService));
             _DeleteService = deleteService ?? throw new ArgumentNullException(nameof(deleteService));
+            _Cache = cache ?? throw new ArgumentNullException(nameof(cache));
+            _Logging = logging;
         }
 
         #endregion
@@ -96,37 +105,58 @@ namespace PepperX.Core.Services
             ValidateMetadata(normalizedLabels, normalizedTags, metadataObject);
 
             ExtentHeader header = BuildHeader(container, key, contentType, normalizedLabels, normalizedTags, metadataObject);
-            ExtentWriteResult result = await _Storage.WriteAsync(header, payload, token).ConfigureAwait(false);
 
-            if (result.SizeBytes > _StorageSettings.MaxObjectBytes)
-            {
-                await _Storage.DeleteAsync(result.Location, token).ConfigureAwait(false);
-                throw new ObjectTooLargeException("Payload exceeds the maximum object size of " + _StorageSettings.MaxObjectBytes + " bytes.");
-            }
+            // Write-through capture (D-goal): tee the payload into memory as it streams to storage, bounded
+            // by the container's per-object ceiling, so a within-ceiling write can populate the cache in one
+            // pass. A 0 ceiling (no per-object limit) skips capture to bound write-time memory; such objects
+            // are cached lazily on first read instead.
+            long ceiling = container.Cache.MaxCacheableObjectBytes;
+            bool tryCapture = container.Cache.Enabled && ceiling > 0;
+            BoundedCaptureStream? capture = tryCapture ? new BoundedCaptureStream(payload, ceiling) : null;
 
-            Extent extent = BuildExtent(container, key, contentType, result, metadataObject != null, normalizedLabels, normalizedTags, header);
-
+            Extent extent;
             bool replaced;
+            byte[]? capturedPayload = null;
             try
             {
-                if (noOverwrite)
+                ExtentWriteResult result = await _Storage.WriteAsync(header, capture ?? payload, token).ConfigureAwait(false);
+
+                if (result.SizeBytes > _StorageSettings.MaxObjectBytes)
                 {
-                    await _Db.Extents.CreateAsync(extent, token).ConfigureAwait(false);
-                    replaced = false;
+                    await _Storage.DeleteAsync(result.Location, token).ConfigureAwait(false);
+                    throw new ObjectTooLargeException("Payload exceeds the maximum object size of " + _StorageSettings.MaxObjectBytes + " bytes.");
                 }
-                else
+
+                extent = BuildExtent(container, key, contentType, result, metadataObject != null, normalizedLabels, normalizedTags, header);
+
+                try
                 {
-                    string? oldId = await ReplaceWithRetryAsync(extent, token).ConfigureAwait(false);
-                    replaced = oldId != null;
-                    if (oldId != null) FinishOldExtent(oldId);
+                    if (noOverwrite)
+                    {
+                        await _Db.Extents.CreateAsync(extent, token).ConfigureAwait(false);
+                        replaced = false;
+                    }
+                    else
+                    {
+                        string? oldId = await ReplaceWithRetryAsync(extent, token).ConfigureAwait(false);
+                        replaced = oldId != null;
+                        if (oldId != null) FinishOldExtent(oldId);
+                    }
                 }
+                catch (Exception)
+                {
+                    await SafeDeleteAsync(result.Location).ConfigureAwait(false);
+                    throw;
+                }
+
+                if (capture != null && !capture.TryGetCapturedPayload(out capturedPayload)) capturedPayload = null;
             }
-            catch (Exception)
+            finally
             {
-                await SafeDeleteAsync(result.Location).ConfigureAwait(false);
-                throw;
+                capture?.Dispose();
             }
 
+            PopulateCacheOnWrite(container, key, extent, capturedPayload, metadataObject);
             return BuildResponse(extent, replaced);
         }
 
@@ -165,23 +195,40 @@ namespace PepperX.Core.Services
                 if (handle == null) throw new ObjectNotFoundException(containerName, key);
 
                 ExtentHeader header = BuildHeader(container, key, existing.ContentType, labels, tags, metadataObject);
-                ExtentWriteResult result = await _Storage.WriteAsync(header, handle.Payload, token).ConfigureAwait(false);
-                Extent newExtent = BuildExtent(container, key, existing.ContentType, result, metadataObject != null, labels, tags, header);
 
-                await handle.DisposeAsync().ConfigureAwait(false);
+                long ceiling = container.Cache.MaxCacheableObjectBytes;
+                bool tryCapture = container.Cache.Enabled && ceiling > 0;
+                BoundedCaptureStream? capture = tryCapture ? new BoundedCaptureStream(handle.Payload, ceiling) : null;
 
-                string? oldId;
+                Extent newExtent;
+                byte[]? capturedPayload = null;
                 try
                 {
-                    oldId = await ReplaceWithRetryAsync(newExtent, token).ConfigureAwait(false);
+                    ExtentWriteResult result = await _Storage.WriteAsync(header, (Stream?)capture ?? handle.Payload, token).ConfigureAwait(false);
+                    newExtent = BuildExtent(container, key, existing.ContentType, result, metadataObject != null, labels, tags, header);
+
+                    await handle.DisposeAsync().ConfigureAwait(false);
+
+                    string? oldId;
+                    try
+                    {
+                        oldId = await ReplaceWithRetryAsync(newExtent, token).ConfigureAwait(false);
+                    }
+                    catch (Exception)
+                    {
+                        await SafeDeleteAsync(result.Location).ConfigureAwait(false);
+                        throw;
+                    }
+
+                    if (oldId != null) FinishOldExtent(oldId);
+                    if (capture != null && !capture.TryGetCapturedPayload(out capturedPayload)) capturedPayload = null;
                 }
-                catch (Exception)
+                finally
                 {
-                    await SafeDeleteAsync(result.Location).ConfigureAwait(false);
-                    throw;
+                    capture?.Dispose();
                 }
 
-                if (oldId != null) FinishOldExtent(oldId);
+                PopulateCacheOnWrite(container, key, newExtent, capturedPayload, metadataObject);
                 return BuildResponse(newExtent, true);
             }
         }
@@ -189,6 +236,50 @@ namespace PepperX.Core.Services
         #endregion
 
         #region Private-Methods
+
+        private void PopulateCacheOnWrite(Container container, string key, Extent extent, byte[]? capturedPayload, object? metadataObject)
+        {
+            if (!container.Cache.Enabled) return;
+
+            ContainerCache? cache = _Cache.Get(container.Id, container.Cache);
+            if (cache == null) return;
+
+            // No usable capture (over-ceiling, or capture skipped for a 0 ceiling): drop any prior entry so a
+            // stale extent id never lingers. The D1 coherence check would catch it on read regardless, but
+            // dropping keeps the cache tidy.
+            if (capturedPayload == null)
+            {
+                cache.Remove(key);
+                return;
+            }
+
+            ObjectMetadata metadata = new ObjectMetadata
+            {
+                Key = extent.Key,
+                ExtentId = extent.Id,
+                ContainerId = extent.ContainerId,
+                ContainerName = container.Name,
+                SizeBytes = extent.SizeBytes,
+                Sha256 = extent.Sha256,
+                ContentType = extent.ContentType,
+                Labels = new List<string>(extent.Labels),
+                Tags = new Dictionary<string, string>(extent.Tags),
+                Object = metadataObject,
+                HasMetadataObject = extent.HasMetadataObject,
+                CreatedUtc = extent.CreatedUtc
+            };
+
+            try
+            {
+                cache.AddReplace(new CachedObject(key, extent.Id, metadata, capturedPayload));
+            }
+            catch (Exception ex)
+            {
+                // Terminal storage already holds the durable write; a cache-insert failure (effectively only
+                // OOM) must not fail the acknowledged write.
+                _Logging?.Debug(_Header + "cache insert failed for " + container.Id + "/" + key + ": " + ex.Message);
+            }
+        }
 
         private async Task<string?> ReplaceWithRetryAsync(Extent extent, CancellationToken token)
         {

@@ -56,11 +56,33 @@ namespace PepperX.Core.Responses
         /// </summary>
         public DateTime LastUpdateUtc { get; set; } = DateTime.UtcNow;
 
+        /// <summary>
+        /// Optional RESP database index this container answers to (null when it is not addressable over RESP
+        /// by an explicit index).
+        /// </summary>
+        public int? RespDatabaseIndex { get; set; } = null;
+
+        /// <summary>
+        /// Per-container cache configuration. Never null.
+        /// </summary>
+        public ContainerCacheSettings Cache
+        {
+            get
+            {
+                return _Cache;
+            }
+            set
+            {
+                _Cache = value ?? new ContainerCacheSettings();
+            }
+        }
+
         #endregion
 
         #region Private-Members
 
         private Dictionary<string, string> _Tags = new Dictionary<string, string>();
+        private ContainerCacheSettings _Cache = new ContainerCacheSettings();
 
         #endregion
 
@@ -91,7 +113,9 @@ namespace PepperX.Core.Responses
                 ObjectCount = container.ObjectCount,
                 TotalBytes = container.TotalBytes,
                 CreatedUtc = container.CreatedUtc,
-                LastUpdateUtc = container.LastUpdateUtc
+                LastUpdateUtc = container.LastUpdateUtc,
+                RespDatabaseIndex = container.RespDatabaseIndex,
+                Cache = container.Cache.Clone()
             };
         }
 

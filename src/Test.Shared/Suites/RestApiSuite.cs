@@ -81,6 +81,67 @@ namespace Test.Shared.Suites
                         Check.Equal(HttpStatusCode.NotFound, gone.StatusCode, "object gone");
                     }),
 
+                    new TestCaseDescriptor("RestApi", "ContainerCache", "Container cache settings round-trip and reject bad input", async ct =>
+                    {
+                        string name = DbTest.NewContainerName();
+                        await (await ClientAsync(ct)).PutAsync("/v1.0/containers", Json("{\"Name\":\"" + name + "\"}"), ct);
+
+                        // A container created without cache settings defaults to caching enabled (D9).
+                        HttpResponseMessage get = await (await ClientAsync(ct)).GetAsync("/v1.0/containers/" + name + "/cache", ct);
+                        Check.True(get.IsSuccessStatusCode, "cache settings served");
+                        string body = await get.Content.ReadAsStringAsync(ct);
+                        Check.True(body.Contains("\"Enabled\":true", StringComparison.Ordinal), "caching enabled by default");
+                        Check.True(body.Contains("\"HitCount\"", StringComparison.Ordinal), "live statistics included");
+
+                        // Replace the settings.
+                        HttpResponseMessage put = await (await ClientAsync(ct)).PutAsync("/v1.0/containers/" + name + "/cache",
+                            Json("{\"Enabled\":true,\"Policy\":\"FIFO\",\"MaxObjects\":321,\"MaxMemoryBytes\":0,\"EvictCount\":7,\"MaxCacheableObjectBytes\":2048}"), ct);
+                        Check.True(put.IsSuccessStatusCode, "cache update accepted");
+                        string updated = await put.Content.ReadAsStringAsync(ct);
+                        Check.True(updated.Contains("\"Policy\":\"FIFO\"", StringComparison.Ordinal), "policy applied");
+                        Check.True(updated.Contains("\"MaxObjects\":321", StringComparison.Ordinal), "capacity applied");
+
+                        // The change is durable across reads.
+                        HttpResponseMessage after = await (await ClientAsync(ct)).GetAsync("/v1.0/containers/" + name + "/cache", ct);
+                        Check.True((await after.Content.ReadAsStringAsync(ct)).Contains("\"MaxObjects\":321", StringComparison.Ordinal), "cache change durable");
+
+                        // Invalid input (evict > max objects) is rejected with 400.
+                        HttpResponseMessage bad = await (await ClientAsync(ct)).PutAsync("/v1.0/containers/" + name + "/cache",
+                            Json("{\"Enabled\":true,\"Policy\":\"LRU\",\"MaxObjects\":10,\"EvictCount\":100,\"MaxCacheableObjectBytes\":1048576}"), ct);
+                        Check.Equal((int)HttpStatusCode.BadRequest, (int)bad.StatusCode, "invalid cache settings rejected with 400");
+
+                        // A missing container is a 404.
+                        HttpResponseMessage missing = await (await ClientAsync(ct)).GetAsync("/v1.0/containers/no-such-container-xyz/cache", ct);
+                        Check.Equal((int)HttpStatusCode.NotFound, (int)missing.StatusCode, "missing container is 404");
+                    }),
+
+                    new TestCaseDescriptor("RestApi", "RespIndex", "A container's RESP index is assignable, unique, and clearable", async ct =>
+                    {
+                        string a = DbTest.NewContainerName();
+                        string b = DbTest.NewContainerName();
+                        await (await ClientAsync(ct)).PutAsync("/v1.0/containers", Json("{\"Name\":\"" + a + "\"}"), ct);
+                        await (await ClientAsync(ct)).PutAsync("/v1.0/containers", Json("{\"Name\":\"" + b + "\"}"), ct);
+
+                        // Assign an index (chosen high to avoid colliding with other suites' mappings).
+                        HttpResponseMessage assign = await (await ClientAsync(ct)).PutAsync("/v1.0/containers/" + a + "/resp-index", Json("{\"Index\":42}"), ct);
+                        Check.True(assign.IsSuccessStatusCode, "index assigned");
+                        Check.True((await assign.Content.ReadAsStringAsync(ct)).Contains("\"RespDatabaseIndex\":42", StringComparison.Ordinal), "index echoed on the container");
+
+                        // The same index on another container conflicts.
+                        HttpResponseMessage conflict = await (await ClientAsync(ct)).PutAsync("/v1.0/containers/" + b + "/resp-index", Json("{\"Index\":42}"), ct);
+                        Check.Equal((int)HttpStatusCode.Conflict, (int)conflict.StatusCode, "duplicate index is 409");
+
+                        // A negative index is rejected.
+                        HttpResponseMessage negative = await (await ClientAsync(ct)).PutAsync("/v1.0/containers/" + a + "/resp-index", Json("{\"Index\":-1}"), ct);
+                        Check.Equal((int)HttpStatusCode.BadRequest, (int)negative.StatusCode, "negative index is 400");
+
+                        // Clearing frees the index for another container.
+                        HttpResponseMessage clear = await (await ClientAsync(ct)).PutAsync("/v1.0/containers/" + a + "/resp-index", Json("{\"Index\":null}"), ct);
+                        Check.True(clear.IsSuccessStatusCode, "index cleared");
+                        HttpResponseMessage reassign = await (await ClientAsync(ct)).PutAsync("/v1.0/containers/" + b + "/resp-index", Json("{\"Index\":42}"), ct);
+                        Check.True(reassign.IsSuccessStatusCode, "freed index reassignable");
+                    }),
+
                     new TestCaseDescriptor("RestApi", "Enumerate", "Object enumeration filters by label", async ct =>
                     {
                         string name = DbTest.NewContainerName();

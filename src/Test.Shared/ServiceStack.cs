@@ -3,6 +3,7 @@ namespace Test.Shared
     using System;
     using System.Threading;
     using System.Threading.Tasks;
+    using PepperX.Core.Caching;
     using PepperX.Core.Database;
     using PepperX.Core.Enums;
     using PepperX.Core.Helpers;
@@ -20,6 +21,9 @@ namespace Test.Shared
 
         /// <summary>This node's identifier.</summary>
         public string NodeId { get; }
+
+        /// <summary>Metadata database driver.</summary>
+        public IMetadataDatabaseDriver Db { get; }
 
         /// <summary>Storage driver.</summary>
         public DiskExtentStorageDriver Storage { get; }
@@ -51,17 +55,22 @@ namespace Test.Shared
         /// <summary>The local lock registry.</summary>
         public LocalLockRegistry LocalLocks { get; }
 
+        /// <summary>The per-container cache manager.</summary>
+        public ContainerCacheManager Cache { get; }
+
         #endregion
 
         #region Private-Members
 
-        private ServiceStack(string nodeId, DiskExtentStorageDriver storage, LocalLockRegistry locks,
+        private ServiceStack(string nodeId, IMetadataDatabaseDriver db, DiskExtentStorageDriver storage, LocalLockRegistry locks, ContainerCacheManager cache,
             ContainerService containers, ObjectWriteService writes, ObjectReadService reads, ObjectDeleteService deletes,
             SearchService search, StatisticsService statistics, RehydrationService rehydration, JanitorService janitor)
         {
             NodeId = nodeId;
+            Db = db;
             Storage = storage;
             LocalLocks = locks;
+            Cache = cache;
             Containers = containers;
             Writes = writes;
             Reads = reads;
@@ -99,16 +108,17 @@ namespace Test.Shared
             await storage.InitializeAsync(token).ConfigureAwait(false);
 
             LocalLockRegistry locks = new LocalLockRegistry();
-            ObjectDeleteService deletes = new ObjectDeleteService(db, storage, settings, locks);
-            ObjectReadService reads = new ObjectReadService(db, storage, settings, locks, resolvedNode);
-            ObjectWriteService writes = new ObjectWriteService(db, storage, settings, reads, deletes);
-            ContainerService containers = new ContainerService(db, storage, deletes);
+            ContainerCacheManager cache = new ContainerCacheManager();
+            ObjectDeleteService deletes = new ObjectDeleteService(db, storage, settings, locks, cache);
+            ObjectReadService reads = new ObjectReadService(db, storage, settings, locks, cache, resolvedNode);
+            ObjectWriteService writes = new ObjectWriteService(db, storage, settings, reads, deletes, cache);
+            ContainerService containers = new ContainerService(db, storage, deletes, cache);
             SearchService search = new SearchService(db);
             StatisticsService statistics = new StatisticsService(db, storage, settings);
             RehydrationService rehydration = new RehydrationService(db, storage);
             JanitorService janitor = new JanitorService(db, storage, deletes, settings);
 
-            return new ServiceStack(resolvedNode, storage, locks, containers, writes, reads, deletes, search, statistics, rehydration, janitor);
+            return new ServiceStack(resolvedNode, db, storage, locks, cache, containers, writes, reads, deletes, search, statistics, rehydration, janitor);
         }
 
         #endregion

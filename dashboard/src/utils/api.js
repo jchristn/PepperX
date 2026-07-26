@@ -128,9 +128,15 @@ export default class ApiClient {
 
   // ------------------------------------------------------------ containers
 
-  createContainer(name, tags) {
+  createContainer(name, tags, cache, respIndex) {
     const body = { Name: name };
     if (tags && Object.keys(tags).length > 0) body.Tags = tags;
+    // Omitting Cache lets the server apply its own defaults; the create modal sends one explicitly so
+    // the operator sees and controls what those defaults are.
+    if (cache) body.Cache = cache;
+    // A RESP database index is optional; only send it when the operator picked one. `null`/undefined
+    // leaves the container unaddressable by an explicit SELECT index.
+    if (respIndex !== undefined && respIndex !== null) body.RespDatabaseIndex = respIndex;
     return this._request('PUT', '/v1.0/containers', { body });
   }
 
@@ -154,6 +160,27 @@ export default class ApiClient {
       'DELETE',
       `/v1.0/containers/${encodeURIComponent(name)}${force ? '?force=true' : ''}`,
     );
+  }
+
+  /** Read a container's cache settings together with its live per-node statistics. */
+  containerCache(name) {
+    return this._request('GET', `/v1.0/containers/${encodeURIComponent(name)}/cache`);
+  }
+
+  /** Replace a container's cache settings, returning the updated settings and statistics. */
+  updateContainerCache(name, settings) {
+    return this._request('PUT', `/v1.0/containers/${encodeURIComponent(name)}/cache`, { body: settings });
+  }
+
+  /**
+   * Claim or clear a container's RESP (Redis) database index. Pass an integer to claim that index, or
+   * `null` to clear it. Returns the updated container. Fails 409 if another container already holds
+   * the index, 400 if it is negative.
+   */
+  updateContainerRespIndex(name, index) {
+    return this._request('PUT', `/v1.0/containers/${encodeURIComponent(name)}/resp-index`, {
+      body: { Index: index },
+    });
   }
 
   // --------------------------------------------------------------- objects
