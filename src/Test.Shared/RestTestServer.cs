@@ -153,6 +153,12 @@ namespace Test.Shared
             settings.Cluster.HeartbeatIntervalSeconds = 60;
             settings.Cluster.JanitorIntervalSeconds = 3600;
 
+            // The admin settings-update endpoints persist to the resolved settings path, which defaults to
+            // pepperx.json in the working directory. Point it at a throwaway temp file so the settings tests
+            // (SettingsUpdate, RawSettingsRoundTrip) never overwrite the repository's shipped pepperx.json.
+            string settingsPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "pepperx-test-settings-" + Guid.NewGuid().ToString("N") + ".json");
+            Environment.SetEnvironmentVariable("PEPPERX_SETTINGS_FILE", settingsPath);
+
             string logPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "pepperx-test-" + Guid.NewGuid().ToString("N") + ".log");
             LoggingModule logging = new LoggingModule(logPath, FileLoggingMode.SingleLogFile, false);
             PepperXServer server = new PepperXServer(settings, logging);
