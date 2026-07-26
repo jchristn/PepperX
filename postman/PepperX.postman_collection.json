@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "PepperX",
-    "description": "PepperX REST API.\n\nSet `baseUrl` to your node (default `http://localhost:8000`), then start with **Health > Server info** to confirm the endpoint is really PepperX.\n\n**There is no authentication.** PepperX is backend infrastructure meant to sit behind a service that performs its own access control, so every request here - including the ones marked DESTRUCTIVE - works against any node you can reach. Point this collection at production only if you mean it.\n\nThe live contract is always at `{{baseUrl}}/openapi.json`, with Swagger UI at `{{baseUrl}}/swagger`.",
+    "description": "PepperX exposes one namespace over several protocols. This collection covers the two HTTP surfaces:\n\n- **REST** (baseUrl, default http://localhost:8000) - the complete native API, grouped by endpoint type.\n- **S3** (s3BaseUrl, default http://localhost:8001) - the S3-compatible surface, grouped into Buckets and Objects.\n\nA bucket is the same object as a container, so a value written over REST to {{container}} is readable over S3 in the bucket of the same name, and vice versa.\n\n**Authentication.** REST is unauthenticated - it is backend infrastructure meant to sit behind a service that performs its own access control, so every REST request (including the DESTRUCTIVE ones) works against any node you can reach. S3 requests are signed with AWS Signature v4 from the s3* variables; PepperX accepts the signature rather than verifying it.\n\nSet the variables on the collection, then start with **REST > Health > Server info**.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -13,1052 +13,1548 @@
     {
       "key": "container",
       "value": "telemetry",
-      "description": "Container name used across the collection."
+      "description": "Container name (also the S3 bucket name) used across the collection."
     },
     {
       "key": "objectKey",
       "value": "metrics/cpu.json",
-      "description": "Object key. URL-encode reserved characters."
+      "description": "Object key, shared by REST and S3. URL-encode reserved characters for REST."
     },
     {
       "key": "requestId",
       "value": "",
       "description": "A request-history record ID, taken from the list endpoint."
+    },
+    {
+      "key": "s3BaseUrl",
+      "value": "http://localhost:8001",
+      "type": "string",
+      "description": "S3 endpoint (port 8001)."
+    },
+    {
+      "key": "s3AccessKey",
+      "value": "pepperx",
+      "type": "string",
+      "description": "S3 access key. A client affordance, not verified by PepperX."
+    },
+    {
+      "key": "s3SecretKey",
+      "value": "pepperx",
+      "type": "string",
+      "description": "S3 secret key. A client affordance, not verified by PepperX."
+    },
+    {
+      "key": "s3Region",
+      "value": "us-west-1",
+      "type": "string",
+      "description": "S3 region sent in the signature and returned by GetBucketLocation."
     }
   ],
   "item": [
     {
-      "name": "Health",
-      "description": "Identity and liveness. Call GET / first to confirm you are talking to a PepperX node.",
+      "name": "REST",
+      "description": "The native PepperX REST API (port 8000) - the complete surface. It is unauthenticated by design, so every request works against any node you can reach, including the ones marked DESTRUCTIVE. Start with Health > Server info to confirm the endpoint is really PepperX. Uses the baseUrl, container, objectKey, and requestId variables.",
       "item": [
         {
-          "name": "Server info",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{baseUrl}}/",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": []
-            },
-            "description": "Product name, version, and uptime. Use this to verify the endpoint is PepperX."
-          },
-          "response": []
-        },
-        {
-          "name": "Ping",
-          "request": {
-            "method": "HEAD",
-            "header": [],
-            "url": {
-              "raw": "{{baseUrl}}/",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": []
-            },
-            "description": "200 when the process is running."
-          },
-          "response": []
-        },
-        {
-          "name": "Health check",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{baseUrl}}/v1.0/api/health",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "v1.0",
-                "api",
-                "health"
-              ]
-            },
-            "description": "Liveness for monitors. Reports the process only - it does not probe PostgreSQL or storage, so a node can answer healthy while its database is down."
-          },
-          "response": []
-        }
-      ]
-    },
-    {
-      "name": "Containers",
-      "description": "Containers hold objects and map one-to-one onto S3 buckets. Names follow S3 bucket rules: 3-63 characters, lowercase letters, digits, and hyphens.",
-      "item": [
-        {
-          "name": "Create container",
-          "request": {
-            "method": "PUT",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/v1.0/containers",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "v1.0",
-                "containers"
-              ]
-            },
-            "description": "Create a container. Returns 409 if the name is taken.",
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"Name\": \"{{container}}\",\n  \"Tags\": {\n    \"team\": \"platform\",\n    \"env\": \"prod\"\n  }\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "List containers",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{baseUrl}}/v1.0/containers?maxResults=100&skip=0",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "v1.0",
-                "containers"
-              ],
-              "query": [
-                {
-                  "key": "maxResults",
-                  "value": "100",
-                  "description": "Page size."
+          "name": "Health",
+          "description": "Identity and liveness. Call GET / first to confirm you are talking to a PepperX node.",
+          "item": [
+            {
+              "name": "Server info",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": []
                 },
-                {
-                  "key": "skip",
-                  "value": "0",
-                  "description": "Offset."
-                }
-              ]
-            },
-            "description": "Paged list. Label and tag filters need the enumerate form."
-          },
-          "response": []
-        },
-        {
-          "name": "Enumerate containers",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/v1.0/containers/enumerate",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "v1.0",
-                "containers",
-                "enumerate"
-              ]
-            },
-            "description": "The same listing with the query in a body, for filters too long for a URL.",
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"MaxResults\": 100,\n  \"Skip\": 0,\n  \"Ordering\": \"CreatedDescending\"\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "Read container",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{baseUrl}}/v1.0/containers/{{container}}",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "v1.0",
-                "containers",
-                "{{container}}"
-              ]
-            },
-            "description": "One container, including its live object count and byte total."
-          },
-          "response": []
-        },
-        {
-          "name": "Container exists",
-          "request": {
-            "method": "HEAD",
-            "header": [],
-            "url": {
-              "raw": "{{baseUrl}}/v1.0/containers/{{container}}",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "v1.0",
-                "containers",
-                "{{container}}"
-              ]
-            },
-            "description": "200 if it exists, 404 if not."
-          },
-          "response": []
-        },
-        {
-          "name": "Replace tags",
-          "request": {
-            "method": "PUT",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/v1.0/containers/{{container}}/tags",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "v1.0",
-                "containers",
-                "{{container}}",
-                "tags"
-              ]
-            },
-            "description": "Replaces the entire tag map. This is not a merge - an empty object clears all tags.",
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"team\": \"platform\",\n  \"env\": \"staging\"\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "Get cache settings",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{baseUrl}}/v1.0/containers/{{container}}/cache",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "v1.0",
-                "containers",
-                "{{container}}",
-                "cache"
-              ]
-            },
-            "description": "The container's cache configuration plus this node's live cache statistics (hit rate, resident objects and memory, evictions). A container created without a cache block defaults to caching enabled (LRU)."
-          },
-          "response": []
-        },
-        {
-          "name": "Update cache settings",
-          "request": {
-            "method": "PUT",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/v1.0/containers/{{container}}/cache",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "v1.0",
-                "containers",
-                "{{container}}",
-                "cache"
-              ]
-            },
-            "description": "Replace the container's cache settings and apply them to the live cache. Reads are cache-first (a validated hit is served from memory with no lease), writes are write-through, deletes evict first. Policy is FIFO or LRU. MaxMemoryBytes 0 means no memory cap; MaxCacheableObjectBytes 0 means no per-object ceiling. Invalid input (e.g. EvictCount greater than MaxObjects) returns 400. A full rehydrate --mode Rebuild resets cache settings to defaults.",
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"Enabled\": true,\n  \"Policy\": \"LRU\",\n  \"MaxObjects\": 1000,\n  \"MaxMemoryBytes\": 268435456,\n  \"EvictCount\": 10,\n  \"MaxCacheableObjectBytes\": 1048576\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "Set RESP database index",
-          "request": {
-            "method": "PUT",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/v1.0/containers/{{container}}/resp-index",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "v1.0",
-                "containers",
-                "{{container}}",
-                "resp-index"
-              ]
-            },
-            "description": "Assign or clear the container's RESP (Redis) database index. A Redis client that issues SELECT n with the assigned index addresses this container instead of the default resp{n}. The index is unique across containers (409 on conflict); a negative index is 400. Send {\"Index\": null} to clear the mapping. To be selectable the index must be within Resp.DatabaseCount (16 by default).",
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"Index\": 5\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            }
-          },
-          "response": []
-        }
-      ]
-    },
-    {
-      "name": "Objects",
-      "description": "An object is one immutable extent: a payload plus labels, tags, and a freeform JSON metadata object. Keys travel as ?key= rather than in the path because they may contain slashes.",
-      "item": [
-        {
-          "name": "Write object (raw body)",
-          "request": {
-            "method": "PUT",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
+                "description": "Product name, version, and uptime. Use this to verify the endpoint is PepperX."
               },
-              {
-                "key": "x-pepperx-labels",
-                "value": "metric,cpu",
-                "description": "Comma-separated labels."
+              "response": []
+            },
+            {
+              "name": "Ping",
+              "request": {
+                "method": "HEAD",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": []
+                },
+                "description": "200 when the process is running."
               },
-              {
-                "key": "x-pepperx-tags",
-                "value": "resolution=1m&host=web-01",
-                "description": "URL-encoded k=v pairs."
+              "response": []
+            },
+            {
+              "name": "Health check",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/v1.0/api/health",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v1.0",
+                    "api",
+                    "health"
+                  ]
+                },
+                "description": "Liveness for monitors. Reports the process only - it does not probe PostgreSQL or storage, so a node can answer healthy while its database is down."
               },
-              {
-                "key": "x-pepperx-object",
-                "value": "eyJwaXBlbGluZSI6ImluZ2VzdCJ9",
-                "description": "Base64 of a JSON document. Bounded by the server's header limit, 16 KiB by default - use the JSON envelope form for anything larger."
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/v1.0/containers/{{container}}/object?key={{objectKey}}",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "v1.0",
-                "containers",
-                "{{container}}",
-                "object"
-              ],
-              "query": [
-                {
-                  "key": "key",
-                  "value": "{{objectKey}}",
-                  "description": "Object key, URL-encoded. May contain slashes."
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "Containers",
+          "description": "Containers hold objects and map one-to-one onto S3 buckets. Names follow S3 bucket rules: 3-63 characters, lowercase letters, digits, and hyphens.",
+          "item": [
+            {
+              "name": "Create container",
+              "request": {
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/v1.0/containers",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v1.0",
+                    "containers"
+                  ]
                 },
-                {
-                  "key": "nooverwrite",
-                  "value": "false",
-                  "description": "Return 409 instead of replacing an existing key.",
-                  "disabled": true
+                "description": "Create a container. Returns 409 if the name is taken.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"Name\": \"{{container}}\",\n  \"Tags\": {\n    \"team\": \"platform\",\n    \"env\": \"prod\"\n  }\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
                 }
-              ]
+              },
+              "response": []
             },
-            "description": "Payload as the raw request body - the form to use for anything large, since it streams rather than being buffered. Metadata travels in headers.",
-            "body": {
-              "mode": "raw",
-              "raw": "{\"cpu\": 0.42, \"host\": \"web-01\"}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "Write object (JSON envelope)",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/v1.0/containers/{{container}}/object?key={{objectKey}}",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "v1.0",
-                "containers",
-                "{{container}}",
-                "object"
-              ],
-              "query": [
-                {
-                  "key": "key",
-                  "value": "{{objectKey}}",
-                  "description": "Object key, URL-encoded. May contain slashes."
-                }
-              ]
-            },
-            "description": "Payload base64-encoded in a JSON body. Use when the metadata object is too large for a header, or the client cannot set custom headers. Costs about a third in transfer size and holds the payload in memory on both ends.",
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"ContentType\": \"application/json\",\n  \"Data\": \"eyJjcHUiOjAuNDJ9\",\n  \"Labels\": [\n    \"metric\",\n    \"cpu\"\n  ],\n  \"Tags\": {\n    \"resolution\": \"1m\"\n  },\n  \"Object\": {\n    \"pipeline\": \"ingest\",\n    \"attempt\": 1\n  }\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "Read object",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{baseUrl}}/v1.0/containers/{{container}}/object?key={{objectKey}}",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "v1.0",
-                "containers",
-                "{{container}}",
-                "object"
-              ],
-              "query": [
-                {
-                  "key": "key",
-                  "value": "{{objectKey}}",
-                  "description": "Object key, URL-encoded. May contain slashes."
-                }
-              ]
-            },
-            "description": "Raw payload bytes; metadata comes back in x-pepperx-* headers."
-          },
-          "response": []
-        },
-        {
-          "name": "Read object range",
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Range",
-                "value": "bytes=0-1023"
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/v1.0/containers/{{container}}/object?key={{objectKey}}",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "v1.0",
-                "containers",
-                "{{container}}",
-                "object"
-              ],
-              "query": [
-                {
-                  "key": "key",
-                  "value": "{{objectKey}}",
-                  "description": "Object key, URL-encoded. May contain slashes."
-                }
-              ]
-            },
-            "description": "Partial read, answering 206 Partial Content."
-          },
-          "response": []
-        },
-        {
-          "name": "Object exists",
-          "request": {
-            "method": "HEAD",
-            "header": [],
-            "url": {
-              "raw": "{{baseUrl}}/v1.0/containers/{{container}}/object?key={{objectKey}}",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "v1.0",
-                "containers",
-                "{{container}}",
-                "object"
-              ],
-              "query": [
-                {
-                  "key": "key",
-                  "value": "{{objectKey}}",
-                  "description": "Object key, URL-encoded. May contain slashes."
-                }
-              ]
-            },
-            "description": "Existence and metadata headers without the payload - the cheapest way to check a key."
-          },
-          "response": []
-        },
-        {
-          "name": "Read metadata",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{baseUrl}}/v1.0/containers/{{container}}/object/metadata?key={{objectKey}}",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "v1.0",
-                "containers",
-                "{{container}}",
-                "object",
-                "metadata"
-              ],
-              "query": [
-                {
-                  "key": "key",
-                  "value": "{{objectKey}}",
-                  "description": "Object key, URL-encoded. May contain slashes."
-                }
-              ]
-            },
-            "description": "Full metadata including labels, tags, and the freeform object, without transferring the payload."
-          },
-          "response": []
-        },
-        {
-          "name": "Update metadata",
-          "request": {
-            "method": "PUT",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/v1.0/containers/{{container}}/object/metadata?key={{objectKey}}",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "v1.0",
-                "containers",
-                "{{container}}",
-                "object",
-                "metadata"
-              ],
-              "query": [
-                {
-                  "key": "key",
-                  "value": "{{objectKey}}",
-                  "description": "Object key, URL-encoded. May contain slashes."
-                }
-              ]
-            },
-            "description": "Rewrites the extent preserving the payload, so the extent ID changes. Null means 'leave unchanged'; use ClearObject to remove the metadata object.",
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"Labels\": [\n    \"metric\",\n    \"cpu\",\n    \"verified\"\n  ],\n  \"Tags\": {\n    \"resolution\": \"1m\"\n  },\n  \"Object\": {\n    \"pipeline\": \"ingest\",\n    \"attempt\": 2\n  },\n  \"ClearObject\": false\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "List objects",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{baseUrl}}/v1.0/containers/{{container}}/objects?maxResults=100",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "v1.0",
-                "containers",
-                "{{container}}",
-                "objects"
-              ],
-              "query": [
-                {
-                  "key": "maxResults",
-                  "value": "100",
-                  "description": "Page size."
+            {
+              "name": "List containers",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/v1.0/containers?maxResults=100&skip=0",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v1.0",
+                    "containers"
+                  ],
+                  "query": [
+                    {
+                      "key": "maxResults",
+                      "value": "100",
+                      "description": "Page size."
+                    },
+                    {
+                      "key": "skip",
+                      "value": "0",
+                      "description": "Offset."
+                    }
+                  ]
                 },
-                {
-                  "key": "prefix",
-                  "value": "metrics/",
-                  "description": "Key prefix.",
-                  "disabled": true
-                }
-              ]
+                "description": "Paged list. Label and tag filters need the enumerate form."
+              },
+              "response": []
             },
-            "description": "Paged list within one container."
-          },
-          "response": []
+            {
+              "name": "Enumerate containers",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/v1.0/containers/enumerate",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v1.0",
+                    "containers",
+                    "enumerate"
+                  ]
+                },
+                "description": "The same listing with the query in a body, for filters too long for a URL.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"MaxResults\": 100,\n  \"Skip\": 0,\n  \"Ordering\": \"CreatedDescending\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Read container",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/v1.0/containers/{{container}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v1.0",
+                    "containers",
+                    "{{container}}"
+                  ]
+                },
+                "description": "One container, including its live object count and byte total."
+              },
+              "response": []
+            },
+            {
+              "name": "Container exists",
+              "request": {
+                "method": "HEAD",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/v1.0/containers/{{container}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v1.0",
+                    "containers",
+                    "{{container}}"
+                  ]
+                },
+                "description": "200 if it exists, 404 if not."
+              },
+              "response": []
+            },
+            {
+              "name": "Replace tags",
+              "request": {
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/v1.0/containers/{{container}}/tags",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v1.0",
+                    "containers",
+                    "{{container}}",
+                    "tags"
+                  ]
+                },
+                "description": "Replaces the entire tag map. This is not a merge - an empty object clears all tags.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"team\": \"platform\",\n  \"env\": \"staging\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Get cache settings",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/v1.0/containers/{{container}}/cache",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v1.0",
+                    "containers",
+                    "{{container}}",
+                    "cache"
+                  ]
+                },
+                "description": "The container's cache configuration plus this node's live cache statistics (hit rate, resident objects and memory, evictions). A container created without a cache block defaults to caching enabled (LRU)."
+              },
+              "response": []
+            },
+            {
+              "name": "Update cache settings",
+              "request": {
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/v1.0/containers/{{container}}/cache",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v1.0",
+                    "containers",
+                    "{{container}}",
+                    "cache"
+                  ]
+                },
+                "description": "Replace the container's cache settings and apply them to the live cache. Reads are cache-first (a validated hit is served from memory with no lease), writes are write-through, deletes evict first. Policy is FIFO or LRU. MaxMemoryBytes 0 means no memory cap; MaxCacheableObjectBytes 0 means no per-object ceiling. Invalid input (e.g. EvictCount greater than MaxObjects) returns 400. A full rehydrate --mode Rebuild resets cache settings to defaults.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"Enabled\": true,\n  \"Policy\": \"LRU\",\n  \"MaxObjects\": 1000,\n  \"MaxMemoryBytes\": 268435456,\n  \"EvictCount\": 10,\n  \"MaxCacheableObjectBytes\": 1048576\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Set RESP database index",
+              "request": {
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/v1.0/containers/{{container}}/resp-index",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v1.0",
+                    "containers",
+                    "{{container}}",
+                    "resp-index"
+                  ]
+                },
+                "description": "Assign or clear the container's RESP (Redis) database index. A Redis client that issues SELECT n with the assigned index addresses this container instead of the default resp{n}. The index is unique across containers (409 on conflict); a negative index is 400. Send {\"Index\": null} to clear the mapping. To be selectable the index must be within Resp.DatabaseCount (16 by default).",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"Index\": 5\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "Objects",
+          "description": "An object is one immutable extent: a payload plus labels, tags, and a freeform JSON metadata object. Keys travel as ?key= rather than in the path because they may contain slashes.",
+          "item": [
+            {
+              "name": "Write object (raw body)",
+              "request": {
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "x-pepperx-labels",
+                    "value": "metric,cpu",
+                    "description": "Comma-separated labels."
+                  },
+                  {
+                    "key": "x-pepperx-tags",
+                    "value": "resolution=1m&host=web-01",
+                    "description": "URL-encoded k=v pairs."
+                  },
+                  {
+                    "key": "x-pepperx-object",
+                    "value": "eyJwaXBlbGluZSI6ImluZ2VzdCJ9",
+                    "description": "Base64 of a JSON document. Bounded by the server's header limit, 16 KiB by default - use the JSON envelope form for anything larger."
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/v1.0/containers/{{container}}/object?key={{objectKey}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v1.0",
+                    "containers",
+                    "{{container}}",
+                    "object"
+                  ],
+                  "query": [
+                    {
+                      "key": "key",
+                      "value": "{{objectKey}}",
+                      "description": "Object key, URL-encoded. May contain slashes."
+                    },
+                    {
+                      "key": "nooverwrite",
+                      "value": "false",
+                      "description": "Return 409 instead of replacing an existing key.",
+                      "disabled": true
+                    }
+                  ]
+                },
+                "description": "Payload as the raw request body - the form to use for anything large, since it streams rather than being buffered. Metadata travels in headers.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\"cpu\": 0.42, \"host\": \"web-01\"}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Write object (JSON envelope)",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/v1.0/containers/{{container}}/object?key={{objectKey}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v1.0",
+                    "containers",
+                    "{{container}}",
+                    "object"
+                  ],
+                  "query": [
+                    {
+                      "key": "key",
+                      "value": "{{objectKey}}",
+                      "description": "Object key, URL-encoded. May contain slashes."
+                    }
+                  ]
+                },
+                "description": "Payload base64-encoded in a JSON body. Use when the metadata object is too large for a header, or the client cannot set custom headers. Costs about a third in transfer size and holds the payload in memory on both ends.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"ContentType\": \"application/json\",\n  \"Data\": \"eyJjcHUiOjAuNDJ9\",\n  \"Labels\": [\n    \"metric\",\n    \"cpu\"\n  ],\n  \"Tags\": {\n    \"resolution\": \"1m\"\n  },\n  \"Object\": {\n    \"pipeline\": \"ingest\",\n    \"attempt\": 1\n  }\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Read object",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/v1.0/containers/{{container}}/object?key={{objectKey}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v1.0",
+                    "containers",
+                    "{{container}}",
+                    "object"
+                  ],
+                  "query": [
+                    {
+                      "key": "key",
+                      "value": "{{objectKey}}",
+                      "description": "Object key, URL-encoded. May contain slashes."
+                    }
+                  ]
+                },
+                "description": "Raw payload bytes; metadata comes back in x-pepperx-* headers."
+              },
+              "response": []
+            },
+            {
+              "name": "Read object range",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Range",
+                    "value": "bytes=0-1023"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/v1.0/containers/{{container}}/object?key={{objectKey}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v1.0",
+                    "containers",
+                    "{{container}}",
+                    "object"
+                  ],
+                  "query": [
+                    {
+                      "key": "key",
+                      "value": "{{objectKey}}",
+                      "description": "Object key, URL-encoded. May contain slashes."
+                    }
+                  ]
+                },
+                "description": "Partial read, answering 206 Partial Content."
+              },
+              "response": []
+            },
+            {
+              "name": "Object exists",
+              "request": {
+                "method": "HEAD",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/v1.0/containers/{{container}}/object?key={{objectKey}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v1.0",
+                    "containers",
+                    "{{container}}",
+                    "object"
+                  ],
+                  "query": [
+                    {
+                      "key": "key",
+                      "value": "{{objectKey}}",
+                      "description": "Object key, URL-encoded. May contain slashes."
+                    }
+                  ]
+                },
+                "description": "Existence and metadata headers without the payload - the cheapest way to check a key."
+              },
+              "response": []
+            },
+            {
+              "name": "Read metadata",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/v1.0/containers/{{container}}/object/metadata?key={{objectKey}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v1.0",
+                    "containers",
+                    "{{container}}",
+                    "object",
+                    "metadata"
+                  ],
+                  "query": [
+                    {
+                      "key": "key",
+                      "value": "{{objectKey}}",
+                      "description": "Object key, URL-encoded. May contain slashes."
+                    }
+                  ]
+                },
+                "description": "Full metadata including labels, tags, and the freeform object, without transferring the payload."
+              },
+              "response": []
+            },
+            {
+              "name": "Update metadata",
+              "request": {
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/v1.0/containers/{{container}}/object/metadata?key={{objectKey}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v1.0",
+                    "containers",
+                    "{{container}}",
+                    "object",
+                    "metadata"
+                  ],
+                  "query": [
+                    {
+                      "key": "key",
+                      "value": "{{objectKey}}",
+                      "description": "Object key, URL-encoded. May contain slashes."
+                    }
+                  ]
+                },
+                "description": "Rewrites the extent preserving the payload, so the extent ID changes. Null means 'leave unchanged'; use ClearObject to remove the metadata object.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"Labels\": [\n    \"metric\",\n    \"cpu\",\n    \"verified\"\n  ],\n  \"Tags\": {\n    \"resolution\": \"1m\"\n  },\n  \"Object\": {\n    \"pipeline\": \"ingest\",\n    \"attempt\": 2\n  },\n  \"ClearObject\": false\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "List objects",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/v1.0/containers/{{container}}/objects?maxResults=100",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v1.0",
+                    "containers",
+                    "{{container}}",
+                    "objects"
+                  ],
+                  "query": [
+                    {
+                      "key": "maxResults",
+                      "value": "100",
+                      "description": "Page size."
+                    },
+                    {
+                      "key": "prefix",
+                      "value": "metrics/",
+                      "description": "Key prefix.",
+                      "disabled": true
+                    }
+                  ]
+                },
+                "description": "Paged list within one container."
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "Search",
+          "description": "Label and tag filters are conjunctive: every listed label and every listed tag pair must match. There is no 'any of' - run separate queries and union the results.",
+          "item": [
+            {
+              "name": "Search in container",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/v1.0/containers/{{container}}/objects/enumerate",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v1.0",
+                    "containers",
+                    "{{container}}",
+                    "objects",
+                    "enumerate"
+                  ]
+                },
+                "description": "Search one container by labels, tags, prefix, and creation window.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"MaxResults\": 100,\n  \"Skip\": 0,\n  \"Ordering\": \"CreatedDescending\",\n  \"Prefix\": \"metrics/\",\n  \"Labels\": [\n    \"metric\"\n  ],\n  \"Tags\": {\n    \"resolution\": \"1m\"\n  },\n  \"CaseInsensitive\": false\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Search all containers",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/v1.0/objects/enumerate",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v1.0",
+                    "objects",
+                    "enumerate"
+                  ]
+                },
+                "description": "Search across every container; omit Containers to search all of them. Page by following ContinuationToken until EndOfResults - that is stable under concurrent writes in a way Skip is not.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"MaxResults\": 100,\n  \"Ordering\": \"CreatedDescending\",\n  \"Labels\": [\n    \"metric\"\n  ],\n  \"Containers\": [\n    \"{{container}}\"\n  ],\n  \"CaseInsensitive\": false\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "Admin",
+          "description": "Statistics, cluster membership, configuration, and rehydration.",
+          "item": [
+            {
+              "name": "Statistics",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/v1.0/admin/stats",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v1.0",
+                    "admin",
+                    "stats"
+                  ]
+                },
+                "description": "Container and object counts, bytes stored, per-container rollups, volume capacity, metadata database size, and cluster nodes."
+              },
+              "response": []
+            },
+            {
+              "name": "Cluster nodes",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/v1.0/admin/nodes",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v1.0",
+                    "admin",
+                    "nodes"
+                  ]
+                },
+                "description": "Node membership and liveness. A node counts as dead after Cluster.NodeDeadAfterSeconds without a heartbeat, 60 by default."
+              },
+              "response": []
+            },
+            {
+              "name": "Settings",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/v1.0/admin/settings",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v1.0",
+                    "admin",
+                    "settings"
+                  ]
+                },
+                "description": "Non-secret configuration: protocol listeners, storage driver and directory, database location, node identity. The database password and S3 static keys are deliberately omitted."
+              },
+              "response": []
+            },
+            {
+              "name": "Rehydrate (verify)",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/v1.0/admin/rehydrate",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v1.0",
+                    "admin",
+                    "rehydrate"
+                  ]
+                },
+                "description": "Reconcile the metadata database against raw extent storage. Verify reports drift and changes nothing; Repair fixes it; Rebuild reconstructs the database entirely from storage. Always run Verify first - Rebuild reads every extent header on disk.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"Mode\": \"Verify\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "Request history",
+          "description": "Every REST request this node served. This is what backs the dashboard's Request History view.",
+          "item": [
+            {
+              "name": "List requests",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/v1.0/api/request-history?pageNumber=1&pageSize=25",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v1.0",
+                    "api",
+                    "request-history"
+                  ],
+                  "query": [
+                    {
+                      "key": "pageNumber",
+                      "value": "1",
+                      "description": "1-based."
+                    },
+                    {
+                      "key": "pageSize",
+                      "value": "25",
+                      "description": "Page size."
+                    },
+                    {
+                      "key": "method",
+                      "value": "PUT",
+                      "description": "Exact method match.",
+                      "disabled": true
+                    },
+                    {
+                      "key": "statusCode",
+                      "value": "404",
+                      "description": "Exact status match.",
+                      "disabled": true
+                    },
+                    {
+                      "key": "pathContains",
+                      "value": "/v1.0/containers",
+                      "description": "Substring match on the path.",
+                      "disabled": true
+                    }
+                  ]
+                },
+                "description": "Paged list. Bodies are omitted here - fetch a single record for those."
+              },
+              "response": []
+            },
+            {
+              "name": "Read request",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/v1.0/api/request-history/{{requestId}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v1.0",
+                    "api",
+                    "request-history",
+                    "{{requestId}}"
+                  ]
+                },
+                "description": "One record in full, including headers and bodies. Bodies are truncated at the configured limit and flagged when they are."
+              },
+              "response": []
+            },
+            {
+              "name": "Traffic summary",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/v1.0/api/request-history/summary?fromUtc=2026-07-23T00:00:00Z&toUtc=2026-07-24T00:00:00Z&bucketMinutes=15",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v1.0",
+                    "api",
+                    "request-history",
+                    "summary"
+                  ],
+                  "query": [
+                    {
+                      "key": "fromUtc",
+                      "value": "2026-07-23T00:00:00Z",
+                      "description": "Window start. Required."
+                    },
+                    {
+                      "key": "toUtc",
+                      "value": "2026-07-24T00:00:00Z",
+                      "description": "Window end. Required."
+                    },
+                    {
+                      "key": "bucketMinutes",
+                      "value": "15",
+                      "description": "Bucket width in minutes. Required."
+                    }
+                  ]
+                },
+                "description": "Time-bucketed counts for charting. Empty buckets come back as zeros so a client need not fill gaps itself."
+              },
+              "response": []
+            },
+            {
+              "name": "Delete request",
+              "request": {
+                "method": "DELETE",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/v1.0/api/request-history/{{requestId}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v1.0",
+                    "api",
+                    "request-history",
+                    "{{requestId}}"
+                  ]
+                },
+                "description": "Delete one record."
+              },
+              "response": []
+            },
+            {
+              "name": "Delete matching",
+              "request": {
+                "method": "DELETE",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/v1.0/api/request-history",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v1.0",
+                    "api",
+                    "request-history"
+                  ],
+                  "query": [
+                    {
+                      "key": "statusCode",
+                      "value": "404",
+                      "description": "Delete only records with this status.",
+                      "disabled": true
+                    }
+                  ]
+                },
+                "description": "DESTRUCTIVE. Bulk delete by filter, using the same parameters as the list. With no filter this deletes all retained history."
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "Cleanup",
+          "description": "Destructive operations, kept last so the collection can be run top to bottom without deleting the container the earlier folders depend on.",
+          "item": [
+            {
+              "name": "Delete object",
+              "request": {
+                "method": "DELETE",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/v1.0/containers/{{container}}/object?key={{objectKey}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v1.0",
+                    "containers",
+                    "{{container}}",
+                    "object"
+                  ],
+                  "query": [
+                    {
+                      "key": "key",
+                      "value": "{{objectKey}}",
+                      "description": "Object key, URL-encoded. May contain slashes."
+                    }
+                  ]
+                },
+                "description": "DESTRUCTIVE. Tombstones the extent, waits for in-flight read leases across the cluster to drain, then destroys the payload - so a read that began before the delete still completes."
+              },
+              "response": []
+            },
+            {
+              "name": "Delete container",
+              "request": {
+                "method": "DELETE",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/v1.0/containers/{{container}}?force=false",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v1.0",
+                    "containers",
+                    "{{container}}"
+                  ],
+                  "query": [
+                    {
+                      "key": "force",
+                      "value": "false",
+                      "description": "Delete the container's objects along with it."
+                    }
+                  ]
+                },
+                "description": "DESTRUCTIVE. Fails with 409 NotEmpty if the container still holds objects; force=true deletes them too, which is not recoverable."
+              },
+              "response": []
+            }
+          ]
         }
       ]
     },
     {
-      "name": "Search",
-      "description": "Label and tag filters are conjunctive: every listed label and every listed tag pair must match. There is no 'any of' - run separate queries and union the results.",
+      "name": "S3",
+      "description": "The S3-compatible surface (port 8001). Buckets map one-to-one onto PepperX containers, so a bucket here is the same container you see under REST. Requests are signed with AWS Signature v4 using the s3AccessKey / s3SecretKey / s3Region variables; PepperX accepts signatures rather than verifying them, and also allows anonymous access. Not implemented: multipart upload, versioning, ACLs, and lifecycle rules.",
+      "auth": {
+        "type": "awsv4",
+        "awsv4": [
+          {
+            "key": "accessKey",
+            "value": "{{s3AccessKey}}",
+            "type": "string"
+          },
+          {
+            "key": "secretKey",
+            "value": "{{s3SecretKey}}",
+            "type": "string"
+          },
+          {
+            "key": "region",
+            "value": "{{s3Region}}",
+            "type": "string"
+          },
+          {
+            "key": "service",
+            "value": "s3",
+            "type": "string"
+          }
+        ]
+      },
       "item": [
         {
-          "name": "Search in container",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/v1.0/containers/{{container}}/objects/enumerate",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "v1.0",
-                "containers",
-                "{{container}}",
-                "objects",
-                "enumerate"
-              ]
+          "name": "Buckets",
+          "description": "Bucket-scoped S3 operations. A bucket is the same object as a PepperX container (one-to-one), so {{container}} names the bucket here.",
+          "item": [
+            {
+              "name": "List buckets",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{s3BaseUrl}}/",
+                  "host": [
+                    "{{s3BaseUrl}}"
+                  ],
+                  "path": [
+                    ""
+                  ]
+                },
+                "description": "ListBuckets. Returns every container as an S3 bucket."
+              },
+              "response": []
             },
-            "description": "Search one container by labels, tags, prefix, and creation window.",
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"MaxResults\": 100,\n  \"Skip\": 0,\n  \"Ordering\": \"CreatedDescending\",\n  \"Prefix\": \"metrics/\",\n  \"Labels\": [\n    \"metric\"\n  ],\n  \"Tags\": {\n    \"resolution\": \"1m\"\n  },\n  \"CaseInsensitive\": false\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
+            {
+              "name": "Create bucket",
+              "request": {
+                "method": "PUT",
+                "header": [],
+                "url": {
+                  "raw": "{{s3BaseUrl}}/{{container}}",
+                  "host": [
+                    "{{s3BaseUrl}}"
+                  ],
+                  "path": [
+                    "{{container}}"
+                  ]
+                },
+                "description": "CreateBucket. Subject to the container naming rules (3-63 lowercase alphanumeric or hyphen)."
+              },
+              "response": []
+            },
+            {
+              "name": "Head bucket",
+              "request": {
+                "method": "HEAD",
+                "header": [],
+                "url": {
+                  "raw": "{{s3BaseUrl}}/{{container}}",
+                  "host": [
+                    "{{s3BaseUrl}}"
+                  ],
+                  "path": [
+                    "{{container}}"
+                  ]
+                },
+                "description": "HeadBucket. 200 if the bucket exists, 404 otherwise."
+              },
+              "response": []
+            },
+            {
+              "name": "Get bucket location",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{s3BaseUrl}}/{{container}}?location",
+                  "host": [
+                    "{{s3BaseUrl}}"
+                  ],
+                  "path": [
+                    "{{container}}"
+                  ],
+                  "query": [
+                    {
+                      "key": "location",
+                      "value": null
+                    }
+                  ]
+                },
+                "description": "GetBucketLocation. Returns the node's configured S3.Region."
+              },
+              "response": []
+            },
+            {
+              "name": "List objects (v2)",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{s3BaseUrl}}/{{container}}?list-type=2",
+                  "host": [
+                    "{{s3BaseUrl}}"
+                  ],
+                  "path": [
+                    "{{container}}"
+                  ],
+                  "query": [
+                    {
+                      "key": "list-type",
+                      "value": "2"
+                    }
+                  ]
+                },
+                "description": "ListObjectsV2. Supports prefix, delimiter, max-keys, and continuation-token query parameters."
+              },
+              "response": []
+            },
+            {
+              "name": "Get bucket tagging",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{s3BaseUrl}}/{{container}}?tagging",
+                  "host": [
+                    "{{s3BaseUrl}}"
+                  ],
+                  "path": [
+                    "{{container}}"
+                  ],
+                  "query": [
+                    {
+                      "key": "tagging",
+                      "value": null
+                    }
+                  ]
+                },
+                "description": "GetBucketTagging. Returns the container's tags as an S3 TagSet."
+              },
+              "response": []
+            },
+            {
+              "name": "Put bucket tagging",
+              "request": {
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/xml"
+                  }
+                ],
+                "url": {
+                  "raw": "{{s3BaseUrl}}/{{container}}?tagging",
+                  "host": [
+                    "{{s3BaseUrl}}"
+                  ],
+                  "path": [
+                    "{{container}}"
+                  ],
+                  "query": [
+                    {
+                      "key": "tagging",
+                      "value": null
+                    }
+                  ]
+                },
+                "description": "PutBucketTagging. Replaces the container's tag set.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "<Tagging>\n  <TagSet>\n    <Tag><Key>team</Key><Value>platform</Value></Tag>\n  </TagSet>\n</Tagging>",
+                  "options": {
+                    "raw": {
+                      "language": "xml"
+                    }
+                  }
                 }
-              }
+              },
+              "response": []
+            },
+            {
+              "name": "Delete bucket tagging",
+              "request": {
+                "method": "DELETE",
+                "header": [],
+                "url": {
+                  "raw": "{{s3BaseUrl}}/{{container}}?tagging",
+                  "host": [
+                    "{{s3BaseUrl}}"
+                  ],
+                  "path": [
+                    "{{container}}"
+                  ],
+                  "query": [
+                    {
+                      "key": "tagging",
+                      "value": null
+                    }
+                  ]
+                },
+                "description": "DeleteBucketTagging. Clears the container's tags."
+              },
+              "response": []
+            },
+            {
+              "name": "Delete bucket",
+              "request": {
+                "method": "DELETE",
+                "header": [],
+                "url": {
+                  "raw": "{{s3BaseUrl}}/{{container}}",
+                  "host": [
+                    "{{s3BaseUrl}}"
+                  ],
+                  "path": [
+                    "{{container}}"
+                  ]
+                },
+                "description": "DeleteBucket. DESTRUCTIVE. Fails if the bucket is not empty, matching S3."
+              },
+              "response": []
             }
-          },
-          "response": []
+          ]
         },
         {
-          "name": "Search all containers",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/v1.0/objects/enumerate",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "v1.0",
-                "objects",
-                "enumerate"
-              ]
-            },
-            "description": "Search across every container; omit Containers to search all of them. Page by following ContinuationToken until EndOfResults - that is stable under concurrent writes in a way Skip is not.",
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"MaxResults\": 100,\n  \"Ordering\": \"CreatedDescending\",\n  \"Labels\": [\n    \"metric\"\n  ],\n  \"Containers\": [\n    \"{{container}}\"\n  ],\n  \"CaseInsensitive\": false\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
+          "name": "Objects",
+          "description": "Object-scoped S3 operations. {{objectKey}} is the key within {{container}}; an object written here is the same object visible over REST.",
+          "item": [
+            {
+              "name": "Put object",
+              "request": {
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "text/plain"
+                  }
+                ],
+                "url": {
+                  "raw": "{{s3BaseUrl}}/{{container}}/{{objectKey}}",
+                  "host": [
+                    "{{s3BaseUrl}}"
+                  ],
+                  "path": [
+                    "{{container}}",
+                    "{{objectKey}}"
+                  ]
+                },
+                "description": "PutObject. Streams the body; the SDKs' AWS streaming-signature format is decoded before storage.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "hello from PepperX over S3",
+                  "options": {
+                    "raw": {
+                      "language": "text"
+                    }
+                  }
                 }
-              }
+              },
+              "response": []
+            },
+            {
+              "name": "Get object",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{s3BaseUrl}}/{{container}}/{{objectKey}}",
+                  "host": [
+                    "{{s3BaseUrl}}"
+                  ],
+                  "path": [
+                    "{{container}}",
+                    "{{objectKey}}"
+                  ]
+                },
+                "description": "GetObject. Supports a Range header for partial reads."
+              },
+              "response": []
+            },
+            {
+              "name": "Head object",
+              "request": {
+                "method": "HEAD",
+                "header": [],
+                "url": {
+                  "raw": "{{s3BaseUrl}}/{{container}}/{{objectKey}}",
+                  "host": [
+                    "{{s3BaseUrl}}"
+                  ],
+                  "path": [
+                    "{{container}}",
+                    "{{objectKey}}"
+                  ]
+                },
+                "description": "HeadObject. Metadata and size without the payload."
+              },
+              "response": []
+            },
+            {
+              "name": "Get object tagging",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{s3BaseUrl}}/{{container}}/{{objectKey}}?tagging",
+                  "host": [
+                    "{{s3BaseUrl}}"
+                  ],
+                  "path": [
+                    "{{container}}",
+                    "{{objectKey}}"
+                  ],
+                  "query": [
+                    {
+                      "key": "tagging",
+                      "value": null
+                    }
+                  ]
+                },
+                "description": "GetObjectTagging."
+              },
+              "response": []
+            },
+            {
+              "name": "Put object tagging",
+              "request": {
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/xml"
+                  }
+                ],
+                "url": {
+                  "raw": "{{s3BaseUrl}}/{{container}}/{{objectKey}}?tagging",
+                  "host": [
+                    "{{s3BaseUrl}}"
+                  ],
+                  "path": [
+                    "{{container}}",
+                    "{{objectKey}}"
+                  ],
+                  "query": [
+                    {
+                      "key": "tagging",
+                      "value": null
+                    }
+                  ]
+                },
+                "description": "PutObjectTagging. Replaces the object's tag set.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "<Tagging>\n  <TagSet>\n    <Tag><Key>team</Key><Value>platform</Value></Tag>\n  </TagSet>\n</Tagging>",
+                  "options": {
+                    "raw": {
+                      "language": "xml"
+                    }
+                  }
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Delete object tagging",
+              "request": {
+                "method": "DELETE",
+                "header": [],
+                "url": {
+                  "raw": "{{s3BaseUrl}}/{{container}}/{{objectKey}}?tagging",
+                  "host": [
+                    "{{s3BaseUrl}}"
+                  ],
+                  "path": [
+                    "{{container}}",
+                    "{{objectKey}}"
+                  ],
+                  "query": [
+                    {
+                      "key": "tagging",
+                      "value": null
+                    }
+                  ]
+                },
+                "description": "DeleteObjectTagging."
+              },
+              "response": []
+            },
+            {
+              "name": "Delete object",
+              "request": {
+                "method": "DELETE",
+                "header": [],
+                "url": {
+                  "raw": "{{s3BaseUrl}}/{{container}}/{{objectKey}}",
+                  "host": [
+                    "{{s3BaseUrl}}"
+                  ],
+                  "path": [
+                    "{{container}}",
+                    "{{objectKey}}"
+                  ]
+                },
+                "description": "DeleteObject. DESTRUCTIVE."
+              },
+              "response": []
+            },
+            {
+              "name": "Delete objects (batch)",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/xml"
+                  }
+                ],
+                "url": {
+                  "raw": "{{s3BaseUrl}}/{{container}}?delete",
+                  "host": [
+                    "{{s3BaseUrl}}"
+                  ],
+                  "path": [
+                    "{{container}}"
+                  ],
+                  "query": [
+                    {
+                      "key": "delete",
+                      "value": null
+                    }
+                  ]
+                },
+                "description": "DeleteObjects. DESTRUCTIVE. Batch delete; the body lists the keys to remove.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "<Delete>\n  <Object><Key>{{objectKey}}</Key></Object>\n</Delete>",
+                  "options": {
+                    "raw": {
+                      "language": "xml"
+                    }
+                  }
+                }
+              },
+              "response": []
             }
-          },
-          "response": []
-        }
-      ]
-    },
-    {
-      "name": "Admin",
-      "description": "Statistics, cluster membership, configuration, and rehydration.",
-      "item": [
-        {
-          "name": "Statistics",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{baseUrl}}/v1.0/admin/stats",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "v1.0",
-                "admin",
-                "stats"
-              ]
-            },
-            "description": "Container and object counts, bytes stored, per-container rollups, volume capacity, metadata database size, and cluster nodes."
-          },
-          "response": []
-        },
-        {
-          "name": "Cluster nodes",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{baseUrl}}/v1.0/admin/nodes",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "v1.0",
-                "admin",
-                "nodes"
-              ]
-            },
-            "description": "Node membership and liveness. A node counts as dead after Cluster.NodeDeadAfterSeconds without a heartbeat, 60 by default."
-          },
-          "response": []
-        },
-        {
-          "name": "Settings",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{baseUrl}}/v1.0/admin/settings",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "v1.0",
-                "admin",
-                "settings"
-              ]
-            },
-            "description": "Non-secret configuration: protocol listeners, storage driver and directory, database location, node identity. The database password and S3 static keys are deliberately omitted."
-          },
-          "response": []
-        },
-        {
-          "name": "Rehydrate (verify)",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/v1.0/admin/rehydrate",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "v1.0",
-                "admin",
-                "rehydrate"
-              ]
-            },
-            "description": "Reconcile the metadata database against raw extent storage. Verify reports drift and changes nothing; Repair fixes it; Rebuild reconstructs the database entirely from storage. Always run Verify first - Rebuild reads every extent header on disk.",
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"Mode\": \"Verify\"\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            }
-          },
-          "response": []
-        }
-      ]
-    },
-    {
-      "name": "Request history",
-      "description": "Every REST request this node served. This is what backs the dashboard's Request History view.",
-      "item": [
-        {
-          "name": "List requests",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{baseUrl}}/v1.0/api/request-history?pageNumber=1&pageSize=25",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "v1.0",
-                "api",
-                "request-history"
-              ],
-              "query": [
-                {
-                  "key": "pageNumber",
-                  "value": "1",
-                  "description": "1-based."
-                },
-                {
-                  "key": "pageSize",
-                  "value": "25",
-                  "description": "Page size."
-                },
-                {
-                  "key": "method",
-                  "value": "PUT",
-                  "description": "Exact method match.",
-                  "disabled": true
-                },
-                {
-                  "key": "statusCode",
-                  "value": "404",
-                  "description": "Exact status match.",
-                  "disabled": true
-                },
-                {
-                  "key": "pathContains",
-                  "value": "/v1.0/containers",
-                  "description": "Substring match on the path.",
-                  "disabled": true
-                }
-              ]
-            },
-            "description": "Paged list. Bodies are omitted here - fetch a single record for those."
-          },
-          "response": []
-        },
-        {
-          "name": "Read request",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{baseUrl}}/v1.0/api/request-history/{{requestId}}",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "v1.0",
-                "api",
-                "request-history",
-                "{{requestId}}"
-              ]
-            },
-            "description": "One record in full, including headers and bodies. Bodies are truncated at the configured limit and flagged when they are."
-          },
-          "response": []
-        },
-        {
-          "name": "Traffic summary",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{baseUrl}}/v1.0/api/request-history/summary?fromUtc=2026-07-23T00:00:00Z&toUtc=2026-07-24T00:00:00Z&bucketMinutes=15",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "v1.0",
-                "api",
-                "request-history",
-                "summary"
-              ],
-              "query": [
-                {
-                  "key": "fromUtc",
-                  "value": "2026-07-23T00:00:00Z",
-                  "description": "Window start. Required."
-                },
-                {
-                  "key": "toUtc",
-                  "value": "2026-07-24T00:00:00Z",
-                  "description": "Window end. Required."
-                },
-                {
-                  "key": "bucketMinutes",
-                  "value": "15",
-                  "description": "Bucket width in minutes. Required."
-                }
-              ]
-            },
-            "description": "Time-bucketed counts for charting. Empty buckets come back as zeros so a client need not fill gaps itself."
-          },
-          "response": []
-        },
-        {
-          "name": "Delete request",
-          "request": {
-            "method": "DELETE",
-            "header": [],
-            "url": {
-              "raw": "{{baseUrl}}/v1.0/api/request-history/{{requestId}}",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "v1.0",
-                "api",
-                "request-history",
-                "{{requestId}}"
-              ]
-            },
-            "description": "Delete one record."
-          },
-          "response": []
-        },
-        {
-          "name": "Delete matching",
-          "request": {
-            "method": "DELETE",
-            "header": [],
-            "url": {
-              "raw": "{{baseUrl}}/v1.0/api/request-history",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "v1.0",
-                "api",
-                "request-history"
-              ],
-              "query": [
-                {
-                  "key": "statusCode",
-                  "value": "404",
-                  "description": "Delete only records with this status.",
-                  "disabled": true
-                }
-              ]
-            },
-            "description": "DESTRUCTIVE. Bulk delete by filter, using the same parameters as the list. With no filter this deletes all retained history."
-          },
-          "response": []
-        }
-      ]
-    },
-    {
-      "name": "Cleanup",
-      "description": "Destructive operations, kept last so the collection can be run top to bottom without deleting the container the earlier folders depend on.",
-      "item": [
-        {
-          "name": "Delete object",
-          "request": {
-            "method": "DELETE",
-            "header": [],
-            "url": {
-              "raw": "{{baseUrl}}/v1.0/containers/{{container}}/object?key={{objectKey}}",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "v1.0",
-                "containers",
-                "{{container}}",
-                "object"
-              ],
-              "query": [
-                {
-                  "key": "key",
-                  "value": "{{objectKey}}",
-                  "description": "Object key, URL-encoded. May contain slashes."
-                }
-              ]
-            },
-            "description": "DESTRUCTIVE. Tombstones the extent, waits for in-flight read leases across the cluster to drain, then destroys the payload - so a read that began before the delete still completes."
-          },
-          "response": []
-        },
-        {
-          "name": "Delete container",
-          "request": {
-            "method": "DELETE",
-            "header": [],
-            "url": {
-              "raw": "{{baseUrl}}/v1.0/containers/{{container}}?force=false",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "v1.0",
-                "containers",
-                "{{container}}"
-              ],
-              "query": [
-                {
-                  "key": "force",
-                  "value": "false",
-                  "description": "Delete the container's objects along with it."
-                }
-              ]
-            },
-            "description": "DESTRUCTIVE. Fails with 409 NotEmpty if the container still holds objects; force=true deletes them too, which is not recoverable."
-          },
-          "response": []
+          ]
         }
       ]
     }
