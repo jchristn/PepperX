@@ -100,7 +100,7 @@ the layer above owns access control and business logic.
 
 ## Capabilities
 
-| | |
+| Capability | What it does |
 |---|---|
 | **Immutable extents** | Writes never mutate. A replace writes a new extent and atomically repoints the key, so readers already streaming the old one finish safely. |
 | **Metadata search** | Filter by label, tag, key prefix, suffix, and creation window — within a container or across all of them. |
