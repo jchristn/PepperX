@@ -161,7 +161,8 @@
     "deleteTypeName": "Type the container name to confirm",
     "empty": "No containers yet.",
     "emptyHint": "Create one to start storing objects.",
-    "browse": "Browse objects"
+    "browse": "Browse objects",
+    "browseUploads": "Browse uploads"
   },
   "cache": {
     "section": "Caching",
@@ -206,6 +207,14 @@
     "conflict": "That index is already in use by another container.",
     "negative": "The RESP database index must be zero or greater.",
     "none": "None"
+  },
+  "multipartExpiry": {
+    "label": "Multipart upload expiry (days)",
+    "hint": "How long in-progress multipart uploads survive before the janitor reclaims them. Leave blank to inherit the system-wide default.",
+    "placeholder": "Inherit system default",
+    "inherit": "Inherit system default",
+    "notSet": "Inherit system default",
+    "range": "Must be a whole number of days from 1 to 365."
   },
   "multipart": {
     "section": "In-progress multipart uploads",

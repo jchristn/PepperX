@@ -156,7 +156,7 @@
                 "description": "Create a container. Returns 409 if the name is taken.",
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"Name\": \"{{container}}\",\n  \"Tags\": {\n    \"team\": \"platform\",\n    \"env\": \"prod\"\n  }\n}",
+                  "raw": "{\n  \"Name\": \"{{container}}\",\n  \"Tags\": {\n    \"team\": \"platform\",\n    \"env\": \"prod\"\n  },\n  \"MultipartUploadExpiryDays\": 7\n}",
                   "options": {
                     "raw": {
                       "language": "json"
@@ -388,6 +388,41 @@
                 "body": {
                   "mode": "raw",
                   "raw": "{\n  \"Index\": 5\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Set multipart upload expiry",
+              "request": {
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/v1.0/containers/{{container}}/multipart-expiry",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v1.0",
+                    "containers",
+                    "{{container}}",
+                    "multipart-expiry"
+                  ]
+                },
+                "description": "Assign or clear the container's multipart-upload expiry (days an incomplete multipart upload may sit before the janitor reclaims it). Days is 1-365; send {\"Days\": null} to clear the override and inherit the system-wide S3.MultipartUploadExpiryDays. Returns 200 with the updated container, or 404 if the container does not exist.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"Days\": 7\n}",
                   "options": {
                     "raw": {
                       "language": "json"

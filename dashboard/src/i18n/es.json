@@ -161,7 +161,8 @@
     "deleteTypeName": "Escribe el nombre del contenedor para confirmar",
     "empty": "Aún no hay contenedores.",
     "emptyHint": "Crea uno para empezar a almacenar objetos.",
-    "browse": "Explorar objetos"
+    "browse": "Explorar objetos",
+    "browseUploads": "Explorar cargas"
   },
   "cache": {
     "section": "Almacenamiento en caché",
@@ -206,6 +207,14 @@
     "conflict": "Ese índice ya está en uso por otro contenedor.",
     "negative": "El índice de base de datos RESP debe ser cero o mayor.",
     "none": "Ninguno"
+  },
+  "multipartExpiry": {
+    "label": "Caducidad de cargas multiparte (días)",
+    "hint": "Cuánto tiempo sobreviven las cargas multiparte en curso antes de que el recolector las reclame. Déjalo en blanco para heredar el valor predeterminado del sistema.",
+    "placeholder": "Heredar valor predeterminado del sistema",
+    "inherit": "Heredar valor predeterminado del sistema",
+    "notSet": "Heredar valor predeterminado del sistema",
+    "range": "Debe ser un número entero de días de 1 a 365."
   },
   "multipart": {
     "section": "Cargas multiparte en curso",

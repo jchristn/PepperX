@@ -81,6 +81,17 @@ namespace PepperX.Core.Database.Interfaces
         Task<Container?> UpdateRespDatabaseIndexAsync(string id, int? respDatabaseIndex, CancellationToken token = default);
 
         /// <summary>
+        /// Set (or clear, with null) a container's per-container multipart-upload expiry, in days. Null
+        /// clears the override so the container inherits the system-wide default. The caller is responsible
+        /// for clamping; the persisted row reflects the supplied value as-is.
+        /// </summary>
+        /// <param name="id">Container identifier.</param>
+        /// <param name="days">The expiry in days, or null to clear the override.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The updated container, or null if not found.</returns>
+        Task<Container?> UpdateMultipartExpiryAsync(string id, int? days, CancellationToken token = default);
+
+        /// <summary>
         /// Replace a container's cache settings.
         /// </summary>
         /// <param name="id">Container identifier.</param>

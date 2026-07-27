@@ -69,7 +69,7 @@ namespace PepperX.Core.Services
             report.ContainersDiscovered = manifests.Count;
             foreach (ContainerManifest manifest in manifests)
             {
-                await EnsureContainerAsync(manifest.Id, manifest.Name, manifest.Tags, manifest.Cache, manifest.RespDatabaseIndex, mutate, report, token).ConfigureAwait(false);
+                await EnsureContainerAsync(manifest.Id, manifest.Name, manifest.Tags, manifest.Cache, manifest.RespDatabaseIndex, manifest.MultipartUploadExpiryDays, mutate, report, token).ConfigureAwait(false);
                 if (!targetCount.ContainsKey(manifest.Id)) { targetCount[manifest.Id] = 0; targetBytes[manifest.Id] = 0; }
             }
 
@@ -88,7 +88,7 @@ namespace PepperX.Core.Services
                 }
 
                 report.ExtentsDiscovered++;
-                await EnsureContainerAsync(header.ContainerId, header.ContainerName, null, null, null, mutate, report, token).ConfigureAwait(false);
+                await EnsureContainerAsync(header.ContainerId, header.ContainerName, null, null, null, null, mutate, report, token).ConfigureAwait(false);
 
                 if (!targetCount.ContainsKey(header.ContainerId)) { targetCount[header.ContainerId] = 0; targetBytes[header.ContainerId] = 0; }
                 targetCount[header.ContainerId] += 1;
@@ -123,7 +123,7 @@ namespace PepperX.Core.Services
 
         #region Private-Methods
 
-        private async Task EnsureContainerAsync(string containerId, string containerName, Dictionary<string, string>? tags, ContainerCacheSettings? cache, int? respIndex, bool mutate, RehydrationReport report, CancellationToken token)
+        private async Task EnsureContainerAsync(string containerId, string containerName, Dictionary<string, string>? tags, ContainerCacheSettings? cache, int? respIndex, int? multipartExpiryDays, bool mutate, RehydrationReport report, CancellationToken token)
         {
             Container? existing = await _Db.Containers.ReadByIdAsync(containerId, token).ConfigureAwait(false);
             if (existing != null)
@@ -131,6 +131,7 @@ namespace PepperX.Core.Services
                 if (mutate && tags != null) await _Db.Containers.UpdateTagsAsync(containerId, tags, token).ConfigureAwait(false);
                 if (mutate && cache != null) await _Db.Containers.UpdateCacheSettingsAsync(containerId, cache, token).ConfigureAwait(false);
                 if (mutate && respIndex.HasValue) await RestoreRespIndexAsync(containerId, containerName, respIndex.Value, report, token).ConfigureAwait(false);
+                if (mutate && multipartExpiryDays.HasValue) await _Db.Containers.UpdateMultipartExpiryAsync(containerId, multipartExpiryDays, token).ConfigureAwait(false);
                 return;
             }
 
@@ -150,6 +151,7 @@ namespace PepperX.Core.Services
             if (tags != null) container.Tags = tags;
             if (cache != null) container.Cache = cache;
             if (respIndex.HasValue) container.RespDatabaseIndex = respIndex.Value;
+            if (multipartExpiryDays.HasValue) container.MultipartUploadExpiryDays = multipartExpiryDays;
             try
             {
                 await _Db.Containers.CreateAsync(container, token).ConfigureAwait(false);

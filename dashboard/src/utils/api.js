@@ -128,7 +128,7 @@ export default class ApiClient {
 
   // ------------------------------------------------------------ containers
 
-  createContainer(name, tags, cache, respIndex) {
+  createContainer(name, tags, cache, respIndex, multipartExpiryDays) {
     const body = { Name: name };
     if (tags && Object.keys(tags).length > 0) body.Tags = tags;
     // Omitting Cache lets the server apply its own defaults; the create modal sends one explicitly so
@@ -137,6 +137,11 @@ export default class ApiClient {
     // A RESP database index is optional; only send it when the operator picked one. `null`/undefined
     // leaves the container unaddressable by an explicit SELECT index.
     if (respIndex !== undefined && respIndex !== null) body.RespDatabaseIndex = respIndex;
+    // The multipart-upload expiry is optional; only send it when the operator set one. `null`/undefined
+    // leaves the container inheriting the system-wide default.
+    if (multipartExpiryDays !== undefined && multipartExpiryDays !== null) {
+      body.MultipartUploadExpiryDays = multipartExpiryDays;
+    }
     return this._request('PUT', '/v1.0/containers', { body });
   }
 
@@ -180,6 +185,17 @@ export default class ApiClient {
   updateContainerRespIndex(name, index) {
     return this._request('PUT', `/v1.0/containers/${encodeURIComponent(name)}/resp-index`, {
       body: { Index: index },
+    });
+  }
+
+  /**
+   * Set or clear a container's multipart-upload expiry override. Pass an integer (1..365) to override
+   * the system-wide default with that many days, or `null` to clear the override so the container
+   * inherits the system default. Returns the updated container.
+   */
+  updateContainerMultipartExpiry(name, days) {
+    return this._request('PUT', `/v1.0/containers/${encodeURIComponent(name)}/multipart-expiry`, {
+      body: { Days: days },
     });
   }
 

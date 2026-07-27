@@ -84,6 +84,15 @@ namespace PepperX.Core.Database.Postgresql
                 container.RespDatabaseIndex = reader.IsDBNull(respIndexOrdinal) ? (int?)null : reader.GetInt32(respIndexOrdinal);
             }
 
+            // Per-container multipart-upload expiry (migration v5); nullable, null meaning "inherit the
+            // system-wide default". Guarded like the columns above so an omitting projection or pre-migration
+            // read leaves the model default (null) in place.
+            if (HasColumn(reader, "multipart_upload_expiry_days"))
+            {
+                int muedOrdinal = reader.GetOrdinal("multipart_upload_expiry_days");
+                container.MultipartUploadExpiryDays = reader.IsDBNull(muedOrdinal) ? (int?)null : reader.GetInt32(muedOrdinal);
+            }
+
             // Cache columns are present after migration v2. Guarded so a projection that omits them (or a
             // pre-migration read) leaves the model's defaults in place. Every value routes through the
             // clamped, null-safe setters on ContainerCacheSettings so a bad or legacy row is normalized

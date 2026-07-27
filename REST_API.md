@@ -120,6 +120,7 @@ curl -X PUT http://localhost:8000/v1.0/containers \
 | `Tags` | object | no | String-to-string map |
 | `Cache` | object | no | Per-container [cache settings](#put-v10containerscontainercache). **When omitted, the container defaults to caching enabled (LRU).** Pass `{"Enabled":false}` to opt out |
 | `RespDatabaseIndex` | int | no | Claim a [RESP database index](#put-v10containerscontainerresp-index) for this container. Must be unique across containers; a conflict fails with `409` |
+| `MultipartUploadExpiryDays` | int | no | Per-container [multipart-upload expiry](#put-v10containerscontainermultipart-expiry) in days, `1`–`365`. When omitted or `null`, the container inherits the system-wide `S3.MultipartUploadExpiryDays` default |
 
 `201` with the container on success. `409 Conflict` if the name is taken.
 
@@ -133,6 +134,7 @@ curl -X PUT http://localhost:8000/v1.0/containers \
   "CreatedUtc": "2026-07-23T23:07:00.682678Z",
   "LastUpdateUtc": "2026-07-23T23:07:00.682678Z",
   "RespDatabaseIndex": null,
+  "MultipartUploadExpiryDays": null,
   "Cache": {
     "Enabled": true,
     "Policy": "LRU",
@@ -260,6 +262,30 @@ database): claiming one another container already holds returns `409 Conflict`. 
 `Resp.DatabaseCount` (16 by default). The assignment is mirrored into the container manifest, so a full
 `rehydrate --mode Rebuild` preserves it. See [`RESP_API.md`](RESP_API.md#addressing-an-arbitrarily-named-container).
 
+### `PUT /v1.0/containers/{container}/multipart-expiry`
+
+Assign or clear the container's **multipart-upload expiry** — the number of days an initiated multipart
+upload may sit incomplete before the janitor reclaims it. At initiate time the server stamps each
+upload's expiry using the container's value when set, otherwise the system-wide
+`S3.MultipartUploadExpiryDays`.
+
+```bash
+# Expire this container's abandoned uploads after 3 days
+curl -X PUT http://localhost:8000/v1.0/containers/foo/multipart-expiry \
+  -H 'Content-Type: application/json' -d '{"Days":3}'
+
+# Clear the override (inherit the system default)
+curl -X PUT http://localhost:8000/v1.0/containers/foo/multipart-expiry \
+  -H 'Content-Type: application/json' -d '{"Days":null}'
+```
+
+| Field | Type | Notes |
+|---|---|---|
+| `Days` | int or null | Days before an incomplete upload expires, `1`–`365`, or `null` to clear the override and inherit `S3.MultipartUploadExpiryDays` |
+
+Returns `200` with the updated container; `404` if the container does not exist. Only uploads initiated
+after the change take the new window — the janitor purges by each upload's stamped `ExpiresUtc`.
+
 ### Multipart uploads
 
 Large objects can be uploaded in parts and assembled server-side into a single object. The full
@@ -268,8 +294,10 @@ lifecycle — initiate, upload parts, complete — is available over REST, and m
 object on completion, so a completed multipart object is indistinguishable from one written in a single
 `PUT`, and any node can complete an upload started on another. Every part except the last must be at
 least `S3.MultipartMinPartBytes` (default 5 MiB); an upload may have up to `S3.MultipartMaxParts` parts
-(default 10000). An upload that is never completed or aborted is reclaimed after
-`S3.MultipartUploadExpiryDays` (default 7).
+(default 10000). An upload that is never completed or aborted is reclaimed after the container's
+`MultipartUploadExpiryDays` when set, otherwise the system-wide `S3.MultipartUploadExpiryDays`
+(default 7); a container can override the window via
+[`PUT /v1.0/containers/{container}/multipart-expiry`](#put-v10containerscontainermultipart-expiry).
 
 #### `POST /v1.0/containers/{container}/multipart-uploads?key={key}`
 

@@ -49,6 +49,12 @@ namespace PepperX.Core.Storage
         public int? RespDatabaseIndex { get; set; } = null;
 
         /// <summary>
+        /// Optional per-container multipart-upload expiry in days, mirrored here so a full rebuild restores
+        /// it. Null when the container inherits the system-wide default.
+        /// </summary>
+        public int? MultipartUploadExpiryDays { get; set; } = null;
+
+        /// <summary>
         /// Per-container cache configuration, mirrored here so a full rebuild restores it. Never null.
         /// </summary>
         public ContainerCacheSettings Cache

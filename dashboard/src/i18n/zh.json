@@ -161,7 +161,8 @@
     "deleteTypeName": "输入容器名称以确认",
     "empty": "尚无容器。",
     "emptyHint": "创建一个以开始存储对象。",
-    "browse": "浏览对象"
+    "browse": "浏览对象",
+    "browseUploads": "浏览上传"
   },
   "cache": {
     "section": "缓存",
@@ -206,6 +207,14 @@
     "conflict": "该索引已被另一个容器使用。",
     "negative": "RESP 数据库索引必须为零或更大。",
     "none": "无"
+  },
+  "multipartExpiry": {
+    "label": "分段上传过期时间（天）",
+    "hint": "进行中的分段上传在被清理程序回收之前可保留的时长。留空则继承系统级默认值。",
+    "placeholder": "继承系统默认值",
+    "inherit": "继承系统默认值",
+    "notSet": "继承系统默认值",
+    "range": "必须是 1 到 365 之间的整数天数。"
   },
   "multipart": {
     "section": "进行中的分段上传",

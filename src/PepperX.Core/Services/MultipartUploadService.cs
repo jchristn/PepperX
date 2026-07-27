@@ -77,6 +77,11 @@ namespace PepperX.Core.Services
 
             Container container = await RequireContainerAsync(containerName, token).ConfigureAwait(false);
 
+            // The expiry window is the container's own override when set, otherwise the system-wide default.
+            // It is stamped onto the upload here at initiate time; the janitor later purges by ExpiresUtc, so
+            // changing a container's setting affects only uploads started after the change.
+            int expiryDays = container.MultipartUploadExpiryDays ?? _Settings.MultipartUploadExpiryDays;
+
             DateTime now = DateTime.UtcNow;
             MultipartUpload upload = new MultipartUpload
             {
@@ -85,7 +90,7 @@ namespace PepperX.Core.Services
                 ContentType = contentType,
                 Tags = tags ?? new Dictionary<string, string>(),
                 InitiatedUtc = now,
-                ExpiresUtc = now.AddDays(_Settings.MultipartUploadExpiryDays)
+                ExpiresUtc = now.AddDays(expiryDays)
             };
 
             await _Db.MultipartUploads.CreateUploadAsync(upload, token).ConfigureAwait(false);

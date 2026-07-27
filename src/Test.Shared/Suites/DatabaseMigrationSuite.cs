@@ -113,6 +113,7 @@ namespace Test.Shared.Suites
                                 ";Username=" + TestEnvironment.User + ";Password=" + TestEnvironment.Password + ";";
                             string? columnType = null;
                             bool indexPresent = false;
+                            string? expiryColumnType = null;
                             await using (NpgsqlConnection conn = new NpgsqlConnection(connString))
                             {
                                 await conn.OpenAsync(ct);
@@ -128,10 +129,18 @@ namespace Test.Shared.Suites
                                     object? result = await cmd.ExecuteScalarAsync(ct);
                                     indexPresent = result != null;
                                 }
+                                // Migration v5: per-container multipart-upload expiry column (nullable integer).
+                                await using (NpgsqlCommand cmd = new NpgsqlCommand(
+                                    "SELECT data_type FROM information_schema.columns WHERE table_name = 'containers' AND column_name = 'multipart_upload_expiry_days';", conn))
+                                {
+                                    object? result = await cmd.ExecuteScalarAsync(ct);
+                                    expiryColumnType = result as string;
+                                }
                             }
 
                             Check.Equal("integer", columnType ?? "(missing)", "resp_database_index column type");
                             Check.True(indexPresent, "partial unique index present");
+                            Check.Equal("integer", expiryColumnType ?? "(missing)", "multipart_upload_expiry_days column type");
                         }
                         finally
                         {

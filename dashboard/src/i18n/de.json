@@ -161,7 +161,8 @@
     "deleteTypeName": "Zur Bestätigung den Containernamen eingeben",
     "empty": "Noch keine Container.",
     "emptyHint": "Erstellen Sie einen, um Objekte zu speichern.",
-    "browse": "Objekte durchsuchen"
+    "browse": "Objekte durchsuchen",
+    "browseUploads": "Uploads durchsuchen"
   },
   "cache": {
     "section": "Zwischenspeicherung",
@@ -206,6 +207,14 @@
     "conflict": "Dieser Index wird bereits von einem anderen Container verwendet.",
     "negative": "Der RESP-Datenbankindex muss null oder größer sein.",
     "none": "Keine"
+  },
+  "multipartExpiry": {
+    "label": "Ablauf mehrteiliger Uploads (Tage)",
+    "hint": "Wie lange laufende mehrteilige Uploads bestehen, bevor sie vom Aufräumdienst zurückgewonnen werden. Leer lassen, um den systemweiten Standard zu übernehmen.",
+    "placeholder": "Systemstandard übernehmen",
+    "inherit": "Systemstandard übernehmen",
+    "notSet": "Systemstandard übernehmen",
+    "range": "Muss eine ganze Zahl von Tagen zwischen 1 und 365 sein."
   },
   "multipart": {
     "section": "Laufende mehrteilige Uploads",

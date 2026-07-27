@@ -161,6 +161,14 @@ namespace PepperX.Core.Database.Postgresql
                     @"ALTER TABLE extents ADD COLUMN IF NOT EXISTS md5 varchar(32);",
                     // Persisted S3 multipart ETag (digest-N); null for single-part objects.
                     @"ALTER TABLE extents ADD COLUMN IF NOT EXISTS etag varchar(64);"
+                }),
+
+                new SchemaMigration(5, "Per-container multipart upload expiry", new List<string>
+                {
+                    // Nullable: NULL means the container inherits the system-wide S3.MultipartUploadExpiryDays.
+                    // A set value (clamped 1..365 by the application) overrides it for uploads initiated in
+                    // this container. No default and no unique index -- unlike resp_database_index.
+                    @"ALTER TABLE containers ADD COLUMN IF NOT EXISTS multipart_upload_expiry_days integer;"
                 })
             };
         }

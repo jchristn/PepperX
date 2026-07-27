@@ -161,7 +161,8 @@
     "deleteTypeName": "Saisissez le nom du conteneur pour confirmer",
     "empty": "Aucun conteneur pour l'instant.",
     "emptyHint": "Créez-en un pour commencer à stocker des objets.",
-    "browse": "Parcourir les objets"
+    "browse": "Parcourir les objets",
+    "browseUploads": "Parcourir les téléversements"
   },
   "cache": {
     "section": "Mise en cache",
@@ -206,6 +207,14 @@
     "conflict": "Cet index est déjà utilisé par un autre conteneur.",
     "negative": "L'index de base de données RESP doit être supérieur ou égal à zéro.",
     "none": "Aucun"
+  },
+  "multipartExpiry": {
+    "label": "Expiration des téléversements multipart (jours)",
+    "hint": "Durée de survie des téléversements multipart en cours avant que le nettoyeur ne les récupère. Laissez vide pour hériter de la valeur par défaut du système.",
+    "placeholder": "Hériter de la valeur par défaut du système",
+    "inherit": "Hériter de la valeur par défaut du système",
+    "notSet": "Hériter de la valeur par défaut du système",
+    "range": "Doit être un nombre entier de jours compris entre 1 et 365."
   },
   "multipart": {
     "section": "Téléversements multipartites en cours",

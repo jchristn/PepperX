@@ -36,6 +36,14 @@ namespace PepperX.Core.Requests
         /// </summary>
         public int? RespDatabaseIndex { get; set; } = null;
 
+        /// <summary>
+        /// Optional per-container expiry, in days, for in-progress multipart uploads. When set (1..365), an
+        /// upload started in this container expires this many days after it begins, overriding the
+        /// system-wide <c>S3.MultipartUploadExpiryDays</c> default. Null (the default) inherits the
+        /// system-wide value.
+        /// </summary>
+        public int? MultipartUploadExpiryDays { get; set; } = null;
+
         #endregion
 
         #region Constructors-and-Factories

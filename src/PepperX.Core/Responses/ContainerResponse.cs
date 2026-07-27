@@ -63,6 +63,12 @@ namespace PepperX.Core.Responses
         public int? RespDatabaseIndex { get; set; } = null;
 
         /// <summary>
+        /// Optional per-container multipart-upload expiry in days. Null when the container inherits the
+        /// system-wide <c>S3.MultipartUploadExpiryDays</c> default.
+        /// </summary>
+        public int? MultipartUploadExpiryDays { get; set; } = null;
+
+        /// <summary>
         /// Per-container cache configuration. Never null.
         /// </summary>
         public ContainerCacheSettings Cache
@@ -115,6 +121,7 @@ namespace PepperX.Core.Responses
                 CreatedUtc = container.CreatedUtc,
                 LastUpdateUtc = container.LastUpdateUtc,
                 RespDatabaseIndex = container.RespDatabaseIndex,
+                MultipartUploadExpiryDays = container.MultipartUploadExpiryDays,
                 Cache = container.Cache.Clone()
             };
         }

@@ -261,7 +261,7 @@ a column default, so the expiry window is a configurable service concern ([D11](
 | | `content_type` | `ContentType` | nullable |
 | | `tags` | `Tags` | `Dictionary<string,string>`, from `x-amz-tagging` at initiate |
 | | `initiated_utc` | `InitiatedUtc` | |
-| | `expires_utc` | `ExpiresUtc` | `InitiatedUtc + MultipartUploadExpiryDays` |
+| | `expires_utc` | `ExpiresUtc` | `InitiatedUtc +` the container's `MultipartUploadExpiryDays` when set, otherwise the system-wide `S3.MultipartUploadExpiryDays` |
 | `multipart_parts` | `id` | `MultipartPart.Id` | `PrettyId` prefix `mpp_` |
 | | `upload_id` | `UploadId` | FK, cascade |
 | | `part_number` | `PartNumber` | clamp 1–`MultipartMaxParts` |
@@ -492,7 +492,8 @@ files; `CleanupOrphanedPartsAsync` removes only unknown, aged directories.
   `IExtentStorageDriver`, `ObjectWriteService`, `ContainerService`, `S3Settings`, optional
   `LoggingModule`; null-checks all required args.
 - [x] **M3-02** `InitiateAsync(container, key, contentType, tags)` → creates the `multipart_uploads`
-  row with `ExpiresUtc = now + MultipartUploadExpiryDays`; returns the `mpu_` upload id. Resolves and
+  row with `ExpiresUtc = now +` the container's `MultipartUploadExpiryDays` when set, otherwise the
+  system-wide `S3.MultipartUploadExpiryDays`; returns the `mpu_` upload id. Resolves and
   validates the container first (`NoSuchBucket` if absent).
 - [x] **M3-03** `UploadPartAsync(container, key, uploadId, partNumber, payload)` per §4.3 — validate
   the upload exists and belongs to the container; clamp/validate the part number; stage via

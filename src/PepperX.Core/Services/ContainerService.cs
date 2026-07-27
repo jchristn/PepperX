@@ -81,6 +81,10 @@ namespace PepperX.Core.Services
                 container.RespDatabaseIndex = request.RespDatabaseIndex.Value;
             }
 
+            // Optional per-container multipart-upload expiry; the model setter clamps to 1..365 and coerces
+            // anything below 1 to null (inherit the system-wide default).
+            container.MultipartUploadExpiryDays = request.MultipartUploadExpiryDays;
+
             await _Db.Containers.CreateAsync(container, token).ConfigureAwait(false);
             await _Storage.WriteContainerManifestAsync(ToManifest(container), token).ConfigureAwait(false);
             _Cache.Configure(container.Id, container.Cache);
@@ -178,6 +182,31 @@ namespace PepperX.Core.Services
             }
 
             Container? updated = await _Db.Containers.UpdateRespDatabaseIndexAsync(container.Id, respDatabaseIndex, token).ConfigureAwait(false);
+            if (updated == null) throw new ContainerNotFoundException(name);
+
+            await _Storage.WriteContainerManifestAsync(ToManifest(updated), token).ConfigureAwait(false);
+            return ContainerResponse.FromModel(updated);
+        }
+
+        /// <summary>
+        /// Set or clear a container's per-container multipart-upload expiry (in days). Passing null clears
+        /// the override so the container inherits the system-wide <c>S3.MultipartUploadExpiryDays</c>. A
+        /// provided value is clamped to 1..365. The new window applies to uploads initiated after the
+        /// change; uploads already in progress keep the expiry stamped when they started.
+        /// </summary>
+        /// <param name="name">Container name.</param>
+        /// <param name="days">The expiry in days, or null to clear the override.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The updated container.</returns>
+        /// <exception cref="ContainerNotFoundException">The container does not exist.</exception>
+        public async Task<ContainerResponse> SetMultipartExpiryAsync(string name, int? days, CancellationToken token = default)
+        {
+            Container container = await RequireAsync(name, token).ConfigureAwait(false);
+
+            // Normalize through the model setter's clamp (1..365; below 1 => null/inherit) before persisting.
+            container.MultipartUploadExpiryDays = days;
+
+            Container? updated = await _Db.Containers.UpdateMultipartExpiryAsync(container.Id, container.MultipartUploadExpiryDays, token).ConfigureAwait(false);
             if (updated == null) throw new ContainerNotFoundException(name);
 
             await _Storage.WriteContainerManifestAsync(ToManifest(updated), token).ConfigureAwait(false);
@@ -300,6 +329,7 @@ namespace PepperX.Core.Services
                 Tags = new Dictionary<string, string>(container.Tags),
                 CreatedUtc = container.CreatedUtc,
                 RespDatabaseIndex = container.RespDatabaseIndex,
+                MultipartUploadExpiryDays = container.MultipartUploadExpiryDays,
                 Cache = container.Cache.Clone()
             };
         }

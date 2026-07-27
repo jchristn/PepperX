@@ -22,7 +22,7 @@ namespace PepperX.Core.Database.Postgresql.Implementations
 
         private const string _Columns = "id, name, tags, object_count, total_bytes, created_utc, last_update_utc, " +
             "cache_enabled, cache_policy, cache_max_objects, cache_max_memory_bytes, cache_evict_count, cache_max_object_bytes, " +
-            "resp_database_index";
+            "resp_database_index, multipart_upload_expiry_days";
         private readonly NpgsqlDataSource _DataSource;
 
         #endregion
@@ -53,8 +53,8 @@ namespace PepperX.Core.Database.Postgresql.Implementations
             await using (NpgsqlCommand cmd = _DataSource.CreateCommand(
                 "INSERT INTO containers (id, name, tags, object_count, total_bytes, created_utc, last_update_utc, " +
                 "cache_enabled, cache_policy, cache_max_objects, cache_max_memory_bytes, cache_evict_count, cache_max_object_bytes, " +
-                "resp_database_index) " +
-                "VALUES (@id, @name, @tags, @oc, @tb, @cu, @lu, @ce, @cp, @cmo, @cmm, @cec, @cmob, @rdi);"))
+                "resp_database_index, multipart_upload_expiry_days) " +
+                "VALUES (@id, @name, @tags, @oc, @tb, @cu, @lu, @ce, @cp, @cmo, @cmm, @cec, @cmob, @rdi, @mued);"))
             {
                 cmd.Parameters.AddWithValue("id", container.Id);
                 cmd.Parameters.AddWithValue("name", container.Name);
@@ -70,6 +70,7 @@ namespace PepperX.Core.Database.Postgresql.Implementations
                 cmd.Parameters.AddWithValue("cec", cache.EvictCount);
                 cmd.Parameters.AddWithValue("cmob", cache.MaxCacheableObjectBytes);
                 cmd.Parameters.AddWithValue("rdi", (object?)container.RespDatabaseIndex ?? DBNull.Value);
+                cmd.Parameters.AddWithValue("mued", (object?)container.MultipartUploadExpiryDays ?? DBNull.Value);
 
                 try
                 {
@@ -222,6 +223,23 @@ namespace PepperX.Core.Database.Postgresql.Implementations
                 {
                     throw new PepperXException(ApiErrorEnum.Conflict, 409, "RESP database index " + respDatabaseIndex + " is already assigned to another container.", ex);
                 }
+                if (affected == 0) return null;
+            }
+
+            return await ReadByIdAsync(id, token).ConfigureAwait(false);
+        }
+
+        /// <inheritdoc />
+        public async Task<Container?> UpdateMultipartExpiryAsync(string id, int? days, CancellationToken token = default)
+        {
+            if (String.IsNullOrEmpty(id)) throw new ArgumentNullException(nameof(id));
+
+            await using (NpgsqlCommand cmd = _DataSource.CreateCommand(
+                "UPDATE containers SET multipart_upload_expiry_days = @mued, last_update_utc = now() WHERE id = @id;"))
+            {
+                cmd.Parameters.AddWithValue("mued", (object?)days ?? DBNull.Value);
+                cmd.Parameters.AddWithValue("id", id);
+                int affected = await cmd.ExecuteNonQueryAsync(token).ConfigureAwait(false);
                 if (affected == 0) return null;
             }
 

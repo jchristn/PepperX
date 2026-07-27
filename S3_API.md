@@ -195,7 +195,8 @@ Semantics worth knowing:
   and it is returned on `GetObject`, `HeadObject`, and `ListObjects` alike.
 - **Multi-node.** Parts and their metadata are shared cluster-wide, so a client may upload parts against
   one node and complete against another.
-- **Expiry.** An upload that is never completed or aborted is reclaimed after `S3.MultipartUploadExpiryDays`
+- **Expiry.** An upload that is never completed or aborted is reclaimed after the container's
+  `MultipartUploadExpiryDays` when set, otherwise the system-wide `S3.MultipartUploadExpiryDays`
   (default 7). A full `rehydrate --mode Rebuild` abandons in-flight uploads (they have no object yet);
   their staged parts are then reclaimed by the janitor.
 - Cross-node in-progress uploads are also visible over REST at

@@ -287,6 +287,45 @@ namespace Test.Shared.Suites
                         Check.True(reassign.IsSuccessStatusCode, "freed index reassignable");
                     }),
 
+                    new TestCaseDescriptor("RestApi", "MultipartExpiryPerContainer", "Per-container multipart expiry is settable and drives an upload's expiry window", async ct =>
+                    {
+                        // Create a container with an explicit 3-day expiry; the response echoes it.
+                        string a = DbTest.NewContainerName();
+                        HttpResponseMessage createA = await (await ClientAsync(ct)).PutAsync(
+                            "/v1.0/containers", Json("{\"Name\":\"" + a + "\",\"MultipartUploadExpiryDays\":3}"), ct);
+                        Check.True(createA.IsSuccessStatusCode, "container created");
+                        Check.True((await createA.Content.ReadAsStringAsync(ct)).Contains("\"MultipartUploadExpiryDays\":3", StringComparison.Ordinal), "expiry echoed on create");
+
+                        // A container created without the field inherits: the serializer omits null-valued
+                        // properties, so the field is absent (not written as null) on the response.
+                        string b = DbTest.NewContainerName();
+                        HttpResponseMessage createB = await (await ClientAsync(ct)).PutAsync("/v1.0/containers", Json("{\"Name\":\"" + b + "\"}"), ct);
+                        Check.False((await createB.Content.ReadAsStringAsync(ct)).Contains("\"MultipartUploadExpiryDays\"", StringComparison.Ordinal), "unset expiry is omitted");
+
+                        // The dedicated endpoint sets and clears the override.
+                        HttpResponseMessage set = await (await ClientAsync(ct)).PutAsync("/v1.0/containers/" + b + "/multipart-expiry", Json("{\"Days\":10}"), ct);
+                        Check.True(set.IsSuccessStatusCode, "expiry set");
+                        Check.True((await set.Content.ReadAsStringAsync(ct)).Contains("\"MultipartUploadExpiryDays\":10", StringComparison.Ordinal), "set value echoed");
+
+                        HttpResponseMessage clear = await (await ClientAsync(ct)).PutAsync("/v1.0/containers/" + b + "/multipart-expiry", Json("{\"Days\":null}"), ct);
+                        Check.False((await clear.Content.ReadAsStringAsync(ct)).Contains("\"MultipartUploadExpiryDays\"", StringComparison.Ordinal), "cleared back to inherit (field omitted)");
+
+                        // Behavior: an upload initiated in the 3-day container expires ~3 days after it starts.
+                        HttpResponseMessage initiate = await (await ClientAsync(ct)).PostAsync(
+                            "/v1.0/containers/" + a + "/multipart-uploads?key=big.bin", Json("{}"), ct);
+                        Check.True(initiate.IsSuccessStatusCode, "upload initiated");
+
+                        HttpResponseMessage list = await (await ClientAsync(ct)).GetAsync("/v1.0/containers/" + a + "/multipart-uploads?maxUploads=10", ct);
+                        using (JsonDocument doc = JsonDocument.Parse(await list.Content.ReadAsStringAsync(ct)))
+                        {
+                            JsonElement upload = doc.RootElement.GetProperty("Uploads")[0];
+                            DateTime initiated = upload.GetProperty("InitiatedUtc").GetDateTime();
+                            DateTime expires = upload.GetProperty("ExpiresUtc").GetDateTime();
+                            double days = (expires - initiated).TotalDays;
+                            Check.True(days > 2.9 && days < 3.1, "upload window reflects the container's 3-day expiry (was " + days.ToString("0.00") + ")");
+                        }
+                    }),
+
                     new TestCaseDescriptor("RestApi", "Enumerate", "Object enumeration filters by label", async ct =>
                     {
                         string name = DbTest.NewContainerName();

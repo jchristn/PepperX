@@ -33,9 +33,12 @@ CACHE_DEFAULT = {
 
 CACHE_FIFO = dict(CACHE_DEFAULT, Policy="FIFO", MaxObjects=500)
 
+# Each entry is (name, tags, cache) and may carry an optional trailing per-container multipart-upload
+# expiry in days (1-365). A container that omits it inherits the system-wide S3.MultipartUploadExpiryDays.
+# "documents" overrides the window so a fresh stack demonstrates the per-container setting.
 CONTAINERS = [
     ("telemetry", {"team": "platform", "env": "prod"}, CACHE_DEFAULT),
-    ("documents", {"team": "legal", "retention": "7y"}, CACHE_DEFAULT),
+    ("documents", {"team": "legal", "retention": "7y"}, CACHE_DEFAULT, 30),
     ("images", {"env": "staging"}, CACHE_FIFO),
     ("backups", {}, CACHE_DEFAULT),
 ]
@@ -99,12 +102,16 @@ def main():
         print(f"No PepperX node at {base_url} (status {status})", file=sys.stderr)
         return 1
 
-    for name, tags, cache in CONTAINERS:
+    for entry in CONTAINERS:
+        name, tags, cache = entry[0], entry[1], entry[2]
+        multipart_expiry_days = entry[3] if len(entry) > 3 else None
         body = {"Name": name}
         if tags:
             body["Tags"] = tags
         if cache:
             body["Cache"] = cache
+        if multipart_expiry_days is not None:
+            body["MultipartUploadExpiryDays"] = multipart_expiry_days
         status, payload = client.request("PUT", "/v1.0/containers", body)
         if status not in (200, 201, 409):
             print(f"  container {name}: {status} {payload[:120]!r}", file=sys.stderr)

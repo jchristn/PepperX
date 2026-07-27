@@ -187,6 +187,13 @@ namespace PepperX.Server.Api.Rest
                 .WithResponse(400, OpenApiResponseMetadata.Create("Negative index"))
                 .WithResponse(404, OpenApiResponseMetadata.NotFound())
                 .WithResponse(409, OpenApiResponseMetadata.Create("Index already assigned to another container")));
+
+            server.Put<UpdateMultipartExpiryRequest>("/v1.0/containers/{container}/multipart-expiry", UpdateMultipartExpiryAsync, openApi => openApi
+                .WithTag("Containers").WithDescription("Set or clear the container's per-container multipart-upload expiry, in days. A set value (1-365) overrides the system-wide S3.MultipartUploadExpiryDays for uploads initiated in this container; a null value clears the override so the container inherits the system-wide default. Only uploads started after the change use the new window.")
+                .WithParameter(OpenApiParameterMetadata.Path("container", "Container name"))
+                .WithRequestBody(OpenApiRequestBodyMetadata.Json(null, "The expiry in days to apply, or null to clear the override", true))
+                .WithResponse(200, OpenApiResponseMetadata.Json("Updated container", null))
+                .WithResponse(404, OpenApiResponseMetadata.NotFound()));
         }
 
         #endregion
@@ -521,6 +528,16 @@ namespace PepperX.Server.Api.Rest
                 string name = RouteHelpers.Container(request);
                 UpdateRespIndexRequest body = request.GetData<UpdateRespIndexRequest>() ?? new UpdateRespIndexRequest();
                 return await _Containers.SetRespDatabaseIndexAsync(name, body.Index, request.CancellationToken).ConfigureAwait(false);
+            });
+        }
+
+        private Task<object> UpdateMultipartExpiryAsync(ApiRequest request)
+        {
+            return RouteHelpers.HandleAsync(request, async () =>
+            {
+                string name = RouteHelpers.Container(request);
+                UpdateMultipartExpiryRequest body = request.GetData<UpdateMultipartExpiryRequest>() ?? new UpdateMultipartExpiryRequest();
+                return await _Containers.SetMultipartExpiryAsync(name, body.Days, request.CancellationToken).ConfigureAwait(false);
             });
         }
 

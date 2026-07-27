@@ -14,8 +14,9 @@ All notable changes to PepperX are documented here. The format follows
   on completion, so a multipart-assembled object is indistinguishable from one written in a single
   `PutObject`. The AWS CLI and SDKs use multipart automatically for large objects. Parts and their
   metadata are shared cluster-wide, so an upload may be started on one node and completed on another.
-  Non-final parts must be at least 5 MiB; uncompleted uploads expire after `S3.MultipartUploadExpiryDays`
-  (default 7) and are reclaimed by the janitor. `ListParts` and `ListMultipartUploads` are paginated.
+  Non-final parts must be at least 5 MiB; uncompleted uploads expire after the container's
+  `MultipartUploadExpiryDays` when set, otherwise the system-wide `S3.MultipartUploadExpiryDays`
+  (default 7), and are reclaimed by the janitor. `ListParts` and `ListMultipartUploads` are paginated.
 - **Content MD5 on every object.** Objects now record an MD5 alongside the existing SHA-256, computed in
   the same streamed write pass. Exposed over REST as the `Md5` field on object write/metadata responses
   and the `x-pepperx-md5` response header.
@@ -29,6 +30,13 @@ All notable changes to PepperX are documented here. The format follows
   `DELETE …/parts/{partNumber}` discards a single staged part; the parts list now includes each part's
   SHA-256 alongside its MD5. In-progress uploads — and, per upload, their parts — are surfaced and
   manageable in the dashboard (a dedicated Uploads page and an upload-detail parts modal).
+- **Per-container multipart-upload expiry.** A container may override the system-wide
+  `S3.MultipartUploadExpiryDays` with its own `MultipartUploadExpiryDays` (`1`–`365`, `null` inherits the
+  default). The value can be set on create (alongside `Cache` and `RespDatabaseIndex`) or changed later
+  via the new `PUT /v1.0/containers/{container}/multipart-expiry` endpoint (body `{"Days": <int|null>}`,
+  `null` clears the override); it is returned as `MultipartUploadExpiryDays` on every `ContainerResponse`.
+  At initiate time the server stamps each upload's `ExpiresUtc` from the container's value when set,
+  and the janitor still purges by that stamped `ExpiresUtc`.
 - **S3 ranged / large-object downloads.** `GetObject` now honors `Range` requests, returning `206 Partial
   Content` with a `Content-Range: bytes start-end/total` header (via S3Server 7.3.1's `S3Object.TotalSize`).
   Ranged/multipart downloads over `aws s3 cp`, the AWS SDKs, and `mc cp` now round-trip large objects

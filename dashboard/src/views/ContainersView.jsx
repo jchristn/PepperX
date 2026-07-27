@@ -111,6 +111,31 @@ function validateRespIndexDraft(value, t) {
 }
 
 /**
+ * Normalize a multipart-expiry input string: blank/whitespace means "inherit the system default"
+ * (null), otherwise the numeric day count the server expects. Kept separate from validation so
+ * callers can build the request body.
+ */
+function expiryToRequest(value) {
+  const trimmed = String(value ?? '').trim();
+  if (trimmed === '') return null;
+  return Number(trimmed);
+}
+
+/** Turn a container's multipart-expiry override into editable input state (null becomes an empty string). */
+function expiryToDraft(days) {
+  return days === undefined || days === null ? '' : String(days);
+}
+
+/** Validate a multipart-expiry draft: blank inherits the default, otherwise it must be a whole number 1..365. */
+function validateExpiryDraft(value, t) {
+  const trimmed = String(value ?? '').trim();
+  if (trimmed === '') return null;
+  const parsed = Number(trimmed);
+  if (!Number.isInteger(parsed) || parsed < 1 || parsed > 365) return t('multipartExpiry.range');
+  return null;
+}
+
+/**
  * The editable cache-settings fields, shared by the create modal and the detail modal's edit mode.
  *
  * The toggle gates the rest: when caching is off the numeric knobs are irrelevant, so they collapse.
@@ -214,6 +239,32 @@ function RespIndexField({ idPrefix, value, onChange, error }) {
   );
 }
 
+/**
+ * The editable multipart-upload expiry field, shared by the create modal and the detail modal's edit
+ * mode. Blank inherits the system-wide default; a whole number 1..365 overrides it with that many days.
+ */
+function MultipartExpiryField({ idPrefix, value, onChange, error }) {
+  const { t } = useTranslation();
+  return (
+    <Field
+      id={`${idPrefix}-multipart-expiry`}
+      label={t('multipartExpiry.label')}
+      hint={t('multipartExpiry.hint')}
+      error={error}
+    >
+      <input
+        id={`${idPrefix}-multipart-expiry`}
+        type="number"
+        min="1"
+        max="365"
+        value={value}
+        placeholder={t('multipartExpiry.placeholder')}
+        onChange={(event) => onChange(event.target.value)}
+      />
+    </Field>
+  );
+}
+
 export default function ContainersView() {
   const { t } = useTranslation();
   const { client, notify } = useApp();
@@ -235,9 +286,11 @@ export default function ContainersView() {
   const [newTags, setNewTags] = useState({});
   const [newCache, setNewCache] = useState(cacheToDraft(CACHE_DEFAULTS));
   const [newRespIndex, setNewRespIndex] = useState('');
+  const [newMultipartExpiry, setNewMultipartExpiry] = useState('');
   const [nameError, setNameError] = useState(null);
   const [cacheError, setCacheError] = useState(null);
   const [respError, setRespError] = useState(null);
+  const [expiryError, setExpiryError] = useState(null);
   const [saving, setSaving] = useState(false);
 
   // One modal renders both View and Edit; `detailMode` decides whether the tags are editable.
@@ -285,9 +338,11 @@ export default function ContainersView() {
     setNewTags({});
     setNewCache(cacheToDraft(CACHE_DEFAULTS));
     setNewRespIndex('');
+    setNewMultipartExpiry('');
     setNameError(null);
     setCacheError(null);
     setRespError(null);
+    setExpiryError(null);
     setCreateOpen(true);
   };
 
@@ -310,6 +365,12 @@ export default function ContainersView() {
       return;
     }
 
+    const expiryValidation = validateExpiryDraft(newMultipartExpiry, t);
+    if (expiryValidation) {
+      setExpiryError(expiryValidation);
+      return;
+    }
+
     setSaving(true);
     try {
       await client.createContainer(
@@ -317,6 +378,7 @@ export default function ContainersView() {
         cleanTags(newTags),
         draftToCacheRequest(newCache),
         respIndexToRequest(newRespIndex),
+        expiryToRequest(newMultipartExpiry),
       );
       setCreateOpen(false);
       notify(t('containers.create'), 'success');
@@ -410,6 +472,7 @@ export default function ContainersView() {
             { key: 'edit', label: t('common.edit'), onClick: () => openDetail(item, 'edit') },
             { key: 'json', label: t('common.viewJson'), onClick: () => setJsonTarget(item) },
             { key: 'browse', label: t('containers.browse'), onClick: () => navigate(`/containers/${encodeURIComponent(item.Name)}`) },
+            { key: 'browseUploads', label: t('containers.browseUploads'), onClick: () => navigate(`/uploads?container=${encodeURIComponent(item.Name)}`) },
             { key: 'delete', label: t('common.delete'), variant: 'danger', onClick: () => setDeleteTarget(item) },
           ]}
         />
@@ -525,6 +588,16 @@ export default function ContainersView() {
             setRespError(null);
           }}
         />
+
+        <MultipartExpiryField
+          idPrefix="create"
+          value={newMultipartExpiry}
+          error={expiryError}
+          onChange={(next) => {
+            setNewMultipartExpiry(next);
+            setExpiryError(null);
+          }}
+        />
       </Modal>
 
       <ContainerDetailModal
@@ -593,6 +666,10 @@ function ContainerDetailModal({ container, mode, onClose, onSaved }) {
   const [respIndexDraft, setRespIndexDraft] = useState('');
   const [respError, setRespError] = useState(null);
 
+  // The container's multipart-upload expiry override, edited alongside the cache settings.
+  const [expiryDraft, setExpiryDraft] = useState('');
+  const [expiryError, setExpiryError] = useState(null);
+
   // The container's in-progress multipart uploads, read-only. `abortTarget` drives the confirm modal.
   const [uploads, setUploads] = useState([]);
   const [uploadsLoading, setUploadsLoading] = useState(false);
@@ -622,6 +699,8 @@ function ContainerDetailModal({ container, mode, onClose, onSaved }) {
     setTags({ ...(container.Tags ?? {}) });
     setRespIndexDraft(respIndexToDraft(container.RespDatabaseIndex));
     setRespError(null);
+    setExpiryDraft(expiryToDraft(container.MultipartUploadExpiryDays));
+    setExpiryError(null);
     setCache(null);
     setCacheError(null);
     setCacheLoading(true);
@@ -664,6 +743,12 @@ function ContainerDetailModal({ container, mode, onClose, onSaved }) {
       return;
     }
 
+    const expiryValidation = validateExpiryDraft(expiryDraft, t);
+    if (expiryValidation) {
+      setExpiryError(expiryValidation);
+      return;
+    }
+
     setBusy(true);
     try {
       await client.updateContainerTags(container.Name, cleanTags(tags));
@@ -676,6 +761,12 @@ function ContainerDetailModal({ container, mode, onClose, onSaved }) {
         respIndexToRequest(respIndexDraft),
       );
       setRespIndexDraft(respIndexToDraft(refreshed?.RespDatabaseIndex));
+      // The multipart-expiry endpoint also returns the refreshed container; keep the draft in sync.
+      const expiryRefreshed = await client.updateContainerMultipartExpiry(
+        container.Name,
+        expiryToRequest(expiryDraft),
+      );
+      setExpiryDraft(expiryToDraft(expiryRefreshed?.MultipartUploadExpiryDays));
       notify(t('cache.saved'), 'success');
       await onSaved();
     } catch (caught) {
@@ -881,6 +972,27 @@ function ContainerDetailModal({ container, mode, onClose, onSaved }) {
             {container.RespDatabaseIndex === undefined || container.RespDatabaseIndex === null
               ? t('resp.notSet')
               : formatters.number(container.RespDatabaseIndex)}
+          </dd>
+        </dl>
+      )}
+
+      {editable ? (
+        <MultipartExpiryField
+          idPrefix="edit"
+          value={expiryDraft}
+          error={expiryError}
+          onChange={(next) => {
+            setExpiryDraft(next);
+            setExpiryError(null);
+          }}
+        />
+      ) : (
+        <dl className="detail-grid">
+          <dt>{t('multipartExpiry.label')}</dt>
+          <dd>
+            {container.MultipartUploadExpiryDays === undefined || container.MultipartUploadExpiryDays === null
+              ? t('multipartExpiry.notSet')
+              : formatters.number(container.MultipartUploadExpiryDays)}
           </dd>
         </dl>
       )}

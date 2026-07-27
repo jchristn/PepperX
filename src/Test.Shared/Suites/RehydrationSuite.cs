@@ -52,7 +52,8 @@ namespace Test.Shared.Suites
                             {
                                 Name = cC,
                                 Cache = new UpdateCacheSettingsRequest { Enabled = true, Policy = CacheEvictionPolicyEnum.FIFO, MaxObjects = 333, EvictCount = 9, MaxCacheableObjectBytes = 4096 },
-                                RespDatabaseIndex = respIdx
+                                RespDatabaseIndex = respIdx,
+                                MultipartUploadExpiryDays = 45
                             }, ct);
                             await Write(stack, cA, "photo1", "aaa", new List<string> { "animal" }, new Dictionary<string, string> { { "team", "a" } }, new Dictionary<string, object> { { "meta", 1 } }, ct);
                             await Write(stack, cA, "photo2", "bbbb", new List<string> { "plant" }, null, null, ct);

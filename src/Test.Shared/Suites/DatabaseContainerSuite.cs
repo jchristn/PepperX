@@ -98,6 +98,23 @@ namespace Test.Shared.Suites
                         Check.Equal(free, ok!.RespDatabaseIndex ?? -1, "a free index is accepted");
                     }),
 
+                    DbTest.Case("DatabaseContainer", "MultipartExpirySetReadClear", "Set, persist, and clear a per-container multipart expiry", async (driver, ct) =>
+                    {
+                        Container created = await DbTest.NewContainerAsync(driver, ct);
+                        Check.True(created.MultipartUploadExpiryDays == null, "new container inherits (null) by default");
+
+                        Container? set = await driver.Containers.UpdateMultipartExpiryAsync(created.Id, 30, ct);
+                        Check.Equal(30, set!.MultipartUploadExpiryDays ?? -1, "expiry set");
+
+                        Container? byId = await driver.Containers.ReadByIdAsync(created.Id, ct);
+                        Check.Equal(30, byId!.MultipartUploadExpiryDays ?? -1, "expiry persisted");
+
+                        Container? cleared = await driver.Containers.UpdateMultipartExpiryAsync(created.Id, null, ct);
+                        Check.True(cleared!.MultipartUploadExpiryDays == null, "expiry cleared (inherit)");
+                        Container? afterClear = await driver.Containers.ReadByIdAsync(created.Id, ct);
+                        Check.True(afterClear!.MultipartUploadExpiryDays == null, "cleared value persisted");
+                    }),
+
                     DbTest.Case("DatabaseContainer", "Delete", "Delete a container", async (driver, ct) =>
                     {
                         Container created = await DbTest.NewContainerAsync(driver, ct);

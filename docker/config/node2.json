@@ -55,7 +55,8 @@
     "Region": "us-west-1",
     "AllowAnonymous": true,
     "StaticAccessKey": "pepperx",
-    "StaticSecretKey": "pepperx"
+    "StaticSecretKey": "pepperx",
+    "MultipartUploadExpiryDays": 7
   },
   "Resp": {
     "Enabled": true,

@@ -113,6 +113,27 @@ namespace PepperX.Core.Models
         }
 
         /// <summary>
+        /// Optional per-container expiry, in days, for in-progress S3/REST multipart uploads. When set, an
+        /// upload initiated in this container expires this many days after it starts, overriding the
+        /// system-wide <c>S3.MultipartUploadExpiryDays</c> default. Null means the container inherits the
+        /// system-wide default. A provided value is clamped to 1..365; a value below 1 is coerced to null
+        /// (inherit).
+        /// </summary>
+        public int? MultipartUploadExpiryDays
+        {
+            get
+            {
+                return _MultipartUploadExpiryDays;
+            }
+            set
+            {
+                if (!value.HasValue || value.Value < 1) _MultipartUploadExpiryDays = null;
+                else if (value.Value > 365) _MultipartUploadExpiryDays = 365;
+                else _MultipartUploadExpiryDays = value;
+            }
+        }
+
+        /// <summary>
         /// Per-container cache configuration, persisted in the metadata database. Never null; a null
         /// assignment is coalesced to a fresh default so downstream code never null-checks it.
         /// </summary>
@@ -150,6 +171,7 @@ namespace PepperX.Core.Models
         private long _ObjectCount = 0;
         private long _TotalBytes = 0;
         private int? _RespDatabaseIndex = null;
+        private int? _MultipartUploadExpiryDays = null;
         private ContainerCacheSettings _Cache = new ContainerCacheSettings();
 
         #endregion
