@@ -331,6 +331,7 @@ export default function RequestHistoryView() {
           void load(filters, 1, size, rangeId);
         }}
         onRefresh={() => void load()}
+        autoRefresh={false}
         loading={loading}
         storageKey="requests"
         emptyMessage={totalCount === 0 && !filters.method && !filters.pathContains ? t('requests.empty') : t('requests.noMatches')}

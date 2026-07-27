@@ -21,6 +21,7 @@ export default function TableFrame({
   onPageChange,
   onPageSizeChange,
   onRefresh,
+  autoRefresh = true,
   loading = false,
   emptyMessage,
   onRowClick,
@@ -55,6 +56,7 @@ export default function TableFrame({
         onPageChange={onPageChange}
         onPageSizeChange={onPageSizeChange}
         onRefresh={onRefresh}
+        autoRefresh={autoRefresh}
         disabled={loading}
         storageKey={storageKey}
         leftSlot={leftSlot}

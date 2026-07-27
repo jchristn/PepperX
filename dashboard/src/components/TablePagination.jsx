@@ -48,6 +48,7 @@ export default function TablePagination({
   onPageChange,
   onPageSizeChange,
   onRefresh = null,
+  autoRefresh = true,
   disabled = false,
   storageKey = null,
   leftSlot = null,
@@ -175,7 +176,7 @@ export default function TablePagination({
           <ChevronLastIcon size={16} />
         </button>
 
-        {onRefresh ? (
+        {onRefresh && autoRefresh ? (
           <AutoRefresh onRefresh={onRefresh} storageKey={storageKey} disabled={disabled} />
         ) : null}
 
