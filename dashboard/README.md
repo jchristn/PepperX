@@ -155,6 +155,16 @@ dashboard validates only that the value is a whole number `>= 0` — it does not
 `DatabaseCount`, so the upper bound is left to the server. All strings live under the `resp.*`
 translation keys.
 
+## In-progress multipart uploads
+
+The container **detail** modal lists the container's in-progress multipart uploads — uploads that
+were initiated but never completed or aborted, which hold storage until they finish or expire. The
+list loads when the modal opens through `ApiClient.containerMultipartUploads(name)` (which caps at
+`maxUploads=1000`) and shows the object key, upload ID, and initiated/expires times. An **Abort**
+action on each row calls `ApiClient.abortMultipartUpload(name, uploadId)` behind a confirmation, then
+refreshes the list; the abort is idempotent server-side. When there are none, the panel shows a clear
+empty state. All strings live under the `multipart.*` translation keys.
+
 ## Known gaps
 
 - **No focus trap in modals.** Escape closes them and focus moves into the dialog on open, but Tab

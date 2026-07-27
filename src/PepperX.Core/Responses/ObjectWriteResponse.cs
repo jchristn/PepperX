@@ -35,6 +35,11 @@ namespace PepperX.Core.Responses
         public string Sha256 { get; set; } = String.Empty;
 
         /// <summary>
+        /// Lowercase hex MD5 of the payload (the content hash used to derive the S3 ETag). May be null.
+        /// </summary>
+        public string? Md5 { get; set; } = null;
+
+        /// <summary>
         /// Content type of the payload. May be null.
         /// </summary>
         public string? ContentType { get; set; } = null;

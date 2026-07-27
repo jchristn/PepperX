@@ -16,7 +16,7 @@ namespace PepperX.Core.Database.Postgresql.Implementations
     {
         #region Private-Members
 
-        private const string _ExtentColumns = "e.id, e.container_id, e.object_key, e.state, e.size_bytes, e.sha256, e.content_type, e.storage_driver, e.storage_location, e.has_metadata_object, e.created_utc, e.last_update_utc";
+        private const string _ExtentColumns = "e.id, e.container_id, e.object_key, e.state, e.size_bytes, e.sha256, e.md5, e.etag, e.content_type, e.storage_driver, e.storage_location, e.has_metadata_object, e.created_utc, e.last_update_utc";
         private readonly NpgsqlDataSource _DataSource;
 
         #endregion

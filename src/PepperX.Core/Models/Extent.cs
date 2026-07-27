@@ -99,6 +99,18 @@ namespace PepperX.Core.Models
         }
 
         /// <summary>
+        /// Lowercase hex MD5 of the payload (the content hash used to derive the S3 ETag). Null for
+        /// extents written before MD5 was recorded.
+        /// </summary>
+        public string? Md5 { get; set; } = null;
+
+        /// <summary>
+        /// Persisted S3 ETag for a multipart-assembled object, of the form <c>hex(md5-of-part-md5s)-N</c>.
+        /// Null for single-part objects (whose S3 ETag is derived from <see cref="Md5"/>).
+        /// </summary>
+        public string? Etag { get; set; } = null;
+
+        /// <summary>
         /// Content type of the payload. May be null.
         /// </summary>
         public string? ContentType { get; set; } = null;

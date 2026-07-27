@@ -205,6 +205,19 @@
     "negative": "El índice de base de datos RESP debe ser cero o mayor.",
     "none": "Ninguno"
   },
+  "multipart": {
+    "section": "Cargas multiparte en curso",
+    "hint": "Cargas que se iniciaron pero nunca se completaron ni cancelaron. Ocupan almacenamiento hasta que finalizan o caducan.",
+    "key": "Clave del objeto",
+    "uploadId": "ID de carga",
+    "initiated": "Iniciada",
+    "expires": "Caduca",
+    "abort": "Cancelar",
+    "abortTitle": "Cancelar carga multiparte",
+    "abortConfirm": "¿Cancelar la carga multiparte de {{key}}? Se descartarán las partes ya cargadas.",
+    "aborted": "Carga multiparte cancelada.",
+    "empty": "No hay cargas multiparte en curso."
+  },
   "objects": {
     "title": "Objetos en {{container}}",
     "subtitle": "Cada objeto es un extent inmutable: una carga binaria más etiquetas, marcas y JSON libre.",

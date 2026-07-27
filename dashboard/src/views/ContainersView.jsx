@@ -13,6 +13,7 @@ import { useApp } from '@context/AppContext.jsx';
 import useFormatters from '@hooks/useFormatters.js';
 import ActionMenu from '@components/ActionMenu.jsx';
 import ConfirmModal from '@components/ConfirmModal.jsx';
+import DataTable from '@components/DataTable.jsx';
 import Modal from '@components/Modal.jsx';
 import PageHeader from '@components/PageHeader.jsx';
 import TableFrame from '@components/TableFrame.jsx';
@@ -567,6 +568,30 @@ function ContainerDetailModal({ container, mode, onClose, onSaved }) {
   const [respIndexDraft, setRespIndexDraft] = useState('');
   const [respError, setRespError] = useState(null);
 
+  // The container's in-progress multipart uploads, read-only. `abortTarget` drives the confirm modal.
+  const [uploads, setUploads] = useState([]);
+  const [uploadsLoading, setUploadsLoading] = useState(false);
+  const [abortTarget, setAbortTarget] = useState(null);
+
+  const loadUploads = useCallback(async () => {
+    if (!container) return;
+    setUploadsLoading(true);
+    try {
+      const result = await client.containerMultipartUploads(container.Name);
+      setUploads(result?.uploads ?? []);
+    } catch {
+      // Supplementary panel: a transient error just shows no uploads rather than blocking the modal.
+      setUploads([]);
+    } finally {
+      setUploadsLoading(false);
+    }
+  }, [client, container]);
+
+  useEffect(() => {
+    setAbortTarget(null);
+    void loadUploads();
+  }, [loadUploads]);
+
   useEffect(() => {
     if (!container) return undefined;
     setTags({ ...(container.Tags ?? {}) });
@@ -638,7 +663,60 @@ function ContainerDetailModal({ container, mode, onClose, onSaved }) {
     }
   };
 
+  const submitAbort = async () => {
+    try {
+      await client.abortMultipartUpload(container.Name, abortTarget.uploadId);
+      setAbortTarget(null);
+      notify(t('multipart.aborted'), 'success');
+      await loadUploads();
+    } catch (caught) {
+      notify(caught.message, 'danger');
+    }
+  };
+
+  const uploadColumns = [
+    {
+      key: 'key',
+      label: t('multipart.key'),
+      render: (item) => <span className="mono">{item.key}</span>,
+    },
+    {
+      key: 'uploadId',
+      label: t('multipart.uploadId'),
+      render: (item) => (
+        <span className="mono" title={item.uploadId}>
+          {item.uploadId}
+        </span>
+      ),
+    },
+    {
+      key: 'initiatedUtc',
+      label: t('multipart.initiated'),
+      render: (item) => (
+        <span title={formatters.dateTime(item.initiatedUtc)}>{formatters.relative(item.initiatedUtc)}</span>
+      ),
+    },
+    {
+      key: 'expiresUtc',
+      label: t('multipart.expires'),
+      render: (item) => (
+        <span title={formatters.dateTime(item.expiresUtc)}>{formatters.relative(item.expiresUtc)}</span>
+      ),
+    },
+    {
+      key: 'actions',
+      label: '',
+      style: { width: '48px' },
+      render: (item) => (
+        <button type="button" className="button-danger" onClick={() => setAbortTarget(item)}>
+          {t('multipart.abort')}
+        </button>
+      ),
+    },
+  ];
+
   return (
+    <>
     <Modal
       open={Boolean(container)}
       onClose={onClose}
@@ -781,6 +859,30 @@ function ContainerDetailModal({ container, mode, onClose, onSaved }) {
           </dd>
         </dl>
       )}
+
+      <h3 className="detail-heading">{t('multipart.section')}</h3>
+      <p className="muted">{t('multipart.hint')}</p>
+      {uploadsLoading ? (
+        <p className="muted">{t('common.loading')}</p>
+      ) : (
+        <DataTable
+          columns={uploadColumns}
+          items={uploads}
+          rowId={(item) => item.uploadId}
+          emptyMessage={t('multipart.empty')}
+        />
+      )}
     </Modal>
+
+    <ConfirmModal
+      open={Boolean(abortTarget)}
+      danger
+      title={t('multipart.abortTitle')}
+      message={abortTarget ? t('multipart.abortConfirm', { key: abortTarget.key }) : ''}
+      confirmLabel={t('multipart.abort')}
+      onConfirm={submitAbort}
+      onCancel={() => setAbortTarget(null)}
+    />
+    </>
   );
 }

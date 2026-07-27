@@ -58,6 +58,27 @@ namespace Test.Shared.Suites
                         Check.Equal(HttpStatusCode.NoContent, delete.StatusCode, "container deleted");
                     }),
 
+                    new TestCaseDescriptor("RestApi", "MultipartUploads", "In-progress multipart uploads list and abort routes are wired", async ct =>
+                    {
+                        string name = DbTest.NewContainerName();
+                        await (await ClientAsync(ct)).PutAsync("/v1.0/containers", Json("{\"Name\":\"" + name + "\"}"), ct);
+
+                        // A container with no uploads returns an empty, well-formed page (not a 404).
+                        HttpResponseMessage list = await (await ClientAsync(ct)).GetAsync("/v1.0/containers/" + name + "/multipart-uploads", ct);
+                        Check.True(list.IsSuccessStatusCode, "empty uploads list ok");
+                        Check.True((await list.Content.ReadAsStringAsync(ct)).Contains("uploads", StringComparison.OrdinalIgnoreCase), "uploads page shape");
+
+                        // Abort is idempotent — aborting an unknown upload succeeds (204).
+                        HttpResponseMessage abort = await (await ClientAsync(ct)).DeleteAsync("/v1.0/containers/" + name + "/multipart-uploads/mpu_does_not_exist", ct);
+                        Check.Equal(HttpStatusCode.NoContent, abort.StatusCode, "abort unknown upload is no-op");
+
+                        // Listing uploads for a missing container is a 404.
+                        HttpResponseMessage missing = await (await ClientAsync(ct)).GetAsync("/v1.0/containers/no-such-container-xyz/multipart-uploads", ct);
+                        Check.Equal(HttpStatusCode.NotFound, missing.StatusCode, "missing container 404");
+
+                        await (await ClientAsync(ct)).DeleteAsync("/v1.0/containers/" + name, ct);
+                    }),
+
                     new TestCaseDescriptor("RestApi", "ObjectLifecycle", "Object write, read (slashed key), metadata, delete", async ct =>
                     {
                         string name = DbTest.NewContainerName();

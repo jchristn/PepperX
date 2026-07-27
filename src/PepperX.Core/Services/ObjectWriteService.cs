@@ -81,6 +81,9 @@ namespace PepperX.Core.Services
         /// <param name="metadataObject">Freeform metadata object, or null.</param>
         /// <param name="noOverwrite">When true, fail if the key already exists.</param>
         /// <param name="token">Cancellation token.</param>
+        /// <param name="etagOverride">Optional S3 ETag to persist on the object (used by multipart completion
+        /// to store the <c>digest-N</c> ETag, which differs from the content MD5). Null for ordinary writes,
+        /// whose S3 ETag is derived from the content MD5.</param>
         /// <returns>The write result.</returns>
         /// <exception cref="ContainerNotFoundException">The container does not exist.</exception>
         /// <exception cref="ObjectAlreadyExistsException">The key exists and no-overwrite was requested.</exception>
@@ -94,7 +97,8 @@ namespace PepperX.Core.Services
             Dictionary<string, string>? tags,
             object? metadataObject,
             bool noOverwrite,
-            CancellationToken token = default)
+            CancellationToken token = default,
+            string? etagOverride = null)
         {
             if (payload == null) throw new ArgumentNullException(nameof(payload));
 
@@ -104,7 +108,7 @@ namespace PepperX.Core.Services
             Dictionary<string, string> normalizedTags = tags ?? new Dictionary<string, string>();
             ValidateMetadata(normalizedLabels, normalizedTags, metadataObject);
 
-            ExtentHeader header = BuildHeader(container, key, contentType, normalizedLabels, normalizedTags, metadataObject);
+            ExtentHeader header = BuildHeader(container, key, contentType, normalizedLabels, normalizedTags, metadataObject, etagOverride);
 
             // Write-through capture (D-goal): tee the payload into memory as it streams to storage, bounded
             // by the container's per-object ceiling, so a within-ceiling write can populate the cache in one
@@ -128,6 +132,7 @@ namespace PepperX.Core.Services
                 }
 
                 extent = BuildExtent(container, key, contentType, result, metadataObject != null, normalizedLabels, normalizedTags, header);
+                extent.Etag = etagOverride;
 
                 try
                 {
@@ -194,7 +199,7 @@ namespace PepperX.Core.Services
             {
                 if (handle == null) throw new ObjectNotFoundException(containerName, key);
 
-                ExtentHeader header = BuildHeader(container, key, existing.ContentType, labels, tags, metadataObject);
+                ExtentHeader header = BuildHeader(container, key, existing.ContentType, labels, tags, metadataObject, existing.Etag);
 
                 long ceiling = container.Cache.MaxCacheableObjectBytes;
                 bool tryCapture = container.Cache.Enabled && ceiling > 0;
@@ -206,6 +211,7 @@ namespace PepperX.Core.Services
                 {
                     ExtentWriteResult result = await _Storage.WriteAsync(header, (Stream?)capture ?? handle.Payload, token).ConfigureAwait(false);
                     newExtent = BuildExtent(container, key, existing.ContentType, result, metadataObject != null, labels, tags, header);
+                    newExtent.Etag = existing.Etag;
 
                     await handle.DisposeAsync().ConfigureAwait(false);
 
@@ -261,6 +267,8 @@ namespace PepperX.Core.Services
                 ContainerName = container.Name,
                 SizeBytes = extent.SizeBytes,
                 Sha256 = extent.Sha256,
+                Md5 = extent.Md5,
+                Etag = extent.Etag,
                 ContentType = extent.ContentType,
                 Labels = new List<string>(extent.Labels),
                 Tags = new Dictionary<string, string>(extent.Tags),
@@ -364,7 +372,7 @@ namespace PepperX.Core.Services
             return result;
         }
 
-        private static ExtentHeader BuildHeader(Container container, string key, string? contentType, List<string> labels, Dictionary<string, string> tags, object? metadataObject)
+        private static ExtentHeader BuildHeader(Container container, string key, string? contentType, List<string> labels, Dictionary<string, string> tags, object? metadataObject, string? etag)
         {
             return new ExtentHeader
             {
@@ -373,6 +381,7 @@ namespace PepperX.Core.Services
                 ContainerName = container.Name,
                 Key = key,
                 ContentType = contentType,
+                Etag = etag,
                 Labels = labels,
                 Tags = tags,
                 Object = metadataObject,
@@ -390,6 +399,7 @@ namespace PepperX.Core.Services
                 State = PepperX.Core.Enums.ExtentStateEnum.Active,
                 SizeBytes = result.SizeBytes,
                 Sha256 = result.Sha256,
+                Md5 = result.Md5,
                 ContentType = contentType,
                 StorageDriver = PepperX.Core.Enums.StorageDriverTypeEnum.Disk,
                 StorageLocation = result.Location,
@@ -409,6 +419,7 @@ namespace PepperX.Core.Services
                 ContainerId = extent.ContainerId,
                 SizeBytes = extent.SizeBytes,
                 Sha256 = extent.Sha256,
+                Md5 = extent.Md5,
                 ContentType = extent.ContentType,
                 Replaced = replaced
             };

@@ -43,6 +43,11 @@ namespace PepperX.Core.Database
         IRequestHistoryMethods RequestHistory { get; }
 
         /// <summary>
+        /// S3 multipart upload data access.
+        /// </summary>
+        IMultipartMethods MultipartUploads { get; }
+
+        /// <summary>
         /// Initialize the driver: open the connection pool and apply pending migrations.
         /// </summary>
         /// <param name="token">Cancellation token.</param>

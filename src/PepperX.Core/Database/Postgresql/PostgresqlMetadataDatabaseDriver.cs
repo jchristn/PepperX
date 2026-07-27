@@ -49,6 +49,11 @@ namespace PepperX.Core.Database.Postgresql
         /// </summary>
         public IRequestHistoryMethods RequestHistory => _RequestHistory ?? throw new InvalidOperationException("Driver is not initialized.");
 
+        /// <summary>
+        /// S3 multipart upload data access.
+        /// </summary>
+        public IMultipartMethods MultipartUploads => _MultipartUploads ?? throw new InvalidOperationException("Driver is not initialized.");
+
         #endregion
 
         #region Private-Members
@@ -63,6 +68,7 @@ namespace PepperX.Core.Database.Postgresql
         private IReadLeaseMethods? _ReadLeases;
         private INodeMethods? _Nodes;
         private IRequestHistoryMethods? _RequestHistory;
+        private IMultipartMethods? _MultipartUploads;
         private bool _Disposed;
 
         #endregion
@@ -101,6 +107,7 @@ namespace PepperX.Core.Database.Postgresql
             _ReadLeases = new PostgresqlReadLeaseMethods(_DataSource);
             _Nodes = new PostgresqlNodeMethods(_DataSource);
             _RequestHistory = new PostgresqlRequestHistoryMethods(_DataSource);
+            _MultipartUploads = new PostgresqlMultipartMethods(_DataSource);
 
             _Logging?.Info(_Header + "initialized");
         }

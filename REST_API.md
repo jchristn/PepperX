@@ -260,6 +260,42 @@ database): claiming one another container already holds returns `409 Conflict`. 
 `Resp.DatabaseCount` (16 by default). The assignment is mirrored into the container manifest, so a full
 `rehydrate --mode Rebuild` preserves it. See [`RESP_API.md`](RESP_API.md#addressing-an-arbitrarily-named-container).
 
+### `GET /v1.0/containers/{container}/multipart-uploads`
+
+List the container's in-progress S3 multipart uploads. Multipart uploads are initiated over the
+[S3 protocol](S3_API.md#multipart-upload); this endpoint gives the REST surface (and the dashboard)
+read access to what is currently in flight.
+
+```bash
+curl 'http://localhost:8000/v1.0/containers/telemetry/multipart-uploads?maxUploads=100'
+```
+
+| Parameter | Type | Default | Notes |
+|---|---|---|---|
+| `maxUploads` | int | 1000 | Page size, 1–1000 |
+| `keyMarker` | string | — | Resume after this object key |
+| `uploadIdMarker` | string | — | Resume after this upload id (paired with `keyMarker`) |
+
+```json
+{
+  "Uploads": [
+    { "UploadId": "mpu_...", "Key": "big/object.bin", "ContentType": "application/octet-stream",
+      "InitiatedUtc": "2026-07-26T12:00:00Z", "ExpiresUtc": "2026-08-02T12:00:00Z" }
+  ],
+  "IsTruncated": false,
+  "NextKeyMarker": null,
+  "NextUploadIdMarker": null
+}
+```
+
+`200` with the page; `404` if the container does not exist. In-progress uploads are transient: an upload
+that is never completed or aborted is reclaimed after `S3.MultipartUploadExpiryDays` (default 7).
+
+### `DELETE /v1.0/containers/{container}/multipart-uploads/{uploadId}`
+
+Abort an in-progress multipart upload, discarding its staged parts. `204` on success; idempotent
+(aborting an unknown upload also returns `204`).
+
 ### `DELETE /v1.0/containers/{container}`
 
 Delete a container. Refuses with `409 NotEmpty` if it still holds objects.
@@ -324,6 +360,7 @@ envelope form below.
   "ExtentId": "ext_mry4fbo6_9KpQm2wRxYz",
   "SizeBytes": 4180,
   "Sha256": "a3f1...",
+  "Md5": "9e107d9d...",
   "CreatedUtc": "2026-07-23T23:07:02.719656Z"
 }
 ```
@@ -361,7 +398,8 @@ Response headers:
 | `Content-Type` | As written |
 | `Content-Length` | Payload size in bytes |
 | `x-pepperx-extent-id` | The extent actually served |
-| `x-pepperx-sha256` | Checksum of the payload |
+| `x-pepperx-sha256` | SHA-256 of the payload |
+| `x-pepperx-md5` | MD5 of the payload (the S3 ETag is derived from this); absent on legacy objects |
 | `x-pepperx-labels`, `x-pepperx-tags`, `x-pepperx-object` | As written |
 
 Supports `Range` for partial reads, answering `206 Partial Content`:
@@ -408,6 +446,7 @@ Full metadata for one object without transferring the payload.
   "ContainerName": "telemetry",
   "SizeBytes": 4180,
   "Sha256": "a3f1...",
+  "Md5": "9e107d9d...",
   "ContentType": "application/json",
   "Labels": ["metric", "cpu"],
   "Tags": { "resolution": "1m" },
@@ -416,6 +455,11 @@ Full metadata for one object without transferring the payload.
   "CreatedUtc": "2026-07-23T23:07:02.719656Z"
 }
 ```
+
+`Md5` is the content MD5 (the value the S3 ETag is derived from); `Sha256` is PepperX's native content
+hash. `Md5` is absent (null) on objects written before MD5 recording was added. For a
+multipart-assembled object, the S3 ETag over the [S3 protocol](S3_API.md#multipart-upload) is the
+`…-N` form; over REST the object still reports its content `Md5` and `Sha256`.
 
 ### `PUT /v1.0/containers/{container}/object/metadata?key={key}`
 

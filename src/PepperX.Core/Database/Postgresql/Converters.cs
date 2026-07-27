@@ -125,7 +125,7 @@ namespace PepperX.Core.Database.Postgresql
 
             int contentTypeOrdinal = reader.GetOrdinal("content_type");
 
-            return new Extent
+            Extent extent = new Extent
             {
                 Id = reader.GetString(reader.GetOrdinal("id")),
                 ContainerId = reader.GetString(reader.GetOrdinal("container_id")),
@@ -140,6 +140,21 @@ namespace PepperX.Core.Database.Postgresql
                 CreatedUtc = reader.GetDateTime(reader.GetOrdinal("created_utc")),
                 LastUpdateUtc = reader.GetDateTime(reader.GetOrdinal("last_update_utc"))
             };
+
+            // Content MD5 and multipart ETag (migration v4); nullable. Guarded so a projection that omits
+            // them, or a pre-migration read, leaves the model defaults (null) in place.
+            if (HasColumn(reader, "md5"))
+            {
+                int md5Ordinal = reader.GetOrdinal("md5");
+                extent.Md5 = reader.IsDBNull(md5Ordinal) ? null : reader.GetString(md5Ordinal);
+            }
+            if (HasColumn(reader, "etag"))
+            {
+                int etagOrdinal = reader.GetOrdinal("etag");
+                extent.Etag = reader.IsDBNull(etagOrdinal) ? null : reader.GetString(etagOrdinal);
+            }
+
+            return extent;
         }
 
         /// <summary>
@@ -207,6 +222,51 @@ namespace PepperX.Core.Database.Postgresql
             }
 
             return entry;
+        }
+
+        /// <summary>
+        /// Read a multipart upload row.
+        /// </summary>
+        /// <param name="reader">Open reader positioned on a row.</param>
+        /// <returns>The multipart upload.</returns>
+        public static MultipartUpload ReadMultipartUpload(NpgsqlDataReader reader)
+        {
+            if (reader == null) throw new ArgumentNullException(nameof(reader));
+
+            int contentTypeOrdinal = reader.GetOrdinal("content_type");
+
+            return new MultipartUpload
+            {
+                Id = reader.GetString(reader.GetOrdinal("id")),
+                ContainerId = reader.GetString(reader.GetOrdinal("container_id")),
+                Key = reader.GetString(reader.GetOrdinal("object_key")),
+                ContentType = reader.IsDBNull(contentTypeOrdinal) ? null : reader.GetString(contentTypeOrdinal),
+                Tags = DeserializeStringDict(reader.GetString(reader.GetOrdinal("tags"))),
+                InitiatedUtc = reader.GetDateTime(reader.GetOrdinal("initiated_utc")),
+                ExpiresUtc = reader.GetDateTime(reader.GetOrdinal("expires_utc"))
+            };
+        }
+
+        /// <summary>
+        /// Read a multipart part row.
+        /// </summary>
+        /// <param name="reader">Open reader positioned on a row.</param>
+        /// <returns>The multipart part.</returns>
+        public static MultipartPart ReadMultipartPart(NpgsqlDataReader reader)
+        {
+            if (reader == null) throw new ArgumentNullException(nameof(reader));
+
+            return new MultipartPart
+            {
+                Id = reader.GetString(reader.GetOrdinal("id")),
+                UploadId = reader.GetString(reader.GetOrdinal("upload_id")),
+                PartNumber = reader.GetInt32(reader.GetOrdinal("part_number")),
+                SizeBytes = reader.GetInt64(reader.GetOrdinal("size_bytes")),
+                Md5 = reader.GetString(reader.GetOrdinal("md5")),
+                Sha256 = reader.GetString(reader.GetOrdinal("sha256")),
+                StorageLocation = reader.GetString(reader.GetOrdinal("storage_location")),
+                CreatedUtc = reader.GetDateTime(reader.GetOrdinal("created_utc"))
+            };
         }
 
         /// <summary>

@@ -150,6 +150,53 @@ namespace PepperX.Core.Storage
         /// <returns>The number of temporary files removed.</returns>
         Task<int> CleanupTempFilesAsync(TimeSpan olderThan, CancellationToken token = default);
 
+        /// <summary>
+        /// Stage a multipart upload part durably on the shared storage root, computing its size, MD5, and
+        /// SHA-256 in a single streamed pass. Re-staging the same part number overwrites the prior blob.
+        /// The staging area is shared across nodes so any node can complete or abort the upload.
+        /// </summary>
+        /// <param name="uploadId">Owning upload identifier.</param>
+        /// <param name="partNumber">Part number.</param>
+        /// <param name="payload">Part payload stream, read to end.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The stage result including size, both hashes, and the driver-relative location.</returns>
+        Task<MultipartStageResult> WritePartAsync(string uploadId, int partNumber, System.IO.Stream payload, CancellationToken token = default);
+
+        /// <summary>
+        /// Open a staged part for reading.
+        /// </summary>
+        /// <param name="location">Driver-relative staged-part location.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>A readable stream over the staged part; the caller disposes it.</returns>
+        Task<System.IO.Stream> OpenPartAsync(string location, CancellationToken token = default);
+
+        /// <summary>
+        /// Delete a single staged part.
+        /// </summary>
+        /// <param name="location">Driver-relative staged-part location.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>True if a file was deleted; false if it did not exist.</returns>
+        Task<bool> DeletePartAsync(string location, CancellationToken token = default);
+
+        /// <summary>
+        /// Delete all staged parts for an upload (its staging directory).
+        /// </summary>
+        /// <param name="uploadId">Upload identifier.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>Task.</returns>
+        Task DeletePartsAsync(string uploadId, CancellationToken token = default);
+
+        /// <summary>
+        /// Remove staging directories whose upload identifier is not in <paramref name="knownUploadIds"/> and
+        /// whose last write is older than <paramref name="olderThan"/> (crash-recovery cleanup for uploads
+        /// whose rows are already gone).
+        /// </summary>
+        /// <param name="olderThan">Age threshold.</param>
+        /// <param name="knownUploadIds">Upload identifiers that still have rows and must be preserved.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The number of staging directories removed.</returns>
+        Task<int> CleanupOrphanedPartsAsync(TimeSpan olderThan, System.Collections.Generic.IReadOnlyCollection<string> knownUploadIds, CancellationToken token = default);
+
         #endregion
     }
 }

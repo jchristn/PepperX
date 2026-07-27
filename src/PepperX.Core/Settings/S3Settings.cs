@@ -101,6 +101,61 @@ namespace PepperX.Core.Settings
             }
         }
 
+        /// <summary>
+        /// Whether S3 multipart upload operations are enabled. When false the multipart callbacks are not
+        /// wired and the library returns NotImplemented. Default true.
+        /// </summary>
+        public bool MultipartEnabled { get; set; } = true;
+
+        /// <summary>
+        /// Number of days an initiated-but-uncompleted multipart upload is retained before the janitor
+        /// reclaims its staged parts. Clamped to the range 1 to 365. Default 7.
+        /// </summary>
+        public int MultipartUploadExpiryDays
+        {
+            get
+            {
+                return _MultipartUploadExpiryDays;
+            }
+            set
+            {
+                _MultipartUploadExpiryDays = Math.Clamp(value, 1, 365);
+            }
+        }
+
+        /// <summary>
+        /// Minimum size in bytes of every part except the last one, enforced at completion (S3's 5 MiB
+        /// rule). A value of 0 disables the check. Clamped to the range 0 to 5368709120 (5 GiB). Default
+        /// 5242880 (5 MiB).
+        /// </summary>
+        public long MultipartMinPartBytes
+        {
+            get
+            {
+                return _MultipartMinPartBytes;
+            }
+            set
+            {
+                _MultipartMinPartBytes = Math.Clamp(value, 0L, 5L * 1024 * 1024 * 1024);
+            }
+        }
+
+        /// <summary>
+        /// Maximum number of parts permitted in a single multipart upload. Clamped to the range 1 to
+        /// 10000 (S3's limit). Default 10000.
+        /// </summary>
+        public int MultipartMaxParts
+        {
+            get
+            {
+                return _MultipartMaxParts;
+            }
+            set
+            {
+                _MultipartMaxParts = Math.Clamp(value, 1, 10000);
+            }
+        }
+
         #endregion
 
         #region Private-Members
@@ -110,6 +165,9 @@ namespace PepperX.Core.Settings
         private string _Region = "us-west-1";
         private string _StaticAccessKey = "pepperx";
         private string _StaticSecretKey = "pepperx";
+        private int _MultipartUploadExpiryDays = 7;
+        private long _MultipartMinPartBytes = 5 * 1024 * 1024;
+        private int _MultipartMaxParts = 10000;
 
         #endregion
 

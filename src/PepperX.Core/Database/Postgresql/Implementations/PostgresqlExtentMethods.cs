@@ -21,7 +21,7 @@ namespace PepperX.Core.Database.Postgresql.Implementations
     {
         #region Private-Members
 
-        private const string _Columns = "id, container_id, object_key, state, size_bytes, sha256, content_type, storage_driver, storage_location, has_metadata_object, created_utc, last_update_utc";
+        private const string _Columns = "id, container_id, object_key, state, size_bytes, sha256, md5, etag, content_type, storage_driver, storage_location, has_metadata_object, created_utc, last_update_utc";
         private const string _UniqueViolation = "23505";
         private const string _DeadlockDetected = "40P01";
         private const string _SerializationFailure = "40001";
@@ -364,14 +364,14 @@ namespace PepperX.Core.Database.Postgresql.Implementations
 
         private static string PrefixColumns()
         {
-            return "e.id, e.container_id, e.object_key, e.state, e.size_bytes, e.sha256, e.content_type, e.storage_driver, e.storage_location, e.has_metadata_object, e.created_utc, e.last_update_utc";
+            return "e.id, e.container_id, e.object_key, e.state, e.size_bytes, e.sha256, e.md5, e.etag, e.content_type, e.storage_driver, e.storage_location, e.has_metadata_object, e.created_utc, e.last_update_utc";
         }
 
         private static async Task InsertExtentAsync(NpgsqlConnection connection, NpgsqlTransaction tx, Extent extent, CancellationToken token)
         {
             await using (NpgsqlCommand cmd = new NpgsqlCommand(
-                "INSERT INTO extents (id, container_id, object_key, state, size_bytes, sha256, content_type, storage_driver, storage_location, has_metadata_object, created_utc, last_update_utc) " +
-                "VALUES (@id, @cid, @key, @state, @size, @sha, @ct, @driver, @loc, @hasobj, @cu, @lu);", connection, tx))
+                "INSERT INTO extents (id, container_id, object_key, state, size_bytes, sha256, md5, etag, content_type, storage_driver, storage_location, has_metadata_object, created_utc, last_update_utc) " +
+                "VALUES (@id, @cid, @key, @state, @size, @sha, @md5, @etag, @ct, @driver, @loc, @hasobj, @cu, @lu);", connection, tx))
             {
                 cmd.Parameters.AddWithValue("id", extent.Id);
                 cmd.Parameters.AddWithValue("cid", extent.ContainerId);
@@ -379,6 +379,8 @@ namespace PepperX.Core.Database.Postgresql.Implementations
                 cmd.Parameters.AddWithValue("state", extent.State.ToString());
                 cmd.Parameters.AddWithValue("size", extent.SizeBytes);
                 cmd.Parameters.AddWithValue("sha", extent.Sha256);
+                cmd.Parameters.AddWithValue("md5", (object?)extent.Md5 ?? DBNull.Value);
+                cmd.Parameters.AddWithValue("etag", (object?)extent.Etag ?? DBNull.Value);
                 cmd.Parameters.AddWithValue("ct", (object?)extent.ContentType ?? DBNull.Value);
                 cmd.Parameters.AddWithValue("driver", extent.StorageDriver.ToString());
                 cmd.Parameters.AddWithValue("loc", extent.StorageLocation);

@@ -118,6 +118,39 @@ call :res "GetObjectTagging" %errorlevel%
 %AWS% s3api delete-object-tagging --bucket %BUCKET% --key hello.txt >nul 2>&1
 call :res "DeleteObjectTagging" %errorlevel%
 
+:: --- multipart upload -------------------------------------------------------
+:: aws s3 cp auto-switches to multipart above its threshold (8 MiB default), so a
+:: large-file round-trip exercises initiate/upload-part/complete end to end.
+set "BIGF=%WORK%\big.bin"
+set "BIGOUT=%WORK%\big.out"
+fsutil file createnew "%BIGF%" 10485760 >nul 2>&1
+%AWS% s3 cp "%BIGF%" s3://%BUCKET%/big.bin >nul 2>&1
+call :res "Multipart upload (aws s3 cp, 10 MiB)" %errorlevel%
+
+del "%BIGOUT%" 2>nul
+%AWS% s3 cp s3://%BUCKET%/big.bin "%BIGOUT%" >nul 2>&1
+call :res "Multipart download (aws s3 cp)" %errorlevel%
+
+fc /b "%BIGF%" "%BIGOUT%" >nul 2>&1
+call :res "Multipart round-trip byte-identical" %errorlevel%
+
+%AWS% s3api delete-object --bucket %BUCKET% --key big.bin >nul 2>&1
+call :res "DeleteObject (multipart result)" %errorlevel%
+
+:: explicit initiate / list / abort (no ETag juggling)
+set "UPLOADID="
+for /f "usebackq delims=" %%u in (`%AWS% s3api create-multipart-upload --bucket %BUCKET% --key mp.bin --query UploadId --output text 2^>nul`) do set "UPLOADID=%%u"
+if defined UPLOADID ( call :res "CreateMultipartUpload" 0 ) else ( call :res "CreateMultipartUpload" 1 )
+
+%AWS% s3api list-multipart-uploads --bucket %BUCKET% >nul 2>&1
+call :res "ListMultipartUploads" %errorlevel%
+
+if defined UPLOADID (
+    %AWS% s3api abort-multipart-upload --bucket %BUCKET% --key mp.bin --upload-id "%UPLOADID%" >nul 2>&1
+    call :res "AbortMultipartUpload" %errorlevel%
+)
+
+
 %AWS% s3api delete-object --bucket %BUCKET% --key hello.txt >nul 2>&1
 call :res "DeleteObject" %errorlevel%
 

@@ -205,6 +205,19 @@
     "negative": "L'index de base de données RESP doit être supérieur ou égal à zéro.",
     "none": "Aucun"
   },
+  "multipart": {
+    "section": "Téléversements multipartites en cours",
+    "hint": "Téléversements démarrés mais jamais terminés ni annulés. Ils occupent de l'espace jusqu'à leur achèvement ou leur expiration.",
+    "key": "Clé de l'objet",
+    "uploadId": "ID de téléversement",
+    "initiated": "Démarré",
+    "expires": "Expire",
+    "abort": "Annuler",
+    "abortTitle": "Annuler le téléversement multipartite",
+    "abortConfirm": "Annuler le téléversement multipartite de {{key}} ? Les parties déjà téléversées seront supprimées.",
+    "aborted": "Téléversement multipartite annulé.",
+    "empty": "Aucun téléversement multipartite en cours."
+  },
   "objects": {
     "title": "Objets dans {{container}}",
     "subtitle": "Chaque objet est un extent immuable : une charge binaire accompagnée de labels, d'étiquettes et de JSON libre.",

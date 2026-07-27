@@ -48,6 +48,18 @@ namespace PepperX.Core.Storage.Format
         public string Sha256 { get; set; } = String.Empty;
 
         /// <summary>
+        /// Lowercase hex MD5 of the payload (the content hash used to derive the S3 ETag). May be null
+        /// for extents written before MD5 was recorded.
+        /// </summary>
+        public string? Md5 { get; set; } = null;
+
+        /// <summary>
+        /// Persisted S3 ETag for a multipart-assembled object (<c>digest-N</c>). Null for single-part
+        /// objects. Stored in the header so a full rebuild restores it.
+        /// </summary>
+        public string? Etag { get; set; } = null;
+
+        /// <summary>
         /// Labels attached to the extent. Never null.
         /// </summary>
         public List<string> Labels

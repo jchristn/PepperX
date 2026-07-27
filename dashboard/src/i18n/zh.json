@@ -205,6 +205,19 @@
     "negative": "RESP 数据库索引必须为零或更大。",
     "none": "无"
   },
+  "multipart": {
+    "section": "进行中的分段上传",
+    "hint": "已开始但从未完成或中止的上传。它们会占用存储空间，直到完成或过期。",
+    "key": "对象键",
+    "uploadId": "上传 ID",
+    "initiated": "开始时间",
+    "expires": "过期时间",
+    "abort": "中止",
+    "abortTitle": "中止分段上传",
+    "abortConfirm": "要中止 {{key}} 的分段上传吗？已上传的分段将被丢弃。",
+    "aborted": "分段上传已中止。",
+    "empty": "没有进行中的分段上传。"
+  },
   "objects": {
     "title": "{{container}} 中的对象",
     "subtitle": "每个对象都是不可变的 extent：二进制负载加上标签、标记和自由格式的 JSON。",

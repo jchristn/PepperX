@@ -183,6 +183,30 @@ export default class ApiClient {
     });
   }
 
+  /**
+   * List a container's in-progress multipart uploads — those initiated but never completed or
+   * aborted. Returns the server's envelope ({ uploads, isTruncated, nextKeyMarker, nextUploadIdMarker });
+   * the cap is high enough that the console shows every upload without paging. Fails 404 if the
+   * container does not exist.
+   */
+  containerMultipartUploads(name) {
+    return this._request(
+      'GET',
+      `/v1.0/containers/${encodeURIComponent(name)}/multipart-uploads?maxUploads=1000`,
+    );
+  }
+
+  /**
+   * Abort an in-progress multipart upload, discarding any parts already staged. Idempotent: aborting
+   * an upload that no longer exists still succeeds (204).
+   */
+  abortMultipartUpload(name, uploadId) {
+    return this._request(
+      'DELETE',
+      `/v1.0/containers/${encodeURIComponent(name)}/multipart-uploads/${encodeURIComponent(uploadId)}`,
+    );
+  }
+
   // --------------------------------------------------------------- objects
 
   objectUrl(container, key) {

@@ -39,14 +39,17 @@ namespace PepperX.Core.Storage.Disk
 
         private static readonly PepperXSerializer _Serializer = new PepperXSerializer();
         private const string _ExtentExtension = ".pxe";
+        private const string _PartExtension = ".part";
         private const string _ManifestFile = "container.json";
         private const string _TempDirName = ".tmp";
+        private const string _MultipartDirName = ".multipart";
         private const int _CopyBufferBytes = 81920;
         private const int _DeleteRetryCount = 20;
         private const int _DeleteRetryDelayMs = 25;
 
         private readonly string _Root;
         private readonly string _TempDir;
+        private readonly string _MultipartDir;
 
         #endregion
 
@@ -62,6 +65,7 @@ namespace PepperX.Core.Storage.Disk
             if (settings == null) throw new ArgumentNullException(nameof(settings));
             _Root = Path.GetFullPath(settings.RootDirectory);
             _TempDir = Path.Combine(_Root, _TempDirName);
+            _MultipartDir = Path.Combine(_Root, _MultipartDirName);
         }
 
         #endregion
@@ -77,6 +81,7 @@ namespace PepperX.Core.Storage.Disk
         {
             Directory.CreateDirectory(_Root);
             Directory.CreateDirectory(_TempDir);
+            Directory.CreateDirectory(_MultipartDir);
             return Task.CompletedTask;
         }
 
@@ -111,6 +116,7 @@ namespace PepperX.Core.Storage.Disk
 
                 header.SizeBytes = hash.SizeBytes;
                 header.Sha256 = hash.Sha256;
+                header.Md5 = hash.Md5;
 
                 using (FileStream payloadIn = new FileStream(payloadTemp, FileMode.Open, FileAccess.Read, FileShare.Read, _CopyBufferBytes, FileOptions.Asynchronous))
                 using (FileStream extentOut = new FileStream(extentTemp, FileMode.Create, FileAccess.Write, FileShare.None, _CopyBufferBytes, FileOptions.Asynchronous))
@@ -121,7 +127,7 @@ namespace PepperX.Core.Storage.Disk
                 }
 
                 File.Move(extentTemp, finalPath, true);
-                return new ExtentWriteResult(hash.SizeBytes, hash.Sha256, location);
+                return new ExtentWriteResult(hash.SizeBytes, hash.Sha256, hash.Md5, location);
             }
             finally
             {
@@ -290,6 +296,7 @@ namespace PepperX.Core.Storage.Disk
             {
                 token.ThrowIfCancellationRequested();
                 if (String.Equals(Path.GetFileName(dir), _TempDirName, StringComparison.Ordinal)) continue;
+                if (String.Equals(Path.GetFileName(dir), _MultipartDirName, StringComparison.Ordinal)) continue;
 
                 string path = Path.Combine(dir, _ManifestFile);
                 if (!File.Exists(path)) continue;
@@ -370,6 +377,150 @@ namespace PepperX.Core.Storage.Disk
             return Task.FromResult(removed);
         }
 
+        /// <summary>
+        /// Stage a multipart upload part durably, computing size, MD5, and SHA-256 in one pass.
+        /// </summary>
+        /// <param name="uploadId">Owning upload identifier.</param>
+        /// <param name="partNumber">Part number.</param>
+        /// <param name="payload">Part payload stream.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The stage result.</returns>
+        /// <exception cref="ArgumentNullException">A required argument is null.</exception>
+        public async Task<MultipartStageResult> WritePartAsync(string uploadId, int partNumber, Stream payload, CancellationToken token = default)
+        {
+            if (String.IsNullOrEmpty(uploadId)) throw new ArgumentNullException(nameof(uploadId));
+            if (payload == null) throw new ArgumentNullException(nameof(payload));
+
+            string location = BuildPartLocation(uploadId, partNumber);
+            string finalPath = Resolve(location);
+            Directory.CreateDirectory(Path.GetDirectoryName(finalPath)!);
+            Directory.CreateDirectory(_TempDir);
+
+            // A unique temp name per attempt so concurrent re-uploads of the same part number do not
+            // collide on the temp file (the final path is deterministic and the last mover wins).
+            string partTemp = Path.Combine(_TempDir, uploadId + "." + partNumber + "." + Guid.NewGuid().ToString("N") + _PartExtension + ".tmp");
+
+            try
+            {
+                HashResult hash;
+                using (FileStream partOut = new FileStream(partTemp, FileMode.Create, FileAccess.Write, FileShare.None, _CopyBufferBytes, FileOptions.Asynchronous))
+                {
+                    hash = await HashHelper.CopyAndHashAsync(payload, partOut, token).ConfigureAwait(false);
+                    await partOut.FlushAsync(token).ConfigureAwait(false);
+                    partOut.Flush(true);
+                }
+
+                // Concurrent re-uploads of the same part number target the same final path; on Windows a
+                // simultaneous move/open can raise a transient sharing or access violation. A bounded retry
+                // absorbs it — last-writer-wins is the expected semantic for a re-uploaded part.
+                for (int attempt = 0; ; attempt++)
+                {
+                    try
+                    {
+                        File.Move(partTemp, finalPath, true);
+                        break;
+                    }
+                    catch (Exception ex) when ((ex is IOException || ex is UnauthorizedAccessException) && attempt < _DeleteRetryCount)
+                    {
+                        await Task.Delay(_DeleteRetryDelayMs, token).ConfigureAwait(false);
+                    }
+                }
+
+                return new MultipartStageResult(hash.SizeBytes, hash.Md5, hash.Sha256, location);
+            }
+            finally
+            {
+                TryDelete(partTemp);
+            }
+        }
+
+        /// <summary>
+        /// Open a staged part for reading.
+        /// </summary>
+        /// <param name="location">Driver-relative staged-part location.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>A readable stream over the staged part.</returns>
+        public Task<Stream> OpenPartAsync(string location, CancellationToken token = default)
+        {
+            string path = Resolve(location);
+            Stream stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, _CopyBufferBytes, FileOptions.Asynchronous);
+            return Task.FromResult(stream);
+        }
+
+        /// <summary>
+        /// Delete a single staged part.
+        /// </summary>
+        /// <param name="location">Driver-relative staged-part location.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>True if a file was deleted.</returns>
+        public Task<bool> DeletePartAsync(string location, CancellationToken token = default)
+        {
+            string path = Resolve(location);
+            if (!File.Exists(path)) return Task.FromResult(false);
+            try
+            {
+                File.Delete(path);
+                return Task.FromResult(true);
+            }
+            catch (IOException)
+            {
+                return Task.FromResult(false);
+            }
+        }
+
+        /// <summary>
+        /// Delete all staged parts for an upload (its staging directory).
+        /// </summary>
+        /// <param name="uploadId">Upload identifier.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>Task.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="uploadId"/> is null or empty.</exception>
+        public Task DeletePartsAsync(string uploadId, CancellationToken token = default)
+        {
+            if (String.IsNullOrEmpty(uploadId)) throw new ArgumentNullException(nameof(uploadId));
+
+            string dir = Path.Combine(_MultipartDir, uploadId);
+            if (Directory.Exists(dir)) Directory.Delete(dir, true);
+            return Task.CompletedTask;
+        }
+
+        /// <summary>
+        /// Remove staging directories whose upload id is not in <paramref name="knownUploadIds"/> and whose
+        /// last write is older than <paramref name="olderThan"/>.
+        /// </summary>
+        /// <param name="olderThan">Age threshold.</param>
+        /// <param name="knownUploadIds">Upload identifiers to preserve.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The number of staging directories removed.</returns>
+        public Task<int> CleanupOrphanedPartsAsync(TimeSpan olderThan, System.Collections.Generic.IReadOnlyCollection<string> knownUploadIds, CancellationToken token = default)
+        {
+            int removed = 0;
+            if (!Directory.Exists(_MultipartDir)) return Task.FromResult(0);
+
+            System.Collections.Generic.HashSet<string> known = new System.Collections.Generic.HashSet<string>(
+                knownUploadIds ?? System.Array.Empty<string>(), StringComparer.Ordinal);
+            DateTime cutoff = DateTime.UtcNow - olderThan;
+
+            foreach (string dir in Directory.EnumerateDirectories(_MultipartDir))
+            {
+                token.ThrowIfCancellationRequested();
+                string uploadId = Path.GetFileName(dir);
+                if (known.Contains(uploadId)) continue;
+                try
+                {
+                    if (Directory.GetLastWriteTimeUtc(dir) >= cutoff) continue;
+                    Directory.Delete(dir, true);
+                    removed++;
+                }
+                catch (IOException)
+                {
+                    // A concurrent stage may still hold the directory; skip it.
+                }
+            }
+
+            return Task.FromResult(removed);
+        }
+
         #endregion
 
         #region Private-Methods
@@ -380,6 +531,11 @@ namespace PepperX.Core.Storage.Disk
                 ? extentId.Substring(Constants.ExtentIdPrefix.Length, 2)
                 : "00";
             return containerId + "/" + fanout + "/" + extentId + _ExtentExtension;
+        }
+
+        private static string BuildPartLocation(string uploadId, int partNumber)
+        {
+            return _MultipartDirName + "/" + uploadId + "/" + partNumber + _PartExtension;
         }
 
         private string Resolve(string location)

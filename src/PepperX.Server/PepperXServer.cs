@@ -98,6 +98,7 @@ namespace PepperX.Server
             SearchService search = new SearchService(_Db);
             StatisticsService statistics = new StatisticsService(_Db, _Storage, _Settings);
             RehydrationService rehydration = new RehydrationService(_Db, _Storage, _Logging);
+            MultipartUploadService multipart = new MultipartUploadService(_Db, _Storage, writes, reads, _Settings.S3, _Logging);
 
             _Heartbeat = new NodeHeartbeatService(_Db, _Settings, _NodeId, Environment.MachineName, _Logging);
             await _Heartbeat.StartAsync(token).ConfigureAwait(false);
@@ -107,11 +108,11 @@ namespace PepperX.Server
 
             _Capture = new RequestHistoryCaptureService(_Db, _Settings.RequestHistory, _Logging);
 
-            if (_Settings.Rest.Enabled) StartRest(containers, writes, reads, deletes, search, statistics, rehydration);
+            if (_Settings.Rest.Enabled) StartRest(containers, writes, reads, deletes, search, statistics, rehydration, multipart);
 
             if (_Settings.S3.Enabled)
             {
-                _S3Handler = new S3ProtocolHandler(containers, writes, reads, deletes, search, _Db, _Settings.S3, _Logging);
+                _S3Handler = new S3ProtocolHandler(containers, writes, reads, deletes, search, multipart, _Db, _Settings.S3, _Logging);
                 _S3Handler.Start();
                 _Logging.Info(_Header + "S3 listener started on port " + _Settings.S3.Port);
             }
@@ -189,7 +190,7 @@ namespace PepperX.Server
 
         #region Private-Methods
 
-        private void StartRest(ContainerService containers, ObjectWriteService writes, ObjectReadService reads, ObjectDeleteService deletes, SearchService search, StatisticsService statistics, RehydrationService rehydration)
+        private void StartRest(ContainerService containers, ObjectWriteService writes, ObjectReadService reads, ObjectDeleteService deletes, SearchService search, StatisticsService statistics, RehydrationService rehydration, MultipartUploadService multipart)
         {
             WebserverSettings webserverSettings = new WebserverSettings(_Settings.Rest.Hostname, _Settings.Rest.Port, _Settings.Rest.Ssl);
 
@@ -231,7 +232,7 @@ namespace PepperX.Server
             });
 
             new HealthRoutes(_StartUtc).Register(_RestServer);
-            new ContainerRoutes(containers).Register(_RestServer);
+            new ContainerRoutes(containers, multipart).Register(_RestServer);
             new ObjectRoutes(writes, reads, deletes, search).Register(_RestServer);
             new SearchRoutes(search).Register(_RestServer);
             new AdminRoutes(statistics, rehydration, _Settings, _NodeId, _Logging).Register(_RestServer);

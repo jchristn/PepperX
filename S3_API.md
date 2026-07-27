@@ -164,15 +164,61 @@ await client.PutBucketAsync("telemetry");
 which the SDKs use by default for uploads. The chunk framing is decoded before the payload is stored,
 so an object uploaded by an SDK is byte-identical to the same object uploaded by `curl` over REST.
 
+### Multipart upload
+
+| Operation | Notes |
+|---|---|
+| `CreateMultipartUpload` | Returns an opaque `UploadId` |
+| `UploadPart` | Per-part ETag is the part's MD5 |
+| `UploadPartCopy` | Copies a part from an existing object; honors `x-amz-copy-source-range` |
+| `CompleteMultipartUpload` | Assembles the parts into one object |
+| `AbortMultipartUpload` | Discards staged parts |
+| `ListParts` | Paginated (`max-parts`, `part-number-marker`) |
+| `ListMultipartUploads` | Paginated (`max-uploads`, `key-marker`, `upload-id-marker`) |
+
+The AWS CLI and every AWS SDK switch to multipart automatically once an upload crosses their threshold
+(8 MiB for `aws s3 cp` by default), so uploading a large object "just works":
+
+```bash
+aws --endpoint-url http://localhost:8001 s3 cp ./4gb.bin s3://telemetry/4gb.bin
+```
+
+Semantics worth knowing:
+
+- **Parts stage on shared storage** and are assembled into a single immutable object when the upload
+  completes. Because completion runs through the ordinary write path, a multipart-assembled object is
+  indistinguishable from one written in a single `PutObject` — it reads, caches, and rebuilds the same way.
+- **Part size.** Every part except the last must be at least 5 MiB (`S3.MultipartMinPartBytes`, matching
+  S3). An upload may have up to 10,000 parts (`S3.MultipartMaxParts`).
+- **ETag.** The per-part ETag is the part's MD5. The completed object's ETag is
+  `hex(MD5(concatenation of the raw part MD5s)) + "-" + partCount` — the standard S3 multipart form —
+  and it is returned on `GetObject`, `HeadObject`, and `ListObjects` alike.
+- **Multi-node.** Parts and their metadata are shared cluster-wide, so a client may upload parts against
+  one node and complete against another.
+- **Expiry.** An upload that is never completed or aborted is reclaimed after `S3.MultipartUploadExpiryDays`
+  (default 7). A full `rehydrate --mode Rebuild` abandons in-flight uploads (they have no object yet);
+  their staged parts are then reclaimed by the janitor.
+- Cross-node in-progress uploads are also visible over REST at
+  `GET /v1.0/containers/{container}/multipart-uploads` (see [`REST_API.md`](REST_API.md)).
+
+**Downloading large objects.** `GetObject` returns the whole object, and a `Range` request returns the
+requested bytes with `206 Partial Content` and a `Content-Range: bytes start-end/total` header that
+carries the full object size. Large-object downloads that use ranged/multipart transfer — `aws s3 cp`,
+the AWS SDKs, and `mc cp` — work byte-for-byte, so upload and download both "just work" with the CLI.
+
+### A note on ETags
+
+An object's S3 ETag is derived from its **MD5**: a plain MD5 hex for a single-`PutObject` object, and the
+`…-N` multipart form for a completed multipart object. PepperX also records each object's SHA-256 (its
+native content hash), surfaced over REST as the `md5` and `sha256` fields on object metadata. `GetObject`,
+`HeadObject`, and `ListObjects` all report the same MD5-based ETag for a given object.
+
 ---
 
 ## What is not implemented
 
 Returns `NotImplemented`:
 
-- **Multipart upload** — PepperX extents are written atomically as a unit; there is no partial-extent
-  state to resume into. Objects up to `Storage.MaxObjectBytes` (5 GiB by default) upload in one
-  request.
 - **Versioning** — every write creates a new immutable extent, but only the current one is
   addressable by key. There is no version ID to expose.
 - **ACLs and bucket policies** — there is no authentication to attach permissions to. An ACL that
@@ -200,6 +246,10 @@ Errors are returned as S3 XML with the conventional codes, so S3 clients handle 
 | Bucket not empty | `BucketNotEmpty` | 409 |
 | Payload too large | `EntityTooLarge` | 413 |
 | Malformed request | `InvalidRequest` | 400 |
+| Unknown/expired multipart upload | `NoSuchUpload` | 404 |
+| Part missing or ETag mismatch on complete | `InvalidPart` | 400 |
+| Parts not in ascending order | `InvalidPartOrder` | 400 |
+| Non-final part below the minimum size | `EntityTooSmall` | 400 |
 | Unsupported operation | `NotImplemented` | 501 |
 
 ---

@@ -20,6 +20,9 @@ query parameter, why deletes wait, why `null` and `ClearObject` mean different t
 | `container` | `telemetry` | Container used throughout the collection |
 | `objectKey` | `metrics/cpu.json` | Object key. URL-encode reserved characters. |
 | `requestId` | *(empty)* | A request-history record ID, from the list endpoint |
+| `s3BaseUrl` | `http://localhost:8001` | The node's S3 endpoint (S3 folder) |
+| `uploadId` | *(empty)* | Multipart UploadId, captured automatically by **S3 → Multipart → Create multipart upload** |
+| `part1Etag` | *(empty)* | A part ETag to paste into the Complete request body |
 
 ## Running it top to bottom
 
@@ -27,6 +30,11 @@ The folders are ordered so a full run works: Health, Containers, Objects, Search
 history, then Cleanup. The destructive deletes live in **Cleanup** at the end rather than in their
 own folders, so running the collection straight through does not delete the container that later
 folders depend on.
+
+The **S3** folder mirrors the S3-compatible surface (`{{s3BaseUrl}}`). Its **Multipart** subfolder
+runs in order — **Create multipart upload** captures the `UploadId` into the `uploadId` variable, then
+Upload part, Complete, List, and Abort reuse it. Save each Upload part response ETag into `part1Etag`
+(etc.) before editing and sending Complete.
 
 With [newman](https://github.com/postmanlabs/newman):
 

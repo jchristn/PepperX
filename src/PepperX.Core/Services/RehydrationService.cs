@@ -249,6 +249,8 @@ namespace PepperX.Core.Services
                 State = ExtentStateEnum.Active,
                 SizeBytes = header.SizeBytes,
                 Sha256 = header.Sha256,
+                Md5 = header.Md5,
+                Etag = header.Etag,
                 ContentType = header.ContentType,
                 StorageDriver = StorageDriverTypeEnum.Disk,
                 StorageLocation = location,

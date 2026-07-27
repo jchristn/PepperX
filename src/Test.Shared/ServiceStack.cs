@@ -52,6 +52,12 @@ namespace Test.Shared
         /// <summary>Janitor service.</summary>
         public JanitorService Janitor { get; }
 
+        /// <summary>Multipart upload service.</summary>
+        public MultipartUploadService Multipart { get; }
+
+        /// <summary>S3 settings (the same instance the multipart service reads; tests may tune limits).</summary>
+        public S3Settings S3 { get; }
+
         /// <summary>The local lock registry.</summary>
         public LocalLockRegistry LocalLocks { get; }
 
@@ -64,9 +70,10 @@ namespace Test.Shared
 
         private ServiceStack(string nodeId, IMetadataDatabaseDriver db, DiskExtentStorageDriver storage, LocalLockRegistry locks, ContainerCacheManager cache,
             ContainerService containers, ObjectWriteService writes, ObjectReadService reads, ObjectDeleteService deletes,
-            SearchService search, StatisticsService statistics, RehydrationService rehydration, JanitorService janitor)
+            SearchService search, StatisticsService statistics, RehydrationService rehydration, JanitorService janitor, MultipartUploadService multipart, S3Settings s3)
         {
             NodeId = nodeId;
+            S3 = s3;
             Db = db;
             Storage = storage;
             LocalLocks = locks;
@@ -79,6 +86,7 @@ namespace Test.Shared
             Statistics = statistics;
             Rehydration = rehydration;
             Janitor = janitor;
+            Multipart = multipart;
         }
 
         #endregion
@@ -117,8 +125,9 @@ namespace Test.Shared
             StatisticsService statistics = new StatisticsService(db, storage, settings);
             RehydrationService rehydration = new RehydrationService(db, storage);
             JanitorService janitor = new JanitorService(db, storage, deletes, settings);
+            MultipartUploadService multipart = new MultipartUploadService(db, storage, writes, reads, settings.S3);
 
-            return new ServiceStack(resolvedNode, db, storage, locks, cache, containers, writes, reads, deletes, search, statistics, rehydration, janitor);
+            return new ServiceStack(resolvedNode, db, storage, locks, cache, containers, writes, reads, deletes, search, statistics, rehydration, janitor, multipart, settings.S3);
         }
 
         #endregion

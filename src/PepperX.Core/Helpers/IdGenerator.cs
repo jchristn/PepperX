@@ -60,6 +60,25 @@ namespace PepperX.Core.Helpers
             return _Generator.GenerateKSortable(Constants.RequestHistoryIdPrefix, Constants.IdLength);
         }
 
+        /// <summary>
+        /// Generate an S3 multipart upload identifier (prefix <c>mpu_</c>). This value is returned to
+        /// clients as the opaque S3 UploadId.
+        /// </summary>
+        /// <returns>Multipart upload identifier.</returns>
+        public static string GenerateMultipartUploadId()
+        {
+            return _Generator.GenerateKSortable(Constants.MultipartUploadIdPrefix, Constants.IdLength);
+        }
+
+        /// <summary>
+        /// Generate an S3 multipart upload part identifier (prefix <c>mpp_</c>).
+        /// </summary>
+        /// <returns>Multipart part identifier.</returns>
+        public static string GenerateMultipartPartId()
+        {
+            return _Generator.GenerateKSortable(Constants.MultipartPartIdPrefix, Constants.IdLength);
+        }
+
         #endregion
     }
 }

@@ -20,6 +20,8 @@ namespace PepperX.Server.Api.Rest
         #region Private-Members
 
         private readonly ContainerService _Containers;
+        private readonly MultipartUploadService _Multipart;
+        private readonly int _DefaultMaxUploads = 1000;
 
         #endregion
 
@@ -29,10 +31,12 @@ namespace PepperX.Server.Api.Rest
         /// Instantiate container routes.
         /// </summary>
         /// <param name="containers">Container service.</param>
-        /// <exception cref="ArgumentNullException"><paramref name="containers"/> is null.</exception>
-        public ContainerRoutes(ContainerService containers)
+        /// <param name="multipart">Multipart upload service.</param>
+        /// <exception cref="ArgumentNullException">A required argument is null.</exception>
+        public ContainerRoutes(ContainerService containers, MultipartUploadService multipart)
         {
             _Containers = containers ?? throw new ArgumentNullException(nameof(containers));
+            _Multipart = multipart ?? throw new ArgumentNullException(nameof(multipart));
         }
 
         #endregion
@@ -105,6 +109,22 @@ namespace PepperX.Server.Api.Rest
                 .WithRequestBody(OpenApiRequestBodyMetadata.Json(null, "Cache settings", true))
                 .WithResponse(200, OpenApiResponseMetadata.Json("Applied cache settings and statistics", null))
                 .WithResponse(400, OpenApiResponseMetadata.Create("Invalid cache settings"))
+                .WithResponse(404, OpenApiResponseMetadata.NotFound()));
+
+            server.Get("/v1.0/containers/{container}/multipart-uploads", ListMultipartUploadsAsync, openApi => openApi
+                .WithTag("Containers").WithDescription("List in-progress S3 multipart uploads for the container, paginated.")
+                .WithParameter(OpenApiParameterMetadata.Path("container", "Container name"))
+                .WithParameter(OpenApiParameterMetadata.Query("keyMarker", "Resume after this object key", false))
+                .WithParameter(OpenApiParameterMetadata.Query("uploadIdMarker", "Resume after this upload id (paired with keyMarker)", false))
+                .WithParameter(OpenApiParameterMetadata.Query("maxUploads", "Maximum uploads to return (1-1000)", false))
+                .WithResponse(200, OpenApiResponseMetadata.Json("Paginated in-progress uploads", null))
+                .WithResponse(404, OpenApiResponseMetadata.NotFound()));
+
+            server.Delete("/v1.0/containers/{container}/multipart-uploads/{uploadId}", AbortMultipartUploadAsync, openApi => openApi
+                .WithTag("Containers").WithDescription("Abort an in-progress S3 multipart upload, discarding its staged parts.")
+                .WithParameter(OpenApiParameterMetadata.Path("container", "Container name"))
+                .WithParameter(OpenApiParameterMetadata.Path("uploadId", "Upload id"))
+                .WithResponse(204, OpenApiResponseMetadata.NoContent())
                 .WithResponse(404, OpenApiResponseMetadata.NotFound()));
 
             server.Put<UpdateRespIndexRequest>("/v1.0/containers/{container}/resp-index", UpdateRespIndexAsync, openApi => openApi
@@ -216,6 +236,53 @@ namespace PepperX.Server.Api.Rest
                 string name = RouteHelpers.Container(request);
                 UpdateCacheSettingsRequest body = request.GetData<UpdateCacheSettingsRequest>() ?? new UpdateCacheSettingsRequest();
                 return await _Containers.UpdateCacheSettingsAsync(name, body, request.CancellationToken).ConfigureAwait(false);
+            });
+        }
+
+        private Task<object> ListMultipartUploadsAsync(ApiRequest request)
+        {
+            return RouteHelpers.HandleAsync(request, async () =>
+            {
+                string name = RouteHelpers.Container(request);
+                System.Collections.Specialized.NameValueCollection query = RouteHelpers.QueryToNvc(request);
+                string? keyMarker = String.IsNullOrEmpty(query["keyMarker"]) ? null : query["keyMarker"];
+                string? uploadIdMarker = String.IsNullOrEmpty(query["uploadIdMarker"]) ? null : query["uploadIdMarker"];
+                int maxUploads = _DefaultMaxUploads;
+                if (!String.IsNullOrEmpty(query["maxUploads"]) && Int32.TryParse(query["maxUploads"], out int parsed)) maxUploads = Math.Clamp(parsed, 1, _DefaultMaxUploads);
+
+                MultipartUploadListResult result = await _Multipart.ListUploadsAsync(name, keyMarker, uploadIdMarker, maxUploads, request.CancellationToken).ConfigureAwait(false);
+
+                MultipartUploadInfoPage page = new MultipartUploadInfoPage
+                {
+                    IsTruncated = result.IsTruncated,
+                    NextKeyMarker = result.NextKeyMarker,
+                    NextUploadIdMarker = result.NextUploadIdMarker
+                };
+                foreach (Core.Models.MultipartUpload upload in result.Uploads)
+                {
+                    page.Uploads.Add(new MultipartUploadInfo
+                    {
+                        UploadId = upload.Id,
+                        Key = upload.Key,
+                        ContentType = upload.ContentType,
+                        InitiatedUtc = upload.InitiatedUtc,
+                        ExpiresUtc = upload.ExpiresUtc
+                    });
+                }
+
+                return page;
+            });
+        }
+
+        private Task<object> AbortMultipartUploadAsync(ApiRequest request)
+        {
+            return RouteHelpers.HandleAsync(request, async () =>
+            {
+                string name = RouteHelpers.Container(request);
+                string uploadId = request.Parameters["uploadId"] ?? String.Empty;
+                await _Multipart.AbortAsync(name, uploadId, request.CancellationToken).ConfigureAwait(false);
+                request.Http.Response.StatusCode = 204;
+                return null!;
             });
         }
 

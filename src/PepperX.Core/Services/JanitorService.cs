@@ -24,6 +24,7 @@ namespace PepperX.Core.Services
         private readonly ObjectDeleteService _DeleteService;
         private readonly ClusterSettings _Cluster;
         private readonly RequestHistorySettings _RequestHistory;
+        private readonly S3Settings _S3;
         private readonly LoggingModule? _Logging;
         private Timer? _Timer;
         private int _Running;
@@ -50,6 +51,7 @@ namespace PepperX.Core.Services
             _DeleteService = deleteService ?? throw new ArgumentNullException(nameof(deleteService));
             _Cluster = settings.Cluster;
             _RequestHistory = settings.RequestHistory;
+            _S3 = settings.S3;
             _Logging = logging;
         }
 
@@ -78,6 +80,7 @@ namespace PepperX.Core.Services
             await PurgeDeadNodesAsync(token).ConfigureAwait(false);
             await _Storage.CleanupTempFilesAsync(TimeSpan.FromHours(1), token).ConfigureAwait(false);
             await _Db.RequestHistory.PruneAsync(DateTime.UtcNow.AddDays(-_RequestHistory.RetentionDays), token).ConfigureAwait(false);
+            await PurgeExpiredMultipartUploadsAsync(token).ConfigureAwait(false);
         }
 
         /// <summary>
@@ -129,6 +132,35 @@ namespace PepperX.Core.Services
                 {
                     _Logging?.Debug(_Header + "could not finish extent " + extent.Id + ": " + ex.Message);
                 }
+            }
+        }
+
+        private async Task PurgeExpiredMultipartUploadsAsync(CancellationToken token)
+        {
+            try
+            {
+                // Purge expired upload rows and reclaim their staged blobs.
+                IReadOnlyList<string> expired = await _Db.MultipartUploads.PurgeExpiredAsync(DateTime.UtcNow, token).ConfigureAwait(false);
+                foreach (string uploadId in expired)
+                {
+                    try
+                    {
+                        await _Storage.DeletePartsAsync(uploadId, token).ConfigureAwait(false);
+                    }
+                    catch (Exception ex)
+                    {
+                        _Logging?.Debug(_Header + "could not delete staged parts for expired upload " + uploadId + ": " + ex.Message);
+                    }
+                }
+
+                // Reclaim staging directories whose upload row is gone (crash recovery), preserving any that
+                // still have a live upload and any younger than the expiry window.
+                IReadOnlyList<string> known = await _Db.MultipartUploads.ListActiveUploadIdsAsync(token).ConfigureAwait(false);
+                await _Storage.CleanupOrphanedPartsAsync(TimeSpan.FromDays(_S3.MultipartUploadExpiryDays), known, token).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                _Logging?.Warn(_Header + "multipart upload purge failed: " + ex.Message);
             }
         }
 

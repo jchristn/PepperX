@@ -7,7 +7,8 @@ namespace PepperX.Core.Helpers
     using System.Threading.Tasks;
 
     /// <summary>
-    /// Streaming SHA-256 utilities. All members are thread-safe; each call uses its own hash instance.
+    /// Streaming hash utilities (SHA-256 and MD5). All members are thread-safe; each call uses its own
+    /// hash instances.
     /// </summary>
     public static class HashHelper
     {
@@ -26,7 +27,7 @@ namespace PepperX.Core.Helpers
         /// <param name="source">Source stream to read to end.</param>
         /// <param name="destination">Destination stream to write the copied bytes to.</param>
         /// <param name="token">Cancellation token.</param>
-        /// <returns>Lowercase hex SHA-256 of the copied bytes, and the total byte count.</returns>
+        /// <returns>Lowercase hex SHA-256 and MD5 of the copied bytes, and the total byte count.</returns>
         /// <exception cref="ArgumentNullException">A stream argument is null.</exception>
         public static async Task<HashResult> CopyAndHashAsync(Stream source, Stream destination, CancellationToken token = default)
         {
@@ -34,6 +35,7 @@ namespace PepperX.Core.Helpers
             if (destination == null) throw new ArgumentNullException(nameof(destination));
 
             using (SHA256 sha = SHA256.Create())
+            using (MD5 md5 = MD5.Create())
             {
                 byte[] buffer = new byte[_CopyBufferBytes];
                 long total = 0;
@@ -44,11 +46,13 @@ namespace PepperX.Core.Helpers
                     token.ThrowIfCancellationRequested();
                     await destination.WriteAsync(buffer.AsMemory(0, read), token).ConfigureAwait(false);
                     sha.TransformBlock(buffer, 0, read, null, 0);
+                    md5.TransformBlock(buffer, 0, read, null, 0);
                     total += read;
                 }
 
                 sha.TransformFinalBlock(Array.Empty<byte>(), 0, 0);
-                return new HashResult(ToHex(sha.Hash!), total);
+                md5.TransformFinalBlock(Array.Empty<byte>(), 0, 0);
+                return new HashResult(ToHex(sha.Hash!), ToHex(md5.Hash!), total);
             }
         }
 

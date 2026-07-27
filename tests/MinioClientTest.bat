@@ -101,6 +101,24 @@ call :res "cp (get object)" %errorlevel%
 mc cat %ALIAS%/%BUCKET%/hello.txt >nul 2>&1
 call :res "cat (read object)" %errorlevel%
 
+:: --- multipart (mc cp auto-multiparts a large object) -----------------------
+set "BIGF=%WORK%\big.bin"
+set "BIGOUT=%WORK%\big.out"
+fsutil file createnew "%BIGF%" 20971520 >nul 2>&1
+mc cp "%BIGF%" %ALIAS%/%BUCKET%/big.bin >nul 2>&1
+call :res "cp (multipart put, 20 MiB)" %errorlevel%
+
+del "%BIGOUT%" 2>nul
+mc cp %ALIAS%/%BUCKET%/big.bin "%BIGOUT%" >nul 2>&1
+call :res "cp (multipart get)" %errorlevel%
+
+fc /b "%BIGF%" "%BIGOUT%" >nul 2>&1
+call :res "multipart round-trip byte-identical" %errorlevel%
+
+mc rm %ALIAS%/%BUCKET%/big.bin >nul 2>&1
+call :res "rm (multipart result)" %errorlevel%
+
+
 mc tag set %ALIAS%/%BUCKET% "team=platform" >nul 2>&1
 call :res "tag set (bucket)" %errorlevel%
 

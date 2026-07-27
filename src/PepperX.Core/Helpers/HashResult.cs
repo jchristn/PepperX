@@ -21,6 +21,17 @@ namespace PepperX.Core.Helpers
         }
 
         /// <summary>
+        /// Lowercase hex MD5 of the processed bytes.
+        /// </summary>
+        public string Md5
+        {
+            get
+            {
+                return _Md5;
+            }
+        }
+
+        /// <summary>
         /// Total number of bytes processed.
         /// </summary>
         public long SizeBytes
@@ -36,6 +47,7 @@ namespace PepperX.Core.Helpers
         #region Private-Members
 
         private readonly string _Sha256;
+        private readonly string _Md5;
         private readonly long _SizeBytes;
 
         #endregion
@@ -46,15 +58,18 @@ namespace PepperX.Core.Helpers
         /// Instantiate a hash result.
         /// </summary>
         /// <param name="sha256">Lowercase hex SHA-256.</param>
+        /// <param name="md5">Lowercase hex MD5.</param>
         /// <param name="sizeBytes">Total bytes processed; must be zero or greater.</param>
-        /// <exception cref="ArgumentNullException"><paramref name="sha256"/> is null.</exception>
+        /// <exception cref="ArgumentNullException"><paramref name="sha256"/> or <paramref name="md5"/> is null.</exception>
         /// <exception cref="ArgumentOutOfRangeException"><paramref name="sizeBytes"/> is negative.</exception>
-        public HashResult(string sha256, long sizeBytes)
+        public HashResult(string sha256, string md5, long sizeBytes)
         {
             if (sha256 == null) throw new ArgumentNullException(nameof(sha256));
+            if (md5 == null) throw new ArgumentNullException(nameof(md5));
             if (sizeBytes < 0) throw new ArgumentOutOfRangeException(nameof(sizeBytes));
 
             _Sha256 = sha256;
+            _Md5 = md5;
             _SizeBytes = sizeBytes;
         }
 

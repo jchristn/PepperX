@@ -44,7 +44,7 @@ client uses is a property of the client, not a copy of the data.
 | Protocol | Port | Use it for |
 |---|---|---|
 | [**REST**](REST_API.md) | 8000 | The complete surface. Application backends, admin tooling, and anything that speaks HTTP and JSON. Ships an OpenAPI document and Swagger UI. |
-| [**S3**](S3_API.md) | 8001 | Drop-in object storage for anything already built on S3 — data pipelines, backup and archive targets, existing S3 applications — using the AWS CLI and SDKs unchanged. |
+| [**S3**](S3_API.md) | 8001 | Drop-in object storage for anything already built on S3 — data pipelines, backup and archive targets, existing S3 applications — using the AWS CLI and SDKs unchanged, including multipart upload for large objects. |
 | [**Redis RESP**](RESP_API.md) | 6379 | Durable key/value for code that already speaks Redis, when you want persistence and metadata search rather than an in-memory cache. |
 | [**WebSockets**](WEBSOCKETS_API.md) | 8002 | REST-equivalent operations over one long-lived connection, for services doing high request volume without per-call HTTP overhead. |
 | [**MCP**](MCP_API.md) | 8003 / 8004 | Direct tool access for LLM agents: store, read, and search as discoverable tool calls, each with a full JSON Schema. |
@@ -92,8 +92,8 @@ the layer above owns access control and business logic.
   own access control. See [Security](#security).
 - **Not a Redis replacement.** The RESP surface is durable storage, not an in-memory cache. It is far
   slower than Redis and always will be.
-- **Not a full S3.** Buckets, objects, and tags only. No multipart upload, versioning, ACLs, or
-  lifecycle rules.
+- **Not a full S3.** Buckets, objects, tags, and multipart uploads (including `UploadPartCopy`). No
+  versioning, ACLs, or lifecycle rules.
 
 ---
 

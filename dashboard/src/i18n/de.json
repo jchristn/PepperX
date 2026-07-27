@@ -205,6 +205,19 @@
     "negative": "Der RESP-Datenbankindex muss null oder größer sein.",
     "none": "Keine"
   },
+  "multipart": {
+    "section": "Laufende mehrteilige Uploads",
+    "hint": "Uploads, die gestartet, aber nie abgeschlossen oder abgebrochen wurden. Sie belegen Speicher, bis sie abgeschlossen sind oder ablaufen.",
+    "key": "Objektschlüssel",
+    "uploadId": "Upload-ID",
+    "initiated": "Gestartet",
+    "expires": "Läuft ab",
+    "abort": "Abbrechen",
+    "abortTitle": "Mehrteiligen Upload abbrechen",
+    "abortConfirm": "Den mehrteiligen Upload für {{key}} abbrechen? Bereits hochgeladene Teile werden verworfen.",
+    "aborted": "Mehrteiliger Upload abgebrochen.",
+    "empty": "Keine laufenden mehrteiligen Uploads."
+  },
   "objects": {
     "title": "Objekte in {{container}}",
     "subtitle": "Jedes Objekt ist ein unveränderliches Extent: eine Binärnutzlast plus Labels, Tags und freies JSON.",

@@ -96,6 +96,8 @@ namespace PepperX.Core.Services
                     ContainerName = String.IsNullOrEmpty(name) ? null : name,
                     SizeBytes = extent.SizeBytes,
                     Sha256 = extent.Sha256,
+                    Md5 = extent.Md5,
+                    Etag = extent.Etag,
                     ContentType = extent.ContentType,
                     Labels = new List<string>(extent.Labels),
                     Tags = new Dictionary<string, string>(extent.Tags),

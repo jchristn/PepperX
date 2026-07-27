@@ -4,6 +4,37 @@ All notable changes to PepperX are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **S3 multipart upload.** The S3 surface now implements `CreateMultipartUpload`, `UploadPart`,
+  `UploadPartCopy`, `CompleteMultipartUpload`, `AbortMultipartUpload`, `ListParts`, and
+  `ListMultipartUploads`. Parts stage on shared storage and are assembled into a single immutable object
+  on completion, so a multipart-assembled object is indistinguishable from one written in a single
+  `PutObject`. The AWS CLI and SDKs use multipart automatically for large objects. Parts and their
+  metadata are shared cluster-wide, so an upload may be started on one node and completed on another.
+  Non-final parts must be at least 5 MiB; uncompleted uploads expire after `S3.MultipartUploadExpiryDays`
+  (default 7) and are reclaimed by the janitor. `ListParts` and `ListMultipartUploads` are paginated.
+- **Content MD5 on every object.** Objects now record an MD5 alongside the existing SHA-256, computed in
+  the same streamed write pass. Exposed over REST as the `Md5` field on object write/metadata responses
+  and the `x-pepperx-md5` response header.
+- **REST visibility for multipart uploads.** `GET /v1.0/containers/{container}/multipart-uploads` lists
+  in-progress uploads (paginated) and `DELETE …/multipart-uploads/{uploadId}` aborts one; surfaced in the
+  dashboard's container detail view.
+- **S3 ranged / large-object downloads.** `GetObject` now honors `Range` requests, returning `206 Partial
+  Content` with a `Content-Range: bytes start-end/total` header (via S3Server 7.3.1's `S3Object.TotalSize`).
+  Ranged/multipart downloads over `aws s3 cp`, the AWS SDKs, and `mc cp` now round-trip large objects
+  byte-for-byte in both directions.
+
+### Changed
+
+- **S3 ETag is now MD5-based and consistent across operations.** `GetObject`, `HeadObject`, and
+  `ListObjects` all report the same ETag for a given object: a plain MD5 hex for a single-`PutObject`
+  object, and the standard `hex(MD5(concat of part MD5s))-N` multipart form for a completed multipart
+  object. Previously `GetObject` returned an MD5 while `HeadObject`/`ListObjects` returned the SHA-256 —
+  a client reading the SHA-256 out of the S3 ETag field will now see MD5.
+
 ## [0.1.0] - 2026-07-23
 
 First alpha. Everything below works and is tested, but interfaces and the on-disk extent

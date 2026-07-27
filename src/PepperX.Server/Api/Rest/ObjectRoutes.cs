@@ -210,6 +210,7 @@ namespace PepperX.Server.Api.Rest
                     response.ContentType = handle.Extent.ContentType ?? Constants.OctetStreamContentType;
                     response.Headers.Add(Constants.ExtentIdHeader, handle.Extent.Id);
                     response.Headers.Add(Constants.Sha256Header, handle.Extent.Sha256);
+                    if (!String.IsNullOrEmpty(handle.Extent.Md5)) response.Headers.Add(Constants.Md5Header, handle.Extent.Md5);
                     if (handle.Extent.HasMetadataObject) response.Headers.Add(Constants.ObjectAvailableHeader, "true");
                     if (offset.HasValue)
                     {
@@ -250,6 +251,7 @@ namespace PepperX.Server.Api.Rest
                 HttpResponseBase response = request.Http.Response;
                 response.Headers.Add(Constants.ExtentIdHeader, metadata.ExtentId);
                 response.Headers.Add(Constants.Sha256Header, metadata.Sha256);
+                if (!String.IsNullOrEmpty(metadata.Md5)) response.Headers.Add(Constants.Md5Header, metadata.Md5);
                 if (!String.IsNullOrEmpty(metadata.ContentType)) response.ContentType = metadata.ContentType;
                 if (metadata.HasMetadataObject) response.Headers.Add(Constants.ObjectAvailableHeader, "true");
                 response.StatusCode = 200;

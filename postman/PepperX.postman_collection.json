@@ -48,6 +48,14 @@
       "value": "us-west-1",
       "type": "string",
       "description": "S3 region sent in the signature and returned by GetBucketLocation."
+    },
+    {
+      "key": "uploadId",
+      "value": ""
+    },
+    {
+      "key": "part1Etag",
+      "value": ""
     }
   ],
   "item": [
@@ -1551,6 +1559,243 @@
                     }
                   }
                 }
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "Multipart",
+          "description": "S3 multipart upload: initiate, upload/copy parts, complete, abort, and list. Run Initiate first; it captures the UploadId into a collection variable. Capture each UploadPart response ETag into part{n}Etag before running Complete.",
+          "item": [
+            {
+              "name": "Create multipart upload",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "url": {
+                  "raw": "{{s3BaseUrl}}/{{container}}/{{objectKey}}?uploads",
+                  "host": [
+                    "{{s3BaseUrl}}"
+                  ],
+                  "path": [
+                    "{{container}}",
+                    "{{objectKey}}"
+                  ],
+                  "query": [
+                    {
+                      "key": "uploads",
+                      "value": null
+                    }
+                  ]
+                },
+                "description": "CreateMultipartUpload. Returns an opaque UploadId (captured into the uploadId variable by this request's test script)."
+              },
+              "response": [],
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "const m = pm.response.text().match(/<UploadId>([^<]+)<\\/UploadId>/);",
+                      "if (m) { pm.collectionVariables.set('uploadId', m[1]); }"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Upload part",
+              "request": {
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/octet-stream"
+                  }
+                ],
+                "url": {
+                  "raw": "{{s3BaseUrl}}/{{container}}/{{objectKey}}?partNumber=1&uploadId={{uploadId}}",
+                  "host": [
+                    "{{s3BaseUrl}}"
+                  ],
+                  "path": [
+                    "{{container}}",
+                    "{{objectKey}}"
+                  ],
+                  "query": [
+                    {
+                      "key": "partNumber",
+                      "value": "1"
+                    },
+                    {
+                      "key": "uploadId",
+                      "value": "{{uploadId}}"
+                    }
+                  ]
+                },
+                "description": "UploadPart. The response ETag is the part's MD5; save it into a part1Etag variable for Complete.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "part one payload",
+                  "options": {
+                    "raw": {
+                      "language": "text"
+                    }
+                  }
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Upload part (copy)",
+              "request": {
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "x-amz-copy-source",
+                    "value": "/{{container}}/{{objectKey}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{s3BaseUrl}}/{{container}}/{{objectKey}}?partNumber=2&uploadId={{uploadId}}",
+                  "host": [
+                    "{{s3BaseUrl}}"
+                  ],
+                  "path": [
+                    "{{container}}",
+                    "{{objectKey}}"
+                  ],
+                  "query": [
+                    {
+                      "key": "partNumber",
+                      "value": "2"
+                    },
+                    {
+                      "key": "uploadId",
+                      "value": "{{uploadId}}"
+                    }
+                  ]
+                },
+                "description": "UploadPartCopy. Copies a part from an existing object named by x-amz-copy-source (optionally a byte range via x-amz-copy-source-range)."
+              },
+              "response": []
+            },
+            {
+              "name": "Complete multipart upload",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/xml"
+                  }
+                ],
+                "url": {
+                  "raw": "{{s3BaseUrl}}/{{container}}/{{objectKey}}?uploadId={{uploadId}}",
+                  "host": [
+                    "{{s3BaseUrl}}"
+                  ],
+                  "path": [
+                    "{{container}}",
+                    "{{objectKey}}"
+                  ],
+                  "query": [
+                    {
+                      "key": "uploadId",
+                      "value": "{{uploadId}}"
+                    }
+                  ]
+                },
+                "description": "CompleteMultipartUpload. Body lists the parts in ascending order with their ETags. Edit the body to match the parts you uploaded.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "<CompleteMultipartUpload>\n  <Part><PartNumber>1</PartNumber><ETag>{{part1Etag}}</ETag></Part>\n</CompleteMultipartUpload>",
+                  "options": {
+                    "raw": {
+                      "language": "xml"
+                    }
+                  }
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "List parts",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{s3BaseUrl}}/{{container}}/{{objectKey}}?uploadId={{uploadId}}&max-parts=1000",
+                  "host": [
+                    "{{s3BaseUrl}}"
+                  ],
+                  "path": [
+                    "{{container}}",
+                    "{{objectKey}}"
+                  ],
+                  "query": [
+                    {
+                      "key": "uploadId",
+                      "value": "{{uploadId}}"
+                    },
+                    {
+                      "key": "max-parts",
+                      "value": "1000"
+                    }
+                  ]
+                },
+                "description": "ListParts. Paginated via max-parts and part-number-marker."
+              },
+              "response": []
+            },
+            {
+              "name": "List multipart uploads",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{s3BaseUrl}}/{{container}}?uploads",
+                  "host": [
+                    "{{s3BaseUrl}}"
+                  ],
+                  "path": [
+                    "{{container}}"
+                  ],
+                  "query": [
+                    {
+                      "key": "uploads",
+                      "value": null
+                    }
+                  ]
+                },
+                "description": "ListMultipartUploads. Lists in-progress uploads for the bucket; paginated via max-uploads, key-marker, and upload-id-marker."
+              },
+              "response": []
+            },
+            {
+              "name": "Abort multipart upload",
+              "request": {
+                "method": "DELETE",
+                "header": [],
+                "url": {
+                  "raw": "{{s3BaseUrl}}/{{container}}/{{objectKey}}?uploadId={{uploadId}}",
+                  "host": [
+                    "{{s3BaseUrl}}"
+                  ],
+                  "path": [
+                    "{{container}}",
+                    "{{objectKey}}"
+                  ],
+                  "query": [
+                    {
+                      "key": "uploadId",
+                      "value": "{{uploadId}}"
+                    }
+                  ]
+                },
+                "description": "AbortMultipartUpload. Discards the staged parts."
               },
               "response": []
             }

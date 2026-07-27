@@ -155,7 +155,7 @@ same extent storage** — nodes are interchangeable and any node may be asked to
 | Port | Protocol |
 |---|---|
 | 8000 | REST (plus Swagger UI at `/swagger`) |
-| 8001 | S3 |
+| 8001 | S3 (buckets, objects, tags, and multipart upload) |
 | 8002 | WebSockets |
 | 8003 | MCP over Streamable HTTP |
 | 8004 | MCP over TCP JSON-RPC |

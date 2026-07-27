@@ -48,6 +48,16 @@ namespace PepperX.Core
         public const string RequestHistoryIdPrefix = "req_";
 
         /// <summary>
+        /// Identifier prefix for S3 multipart uploads. This value is the opaque S3 UploadId.
+        /// </summary>
+        public const string MultipartUploadIdPrefix = "mpu_";
+
+        /// <summary>
+        /// Identifier prefix for S3 multipart upload parts.
+        /// </summary>
+        public const string MultipartPartIdPrefix = "mpp_";
+
+        /// <summary>
         /// Total length, including prefix, of generated identifiers.
         /// </summary>
         public const int IdLength = 24;
@@ -99,6 +109,11 @@ namespace PepperX.Core
         /// Response header carrying the payload SHA-256 (hex).
         /// </summary>
         public const string Sha256Header = "x-pepperx-sha256";
+
+        /// <summary>
+        /// Response header carrying the payload MD5 (hex). Absent for objects written before MD5 was recorded.
+        /// </summary>
+        public const string Md5Header = "x-pepperx-md5";
 
         #endregion
 

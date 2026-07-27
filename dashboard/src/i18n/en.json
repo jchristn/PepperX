@@ -205,6 +205,19 @@
     "negative": "The RESP database index must be zero or greater.",
     "none": "None"
   },
+  "multipart": {
+    "section": "In-progress multipart uploads",
+    "hint": "Uploads that were started but never completed or aborted. They hold storage until they finish or expire.",
+    "key": "Object key",
+    "uploadId": "Upload ID",
+    "initiated": "Initiated",
+    "expires": "Expires",
+    "abort": "Abort",
+    "abortTitle": "Abort multipart upload",
+    "abortConfirm": "Abort the multipart upload for {{key}}? Any parts already uploaded are discarded.",
+    "aborted": "Multipart upload aborted.",
+    "empty": "No multipart uploads in progress."
+  },
   "objects": {
     "title": "Objects in {{container}}",
     "subtitle": "Every object is an immutable extent: a binary payload plus labels, tags, and freeform JSON.",

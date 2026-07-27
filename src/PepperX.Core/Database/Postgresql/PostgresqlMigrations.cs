@@ -129,6 +129,38 @@ namespace PepperX.Core.Database.Postgresql
                     // A container may claim at most one RESP database index, and an index maps to at most one
                     // container: a partial unique index enforces both, leaving unmapped containers (NULL) free.
                     @"CREATE UNIQUE INDEX IF NOT EXISTS ux_containers_resp_db_index ON containers (resp_database_index) WHERE resp_database_index IS NOT NULL;"
+                }),
+
+                new SchemaMigration(4, "S3 multipart uploads", new List<string>
+                {
+                    @"CREATE TABLE IF NOT EXISTS multipart_uploads (
+                        id varchar(64) PRIMARY KEY,
+                        container_id varchar(64) NOT NULL REFERENCES containers(id),
+                        object_key varchar(1024) NOT NULL,
+                        content_type varchar(255),
+                        tags jsonb NOT NULL DEFAULT '{}',
+                        initiated_utc timestamptz NOT NULL DEFAULT now(),
+                        expires_utc timestamptz NOT NULL
+                    );",
+                    @"CREATE INDEX IF NOT EXISTS ix_mpu_container_key ON multipart_uploads (container_id, object_key);",
+                    @"CREATE INDEX IF NOT EXISTS ix_mpu_expires ON multipart_uploads (expires_utc);",
+
+                    @"CREATE TABLE IF NOT EXISTS multipart_parts (
+                        id varchar(64) PRIMARY KEY,
+                        upload_id varchar(64) NOT NULL REFERENCES multipart_uploads(id) ON DELETE CASCADE,
+                        part_number integer NOT NULL,
+                        size_bytes bigint NOT NULL,
+                        md5 varchar(32) NOT NULL,
+                        sha256 varchar(64) NOT NULL,
+                        storage_location text NOT NULL,
+                        created_utc timestamptz NOT NULL DEFAULT now()
+                    );",
+                    @"CREATE UNIQUE INDEX IF NOT EXISTS ux_mpp_upload_part ON multipart_parts (upload_id, part_number);",
+
+                    // Content MD5 for every object (SHA-256 already exists); nullable so legacy rows are tolerated.
+                    @"ALTER TABLE extents ADD COLUMN IF NOT EXISTS md5 varchar(32);",
+                    // Persisted S3 multipart ETag (digest-N); null for single-part objects.
+                    @"ALTER TABLE extents ADD COLUMN IF NOT EXISTS etag varchar(64);"
                 })
             };
         }

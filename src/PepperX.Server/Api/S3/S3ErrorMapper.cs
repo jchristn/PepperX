@@ -28,6 +28,10 @@ namespace PepperX.Server.Api.S3
             else if (ex is ContainerNotEmptyException) code = ErrorCode.BucketNotEmpty;
             else if (ex is ObjectAlreadyExistsException) code = ErrorCode.BucketAlreadyExists;
             else if (ex is ObjectTooLargeException) code = ErrorCode.EntityTooLarge;
+            else if (ex is NoSuchUploadException) code = ErrorCode.NoSuchUpload;
+            else if (ex is InvalidPartException) code = ErrorCode.InvalidPart;
+            else if (ex is InvalidPartOrderException) code = ErrorCode.InvalidPartOrder;
+            else if (ex is EntityTooSmallException) code = ErrorCode.EntityTooSmall;
             else if (ex is PepperXException pex)
             {
                 code = pex.ErrorType switch
