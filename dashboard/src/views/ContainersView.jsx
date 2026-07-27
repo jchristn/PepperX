@@ -603,7 +603,7 @@ function ContainerDetailModal({ container, mode, onClose, onSaved }) {
     setUploadsLoading(true);
     try {
       const result = await client.containerMultipartUploads(container.Name);
-      setUploads(result?.uploads ?? []);
+      setUploads(result?.Uploads ?? []);
     } catch {
       // Supplementary panel: a transient error just shows no uploads rather than blocking the modal.
       setUploads([]);
@@ -690,7 +690,7 @@ function ContainerDetailModal({ container, mode, onClose, onSaved }) {
 
   const submitAbort = async () => {
     try {
-      await client.abortMultipartUpload(container.Name, abortTarget.uploadId);
+      await client.abortMultipartUpload(container.Name, abortTarget.UploadId);
       setAbortTarget(null);
       notify(t('multipart.aborted'), 'success');
       await loadUploads();
@@ -703,14 +703,14 @@ function ContainerDetailModal({ container, mode, onClose, onSaved }) {
     {
       key: 'key',
       label: t('multipart.key'),
-      render: (item) => <span className="mono">{item.key}</span>,
+      render: (item) => <span className="mono">{item.Key}</span>,
     },
     {
       key: 'uploadId',
       label: t('multipart.uploadId'),
       render: (item) => (
-        <span className="mono" title={item.uploadId}>
-          {item.uploadId}
+        <span className="mono" title={item.UploadId}>
+          {item.UploadId}
         </span>
       ),
     },
@@ -718,14 +718,14 @@ function ContainerDetailModal({ container, mode, onClose, onSaved }) {
       key: 'initiatedUtc',
       label: t('multipart.initiated'),
       render: (item) => (
-        <span title={formatters.dateTime(item.initiatedUtc)}>{formatters.relative(item.initiatedUtc)}</span>
+        <span title={formatters.dateTime(item.InitiatedUtc)}>{formatters.relative(item.InitiatedUtc)}</span>
       ),
     },
     {
       key: 'expiresUtc',
       label: t('multipart.expires'),
       render: (item) => (
-        <span title={formatters.dateTime(item.expiresUtc)}>{formatters.relative(item.expiresUtc)}</span>
+        <span title={formatters.dateTime(item.ExpiresUtc)}>{formatters.relative(item.ExpiresUtc)}</span>
       ),
     },
     {
@@ -893,7 +893,7 @@ function ContainerDetailModal({ container, mode, onClose, onSaved }) {
         <DataTable
           columns={uploadColumns}
           items={uploads}
-          rowId={(item) => item.uploadId}
+          rowId={(item) => item.UploadId}
           emptyMessage={t('multipart.empty')}
         />
       )}
@@ -903,7 +903,7 @@ function ContainerDetailModal({ container, mode, onClose, onSaved }) {
       open={Boolean(abortTarget)}
       danger
       title={t('multipart.abortTitle')}
-      message={abortTarget ? t('multipart.abortConfirm', { key: abortTarget.key }) : ''}
+      message={abortTarget ? t('multipart.abortConfirm', { key: abortTarget.Key }) : ''}
       confirmLabel={t('multipart.abort')}
       onConfirm={submitAbort}
       onCancel={() => setAbortTarget(null)}

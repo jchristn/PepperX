@@ -16,7 +16,11 @@ const VIEWPORTS = [
 const ROUTES = [
   ['home', '/'],
   ['containers', '/containers'],
-  ['objects', '/containers/telemetry'],
+  ['objects', '/objects'],
+  ['objects-selected', '/objects?container=telemetry'],
+  ['container-objects', '/containers/telemetry'],
+  ['uploads', '/uploads'],
+  ['uploads-selected', '/uploads?container=telemetry'],
   ['search', '/search'],
   ['capacity', '/capacity'],
   ['requests', '/requests'],

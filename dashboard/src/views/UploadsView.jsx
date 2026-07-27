@@ -59,7 +59,7 @@ export default function UploadsView() {
     setError(null);
     try {
       const result = await client.containerMultipartUploads(container);
-      setUploads(result?.uploads ?? []);
+      setUploads(result?.Uploads ?? []);
     } catch (caught) {
       setError(caught);
       setUploads([]);
@@ -82,7 +82,7 @@ export default function UploadsView() {
 
   const submitAbort = async () => {
     try {
-      await client.abortMultipartUpload(container, abortTarget.uploadId);
+      await client.abortMultipartUpload(container, abortTarget.UploadId);
       setAbortTarget(null);
       notify(t('multipart.aborted'), 'success');
       await load();
@@ -95,14 +95,14 @@ export default function UploadsView() {
     {
       key: 'key',
       label: t('multipart.key'),
-      render: (item) => <span className="mono">{item.key}</span>,
+      render: (item) => <span className="mono">{item.Key}</span>,
     },
     {
       key: 'uploadId',
       label: t('multipart.uploadId'),
       render: (item) => (
-        <span className="mono" title={item.uploadId}>
-          {item.uploadId}
+        <span className="mono" title={item.UploadId}>
+          {item.UploadId}
         </span>
       ),
     },
@@ -110,14 +110,14 @@ export default function UploadsView() {
       key: 'initiatedUtc',
       label: t('multipart.initiated'),
       render: (item) => (
-        <span title={formatters.dateTime(item.initiatedUtc)}>{formatters.relative(item.initiatedUtc)}</span>
+        <span title={formatters.dateTime(item.InitiatedUtc)}>{formatters.relative(item.InitiatedUtc)}</span>
       ),
     },
     {
       key: 'expiresUtc',
       label: t('multipart.expires'),
       render: (item) => (
-        <span title={formatters.dateTime(item.expiresUtc)}>{formatters.relative(item.expiresUtc)}</span>
+        <span title={formatters.dateTime(item.ExpiresUtc)}>{formatters.relative(item.ExpiresUtc)}</span>
       ),
     },
     {
@@ -198,7 +198,7 @@ export default function UploadsView() {
             columns={columns}
             items={uploads}
             loading={loading}
-            rowId={(item) => item.uploadId}
+            rowId={(item) => item.UploadId}
             emptyMessage={t('multipart.empty')}
           />
         </Card>
@@ -208,7 +208,7 @@ export default function UploadsView() {
         open={Boolean(abortTarget)}
         danger
         title={t('multipart.abortTitle')}
-        message={abortTarget ? t('multipart.abortConfirm', { key: abortTarget.key }) : ''}
+        message={abortTarget ? t('multipart.abortConfirm', { key: abortTarget.Key }) : ''}
         confirmLabel={t('multipart.abort')}
         onConfirm={submitAbort}
         onCancel={() => setAbortTarget(null)}
