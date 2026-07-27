@@ -1111,7 +1111,7 @@
 }
 
 .body-viewer-kind {
-  padding: 2px var(--spacing-sm);
+  padding: var(--spacing-xs) var(--spacing-md);
   border: 1px solid var(--color-border);
   border-radius: 999px;
   background-color: var(--color-surface-alt);
@@ -1130,7 +1130,8 @@
 }
 
 .segmented-option {
-  padding: var(--spacing-xs) var(--spacing-md);
+  min-height: 32px;
+  padding: var(--spacing-sm) var(--spacing-lg);
   border: 0;
   border-radius: 0;
   background-color: var(--color-surface);
@@ -1157,7 +1158,7 @@
 
 /* Single-shot action button (e.g. "Pretty print" over an editable body). */
 .body-viewer-toggle {
-  padding: var(--spacing-xs) var(--spacing-md);
+  padding: var(--spacing-sm) var(--spacing-lg);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
   background-color: var(--color-surface);
