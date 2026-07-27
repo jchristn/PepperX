@@ -235,6 +235,7 @@ export default function RequestHistoryView() {
           onRangeChange={setRangeId}
           onBucketClick={applyBucket}
           onRefresh={() => void load()}
+          autoRefreshKey="requests-chart"
           loading={loading}
           showStats={false}
         />

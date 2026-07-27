@@ -13,6 +13,7 @@ import { useTranslation } from 'react-i18next';
 import { useApp } from '@context/AppContext.jsx';
 import useFormatters from '@hooks/useFormatters.js';
 import ActionMenu from '@components/ActionMenu.jsx';
+import AutoRefresh from '@components/AutoRefresh.jsx';
 import ConfirmModal from '@components/ConfirmModal.jsx';
 import DataTable from '@components/DataTable.jsx';
 import Modal from '@components/Modal.jsx';
@@ -196,16 +197,19 @@ export default function UploadsView() {
           title={t('multipart.section')}
           help={t('multipart.hint')}
           actions={
-            <button
-              type="button"
-              className="button-icon"
-              onClick={() => void load()}
-              disabled={loading}
-              title={t('common.refresh')}
-              aria-label={t('common.refresh')}
-            >
-              <RefreshIcon size={16} />
-            </button>
+            <>
+              <AutoRefresh onRefresh={() => load()} storageKey="uploads" disabled={loading} />
+              <button
+                type="button"
+                className="button-icon"
+                onClick={() => void load()}
+                disabled={loading}
+                title={t('common.refresh')}
+                aria-label={t('common.refresh')}
+              >
+                <RefreshIcon size={16} />
+              </button>
+            </>
           }
         >
           <DataTable

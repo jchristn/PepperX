@@ -512,6 +512,18 @@
   margin: 0;
 }
 
+.auto-refresh {
+  margin: 0;
+  display: inline-flex;
+  align-items: center;
+}
+
+.auto-refresh select {
+  width: auto;
+  min-width: 92px;
+  color: var(--color-text-secondary);
+}
+
 .table-pagination-jump {
   display: flex;
   align-items: center;

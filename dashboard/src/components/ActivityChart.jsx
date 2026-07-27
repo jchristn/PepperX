@@ -12,6 +12,7 @@ import React, { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import useFormatters from '@hooks/useFormatters.js';
+import AutoRefresh from './AutoRefresh.jsx';
 import { RefreshIcon } from './Icons.jsx';
 
 /** Selectable windows, with the bucket width each one asks the server for. */
@@ -98,6 +99,7 @@ export default function ActivityChart({
   onRangeChange = null,
   onBucketClick = null,
   onRefresh = null,
+  autoRefreshKey = null,
   loading = false,
   title = null,
   showStats = true,
@@ -186,6 +188,9 @@ export default function ActivityChart({
               </button>
             ))}
           </div>
+          {onRefresh ? (
+            <AutoRefresh onRefresh={onRefresh} storageKey={autoRefreshKey} disabled={loading} />
+          ) : null}
           {onRefresh ? (
             <button
               type="button"

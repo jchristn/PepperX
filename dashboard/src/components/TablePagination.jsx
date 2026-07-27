@@ -9,6 +9,7 @@ import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import useFormatters from '@hooks/useFormatters.js';
+import AutoRefresh from './AutoRefresh.jsx';
 import {
   ChevronFirstIcon,
   ChevronLastIcon,
@@ -173,6 +174,10 @@ export default function TablePagination({
         >
           <ChevronLastIcon size={16} />
         </button>
+
+        {onRefresh ? (
+          <AutoRefresh onRefresh={onRefresh} storageKey={storageKey} disabled={disabled} />
+        ) : null}
 
         {onRefresh ? (
           <button

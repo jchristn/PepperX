@@ -80,7 +80,10 @@
     "typeDetails": "{{type}} Details",
     "typeContainer": "Container",
     "typeObject": "Object",
-    "typeRequest": "Request"
+    "typeRequest": "Request",
+    "autoRefresh": "Auto-refresh",
+    "autoRefreshOff": "Off",
+    "autoRefreshEvery": "Every {{count}}s"
   },
   "table": {
     "showing": "Showing {{from}}–{{to}} of {{total}} records",

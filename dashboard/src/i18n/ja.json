@@ -80,7 +80,10 @@
     "typeDetails": "{{type}}の詳細",
     "typeContainer": "コンテナー",
     "typeObject": "オブジェクト",
-    "typeRequest": "リクエスト"
+    "typeRequest": "リクエスト",
+    "autoRefresh": "自動更新",
+    "autoRefreshOff": "オフ",
+    "autoRefreshEvery": "{{count}} 秒ごと"
   },
   "table": {
     "showing": "{{total}} 件中 {{from}}–{{to}} 件を表示",

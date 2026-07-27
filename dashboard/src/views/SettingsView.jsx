@@ -8,11 +8,12 @@
  * policy applies it. Theme and language are separate: those live only in this browser.
  */
 
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { useApp } from '@context/AppContext.jsx';
 import useFormatters from '@hooks/useFormatters.js';
+import AutoRefresh from '@components/AutoRefresh.jsx';
 import ConfirmModal from '@components/ConfirmModal.jsx';
 import DataTable from '@components/DataTable.jsx';
 import PageHeader, { Card } from '@components/PageHeader.jsx';
@@ -52,7 +53,7 @@ export default function SettingsView() {
   const [rawError, setRawError] = useState(null);
   const [rawBusy, setRawBusy] = useState(false);
 
-  useEffect(() => {
+  const load = useCallback(() => {
     if (!client) return;
     // A node running an older build has no settings route; the rest of the page still works.
     client
@@ -68,6 +69,10 @@ export default function SettingsView() {
       .then((full) => setRawText(JSON.stringify(full, null, 2)))
       .catch(() => setRawText(''));
   }, [client]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
 
   const saveRawSettings = async () => {
     let parsed;
@@ -144,7 +149,11 @@ export default function SettingsView() {
         </dl>
       </Card>
 
-      <Card title={t('settings.protocols')} help={t('settings.protocolHint')}>
+      <Card
+        title={t('settings.protocols')}
+        help={t('settings.protocolHint')}
+        actions={<AutoRefresh onRefresh={() => load()} storageKey="settings" />}
+      >
         <DataTable
           columns={[
             { key: 'Name', label: t('common.name'), render: (item) => <strong>{item.Name}</strong> },

@@ -19,6 +19,7 @@ import { buildQuery, toEnumerationBody } from '../../utils/api.js';
 import { defaultServerUrl, loadRuntimeConfig, runtimeConfig } from '../../utils/runtimeConfig.js';
 import { formatBytes, formatDuration, formatNumber, formatPercent } from '../../i18n/formatters.js';
 import { detectBodyKind, formatBody, prettyXml } from '../BodyViewer.jsx';
+import { persistedAutoRefresh } from '../AutoRefresh.jsx';
 import { directionFor, normalizeLocale } from '../../i18n/localeRegistry.js';
 import resources from '../../i18n/resources.js';
 
@@ -255,5 +256,28 @@ describe('body formatting', () => {
   it('leaves plain text and invalid payloads untouched', () => {
     expect(formatBody('just text')).toBe('just text');
     expect(formatBody('{not valid json}')).toBe('{not valid json}');
+  });
+});
+
+describe('auto-refresh persistence', () => {
+  it('defaults to 30 seconds when nothing is stored', () => {
+    window.localStorage.removeItem('pepperx.autoRefresh.demo');
+    // The bug this guards: Number(null) === 0 and 0 ("Off") is a valid interval, so a naive
+    // includes() check would treat a missing key as Off instead of the 30s default.
+    expect(persistedAutoRefresh('demo')).toBe(30);
+  });
+
+  it('restores a stored interval, including 0 (Off)', () => {
+    window.localStorage.setItem('pepperx.autoRefresh.demo', '0');
+    expect(persistedAutoRefresh('demo')).toBe(0);
+    window.localStorage.setItem('pepperx.autoRefresh.demo', '60');
+    expect(persistedAutoRefresh('demo')).toBe(60);
+    window.localStorage.removeItem('pepperx.autoRefresh.demo');
+  });
+
+  it('falls back to the default for an unrecognized stored value', () => {
+    window.localStorage.setItem('pepperx.autoRefresh.demo', '999');
+    expect(persistedAutoRefresh('demo')).toBe(30);
+    window.localStorage.removeItem('pepperx.autoRefresh.demo');
   });
 });

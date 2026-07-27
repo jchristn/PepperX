@@ -80,7 +80,10 @@
     "typeDetails": "{{type}}详情",
     "typeContainer": "容器",
     "typeObject": "对象",
-    "typeRequest": "请求"
+    "typeRequest": "请求",
+    "autoRefresh": "自动刷新",
+    "autoRefreshOff": "关闭",
+    "autoRefreshEvery": "每 {{count}} 秒"
   },
   "table": {
     "showing": "第 {{from}}–{{to}} 条，共 {{total}} 条记录",

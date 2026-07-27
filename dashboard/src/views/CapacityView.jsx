@@ -11,6 +11,7 @@ import { useTranslation } from 'react-i18next';
 
 import { useApp } from '@context/AppContext.jsx';
 import useFormatters from '@hooks/useFormatters.js';
+import AutoRefresh from '@components/AutoRefresh.jsx';
 import ConfirmModal from '@components/ConfirmModal.jsx';
 import DataTable from '@components/DataTable.jsx';
 import Modal from '@components/Modal.jsx';
@@ -81,6 +82,7 @@ export default function CapacityView() {
         subtitle={t('capacity.subtitle')}
         actions={
           <>
+            <AutoRefresh onRefresh={() => load()} storageKey="capacity" disabled={loading} />
             <button type="button" className="button-secondary" onClick={() => void load()} disabled={loading}>
               <RefreshIcon size={16} />
               {t('common.refresh')}

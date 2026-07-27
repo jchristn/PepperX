@@ -80,7 +80,10 @@
     "typeDetails": "Detalles de {{type}}",
     "typeContainer": "Contenedor",
     "typeObject": "Objeto",
-    "typeRequest": "Solicitud"
+    "typeRequest": "Solicitud",
+    "autoRefresh": "Actualización automática",
+    "autoRefreshOff": "Desactivada",
+    "autoRefreshEvery": "Cada {{count}} s"
   },
   "table": {
     "showing": "{{from}}–{{to}} de {{total}} registros",

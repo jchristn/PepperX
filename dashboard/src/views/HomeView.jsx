@@ -13,6 +13,7 @@ import { useTranslation } from 'react-i18next';
 import { useApp } from '@context/AppContext.jsx';
 import useFormatters from '@hooks/useFormatters.js';
 import ActivityChart, { getTimeRange, rangeWindow } from '@components/ActivityChart.jsx';
+import AutoRefresh from '@components/AutoRefresh.jsx';
 import DataTable from '@components/DataTable.jsx';
 import PageHeader, { Card, Metric } from '@components/PageHeader.jsx';
 import { ErrorBanner } from '@components/EmptyState.jsx';
@@ -123,6 +124,7 @@ export default function HomeView() {
           rangeId={rangeId}
           onRangeChange={setRangeId}
           onRefresh={() => void load()}
+          autoRefreshKey="home-chart"
           onBucketClick={() => navigate('/requests')}
           loading={loading}
           title={t('home.activity')}
@@ -164,7 +166,15 @@ export default function HomeView() {
         </Card>
       </div>
 
-      <Card title={t('capacity.byContainer')} actions={<Link className="button-secondary" to="/containers">{t('nav.containers')}</Link>}>
+      <Card
+        title={t('capacity.byContainer')}
+        actions={
+          <>
+            <AutoRefresh onRefresh={() => load()} storageKey="home-table" />
+            <Link className="button-secondary" to="/containers">{t('nav.containers')}</Link>
+          </>
+        }
+      >
         <DataTable
           columns={[
             { key: 'Name', label: t('common.name'), render: (item) => <strong>{item.Name}</strong> },
