@@ -5,6 +5,7 @@ namespace Test.Shared.Suites
     using System.Net;
     using System.Net.Http;
     using System.Text;
+    using System.Text.Json;
     using System.Threading;
     using System.Threading.Tasks;
     using Touchstone.Core;
@@ -77,6 +78,95 @@ namespace Test.Shared.Suites
                         Check.Equal(HttpStatusCode.NotFound, missing.StatusCode, "missing container 404");
 
                         await (await ClientAsync(ct)).DeleteAsync("/v1.0/containers/" + name, ct);
+                    }),
+
+                    new TestCaseDescriptor("RestApi", "MultipartLifecycle", "Multipart initiate, upload part, copy part, list parts, complete, and read over REST", async ct =>
+                    {
+                        HttpClient client = await ClientAsync(ct);
+                        string name = DbTest.NewContainerName();
+                        await client.PutAsync("/v1.0/containers", Json("{\"Name\":\"" + name + "\"}"), ct);
+
+                        // A small source object for the copy-part step.
+                        byte[] copied = Encoding.UTF8.GetBytes("COPIED");
+                        await client.PutAsync("/v1.0/containers/" + name + "/object?key=src", new ByteArrayContent(copied), ct);
+
+                        // Initiate.
+                        HttpResponseMessage init = await client.PostAsync("/v1.0/containers/" + name + "/multipart-uploads?key=assembled&contentType=application/octet-stream", Json("{}"), ct);
+                        Check.Equal(HttpStatusCode.Created, init.StatusCode, "initiate 201");
+                        string uploadId = await JsonStringAsync(init, "UploadId", ct);
+                        Check.True(uploadId.StartsWith("mpu_", StringComparison.Ordinal), "upload id returned");
+
+                        // Part 1: a 5 MiB inline body (satisfies the non-final minimum part size).
+                        byte[] part1 = new byte[5 * 1024 * 1024];
+                        for (int i = 0; i < part1.Length; i++) part1[i] = 0x41;
+                        HttpResponseMessage up1 = await client.PutAsync("/v1.0/containers/" + name + "/multipart-uploads/" + uploadId + "/parts/1", new ByteArrayContent(part1), ct);
+                        Check.Equal(HttpStatusCode.OK, up1.StatusCode, "upload part 1 200");
+                        string etag1 = await JsonStringAsync(up1, "ETag", ct);
+
+                        // Part 2 (last): copied from the source object via the copy-source header.
+                        HttpRequestMessage copyReq = new HttpRequestMessage(HttpMethod.Put, "/v1.0/containers/" + name + "/multipart-uploads/" + uploadId + "/parts/2");
+                        copyReq.Headers.TryAddWithoutValidation("x-pepperx-copy-source", name + "/src");
+                        HttpResponseMessage up2 = await client.SendAsync(copyReq, ct);
+                        Check.Equal(HttpStatusCode.OK, up2.StatusCode, "upload part 2 (copy) 200");
+                        string etag2 = await JsonStringAsync(up2, "ETag", ct);
+
+                        // List parts shows both.
+                        HttpResponseMessage parts = await client.GetAsync("/v1.0/containers/" + name + "/multipart-uploads/" + uploadId + "/parts", ct);
+                        string partsBody = await parts.Content.ReadAsStringAsync(ct);
+                        Check.True(partsBody.Contains("\"PartNumber\":1", StringComparison.Ordinal) && partsBody.Contains("\"PartNumber\":2", StringComparison.Ordinal), "both parts listed");
+
+                        // Complete.
+                        string completeBody = "{\"Parts\":[{\"PartNumber\":1,\"ETag\":\"" + etag1 + "\"},{\"PartNumber\":2,\"ETag\":\"" + etag2 + "\"}]}";
+                        HttpResponseMessage complete = await client.PostAsync("/v1.0/containers/" + name + "/multipart-uploads/" + uploadId + "/complete", Json(completeBody), ct);
+                        Check.Equal(HttpStatusCode.OK, complete.StatusCode, "complete 200");
+
+                        // Read the assembled object: 5 MiB of 'A' followed by "COPIED".
+                        HttpResponseMessage obj = await client.GetAsync("/v1.0/containers/" + name + "/object?key=assembled", ct);
+                        byte[] assembled = await obj.Content.ReadAsByteArrayAsync(ct);
+                        Check.Equal(part1.Length + copied.Length, assembled.Length, "assembled length");
+                        Check.Equal("COPIED", Encoding.UTF8.GetString(assembled, part1.Length, copied.Length), "assembled tail is the copied part");
+
+                        await client.DeleteAsync("/v1.0/containers/" + name + "?force=true", ct);
+                    }),
+
+                    new TestCaseDescriptor("RestApi", "MultipartAbort", "An initiated upload lists, aborts, and then cannot complete over REST", async ct =>
+                    {
+                        HttpClient client = await ClientAsync(ct);
+                        string name = DbTest.NewContainerName();
+                        await client.PutAsync("/v1.0/containers", Json("{\"Name\":\"" + name + "\"}"), ct);
+
+                        HttpResponseMessage init = await client.PostAsync("/v1.0/containers/" + name + "/multipart-uploads?key=pending", Json("{}"), ct);
+                        string uploadId = await JsonStringAsync(init, "UploadId", ct);
+
+                        string listed = await (await client.GetAsync("/v1.0/containers/" + name + "/multipart-uploads", ct)).Content.ReadAsStringAsync(ct);
+                        Check.True(listed.Contains("pending", StringComparison.Ordinal), "in-progress upload listed");
+
+                        HttpResponseMessage abort = await client.DeleteAsync("/v1.0/containers/" + name + "/multipart-uploads/" + uploadId, ct);
+                        Check.Equal(HttpStatusCode.NoContent, abort.StatusCode, "abort 204");
+
+                        string after = await (await client.GetAsync("/v1.0/containers/" + name + "/multipart-uploads", ct)).Content.ReadAsStringAsync(ct);
+                        Check.False(after.Contains("pending", StringComparison.Ordinal), "upload gone after abort");
+
+                        HttpResponseMessage complete = await client.PostAsync("/v1.0/containers/" + name + "/multipart-uploads/" + uploadId + "/complete", Json("{\"Parts\":[]}"), ct);
+                        Check.Equal(HttpStatusCode.NotFound, complete.StatusCode, "complete after abort 404");
+
+                        await client.DeleteAsync("/v1.0/containers/" + name + "?force=true", ct);
+                    }),
+
+                    new TestCaseDescriptor("RestApi", "ContainerDeleteWithInProgressUpload", "Force-deleting a container purges its in-progress multipart uploads", async ct =>
+                    {
+                        HttpClient client = await ClientAsync(ct);
+                        string name = DbTest.NewContainerName();
+                        await client.PutAsync("/v1.0/containers", Json("{\"Name\":\"" + name + "\"}"), ct);
+
+                        await client.PostAsync("/v1.0/containers/" + name + "/multipart-uploads?key=leftover", Json("{}"), ct);
+
+                        // Previously this returned 500 due to the multipart_uploads -> containers foreign key.
+                        HttpResponseMessage delete = await client.DeleteAsync("/v1.0/containers/" + name + "?force=true", ct);
+                        Check.Equal(HttpStatusCode.NoContent, delete.StatusCode, "container deleted despite in-progress upload");
+
+                        HttpResponseMessage gone = await client.GetAsync("/v1.0/containers/" + name, ct);
+                        Check.Equal(HttpStatusCode.NotFound, gone.StatusCode, "container gone");
                     }),
 
                     new TestCaseDescriptor("RestApi", "ObjectLifecycle", "Object write, read (slashed key), metadata, delete", async ct =>
@@ -356,6 +446,15 @@ namespace Test.Shared.Suites
         private static StringContent Json(string json)
         {
             return new StringContent(json, Encoding.UTF8, "application/json");
+        }
+
+        private static async Task<string> JsonStringAsync(HttpResponseMessage response, string property, CancellationToken ct)
+        {
+            string body = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+            using (JsonDocument doc = JsonDocument.Parse(body))
+            {
+                return doc.RootElement.GetProperty(property).GetString() ?? String.Empty;
+            }
         }
     }
 }

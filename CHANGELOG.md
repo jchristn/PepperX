@@ -19,8 +19,12 @@ All notable changes to PepperX are documented here. The format follows
 - **Content MD5 on every object.** Objects now record an MD5 alongside the existing SHA-256, computed in
   the same streamed write pass. Exposed over REST as the `Md5` field on object write/metadata responses
   and the `x-pepperx-md5` response header.
-- **REST visibility for multipart uploads.** `GET /v1.0/containers/{container}/multipart-uploads` lists
-  in-progress uploads (paginated) and `DELETE …/multipart-uploads/{uploadId}` aborts one; surfaced in the
+- **Full multipart upload over the REST API.** The complete lifecycle is now available natively over
+  REST, not just S3: `POST /v1.0/containers/{container}/multipart-uploads?key=` (initiate),
+  `PUT …/multipart-uploads/{uploadId}/parts/{partNumber}` (upload a part, or copy one from an existing
+  object via `x-pepperx-copy-source`), `GET …/multipart-uploads/{uploadId}/parts` (list parts, paginated),
+  `POST …/multipart-uploads/{uploadId}/complete` (assemble), plus `GET …/multipart-uploads` (list
+  in-progress) and `DELETE …/multipart-uploads/{uploadId}` (abort). In-progress uploads are surfaced in the
   dashboard's container detail view.
 - **S3 ranged / large-object downloads.** `GetObject` now honors `Range` requests, returning `206 Partial
   Content` with a `Content-Range: bytes start-end/total` header (via S3Server 7.3.1's `S3Object.TotalSize`).
@@ -34,6 +38,12 @@ All notable changes to PepperX are documented here. The format follows
   object, and the standard `hex(MD5(concat of part MD5s))-N` multipart form for a completed multipart
   object. Previously `GetObject` returned an MD5 while `HeadObject`/`ListObjects` returned the SHA-256 —
   a client reading the SHA-256 out of the S3 ETag field will now see MD5.
+
+### Fixed
+
+- **Force-deleting a container with in-progress multipart uploads.** Container deletion now purges any
+  in-progress multipart uploads (rows and staged parts) before removing the container. Previously the
+  `multipart_uploads` → `containers` foreign key caused the delete to fail with a 500.
 
 ## [0.1.0] - 2026-07-23
 

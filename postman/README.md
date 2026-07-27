@@ -21,8 +21,10 @@ query parameter, why deletes wait, why `null` and `ClearObject` mean different t
 | `objectKey` | `metrics/cpu.json` | Object key. URL-encode reserved characters. |
 | `requestId` | *(empty)* | A request-history record ID, from the list endpoint |
 | `s3BaseUrl` | `http://localhost:8001` | The node's S3 endpoint (S3 folder) |
-| `uploadId` | *(empty)* | Multipart UploadId, captured automatically by **S3 → Multipart → Create multipart upload** |
-| `part1Etag` | *(empty)* | A part ETag to paste into the Complete request body |
+| `uploadId` | *(empty)* | S3 multipart UploadId, captured automatically by **S3 → Multipart → Create multipart upload** |
+| `part1Etag` | *(empty)* | An S3 part ETag to paste into the S3 Complete request body |
+| `restUploadId` | *(empty)* | REST multipart UploadId, captured automatically by **REST → Multipart → Initiate multipart upload** |
+| `restPart1Etag` | *(empty)* | A REST part ETag to paste into the REST Complete request body |
 
 ## Running it top to bottom
 
@@ -31,10 +33,13 @@ history, then Cleanup. The destructive deletes live in **Cleanup** at the end ra
 own folders, so running the collection straight through does not delete the container that later
 folders depend on.
 
+The **REST → Multipart** subfolder covers the native REST multipart lifecycle (`{{baseUrl}}`): **Initiate
+multipart upload** captures the `UploadId` into `restUploadId`, then Upload part, Upload part (copy),
+List parts, Complete, List in-progress, and Abort reuse it. Save each Upload part response ETag into
+`restPart1Etag` (etc.) before sending Complete.
+
 The **S3** folder mirrors the S3-compatible surface (`{{s3BaseUrl}}`). Its **Multipart** subfolder
-runs in order — **Create multipart upload** captures the `UploadId` into the `uploadId` variable, then
-Upload part, Complete, List, and Abort reuse it. Save each Upload part response ETag into `part1Etag`
-(etc.) before editing and sending Complete.
+runs the same way with the `uploadId`/`part1Etag` variables.
 
 With [newman](https://github.com/postmanlabs/newman):
 

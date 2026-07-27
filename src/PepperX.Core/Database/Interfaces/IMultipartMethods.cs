@@ -87,6 +87,16 @@ namespace PepperX.Core.Database.Interfaces
         Task<IReadOnlyList<string>> PurgeExpiredAsync(DateTime olderThanUtc, CancellationToken token = default);
 
         /// <summary>
+        /// Delete all in-progress uploads for a container (rows and, by cascade, their parts) and return
+        /// their identifiers so staged parts can be reclaimed from storage. Called when a container is
+        /// deleted so its rows do not orphan or block the container delete via the foreign key.
+        /// </summary>
+        /// <param name="containerId">Container identifier.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The identifiers of the deleted uploads.</returns>
+        Task<IReadOnlyList<string>> DeleteByContainerAsync(string containerId, CancellationToken token = default);
+
+        /// <summary>
         /// List the identifiers of all in-progress uploads across all containers (used by the janitor to
         /// determine which staging directories still have a live upload).
         /// </summary>

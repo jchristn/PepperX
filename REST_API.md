@@ -260,15 +260,95 @@ database): claiming one another container already holds returns `409 Conflict`. 
 `Resp.DatabaseCount` (16 by default). The assignment is mirrored into the container manifest, so a full
 `rehydrate --mode Rebuild` preserves it. See [`RESP_API.md`](RESP_API.md#addressing-an-arbitrarily-named-container).
 
-### `GET /v1.0/containers/{container}/multipart-uploads`
+### Multipart uploads
 
-List the container's in-progress S3 multipart uploads. Multipart uploads are initiated over the
-[S3 protocol](S3_API.md#multipart-upload); this endpoint gives the REST surface (and the dashboard)
-read access to what is currently in flight.
+Large objects can be uploaded in parts and assembled server-side into a single object. The full
+lifecycle — initiate, upload parts, complete — is available over REST, and mirrored on the
+[S3 protocol](S3_API.md#multipart-upload). Parts stage on shared storage and assemble into one immutable
+object on completion, so a completed multipart object is indistinguishable from one written in a single
+`PUT`, and any node can complete an upload started on another. Every part except the last must be at
+least `S3.MultipartMinPartBytes` (default 5 MiB); an upload may have up to `S3.MultipartMaxParts` parts
+(default 10000). An upload that is never completed or aborted is reclaimed after
+`S3.MultipartUploadExpiryDays` (default 7).
+
+#### `POST /v1.0/containers/{container}/multipart-uploads?key={key}`
+
+Initiate an upload; returns an `UploadId` for the subsequent calls.
+
+| Parameter | Type | Default | Notes |
+|---|---|---|---|
+| `key` | string | (required) | Target object key |
+| `contentType` | string | — | Content type for the completed object |
+
+Tags for the completed object may be supplied via the `x-pepperx-tags` header (URL-encoded `k=v&k=v`).
 
 ```bash
-curl 'http://localhost:8000/v1.0/containers/telemetry/multipart-uploads?maxUploads=100'
+curl -X POST 'http://localhost:8000/v1.0/containers/telemetry/multipart-uploads?key=big/object.bin&contentType=application/octet-stream'
 ```
+```json
+{ "UploadId": "mpu_...", "Key": "big/object.bin" }
+```
+`201` on success; `404` if the container does not exist.
+
+#### `PUT /v1.0/containers/{container}/multipart-uploads/{uploadId}/parts/{partNumber}`
+
+Upload one part. The raw request body is the part payload. The response `ETag` is the part's MD5 — keep
+it for the complete call.
+
+```bash
+curl -X PUT --data-binary @part1.bin \
+  'http://localhost:8000/v1.0/containers/telemetry/multipart-uploads/mpu_.../parts/1'
+```
+```json
+{ "PartNumber": 1, "ETag": "9e107d9d...", "SizeBytes": 5242880 }
+```
+
+To **copy** a part from an existing object instead of sending a body, omit the body and set
+`x-pepperx-copy-source: {container}/{key}` (optionally `x-pepperx-copy-source-range: bytes=start-end`):
+
+```bash
+curl -X PUT -H 'x-pepperx-copy-source: telemetry/source.bin' \
+  'http://localhost:8000/v1.0/containers/telemetry/multipart-uploads/mpu_.../parts/2'
+```
+`200` on success; `404 NoSuchUpload` if the upload does not exist; `404 NoSuchKey` if a copy source is missing.
+
+#### `POST /v1.0/containers/{container}/multipart-uploads/{uploadId}/complete`
+
+Assemble the listed parts, in ascending order, into the object. Each part's `ETag` must match the staged
+part, and every part except the last must meet the minimum part size.
+
+```bash
+curl -X POST -H 'Content-Type: application/json' \
+  --data '{"Parts":[{"PartNumber":1,"ETag":"9e107d9d..."},{"PartNumber":2,"ETag":"a1b2c3..."}]}' \
+  'http://localhost:8000/v1.0/containers/telemetry/multipart-uploads/mpu_.../complete'
+```
+```json
+{ "ContainerName": "telemetry", "Key": "big/object.bin", "ETag": "e3b0c44...-2", "ExtentId": "ext_...", "SizeBytes": 5242886 }
+```
+`200` on success. Errors: `400` for a missing/mismatched part (`InvalidPart`), out-of-order parts
+(`InvalidPartOrder`), or a too-small non-final part (`EntityTooSmall`); `404 NoSuchUpload` if the upload
+does not exist — including a second, racing complete, since exactly one wins.
+
+#### `GET /v1.0/containers/{container}/multipart-uploads/{uploadId}/parts`
+
+List an upload's staged parts, paginated ascending by part number.
+
+| Parameter | Type | Default | Notes |
+|---|---|---|---|
+| `maxParts` | int | 1000 | Page size, 1–1000 |
+| `partNumberMarker` | int | — | Resume after this part number |
+
+```json
+{
+  "Parts": [ { "PartNumber": 1, "ETag": "9e107d9d...", "SizeBytes": 5242880, "CreatedUtc": "2026-07-26T12:00:01Z" } ],
+  "IsTruncated": false,
+  "NextPartNumberMarker": null
+}
+```
+
+#### `GET /v1.0/containers/{container}/multipart-uploads`
+
+List the container's in-progress uploads, paginated.
 
 | Parameter | Type | Default | Notes |
 |---|---|---|---|
@@ -288,13 +368,13 @@ curl 'http://localhost:8000/v1.0/containers/telemetry/multipart-uploads?maxUploa
 }
 ```
 
-`200` with the page; `404` if the container does not exist. In-progress uploads are transient: an upload
-that is never completed or aborted is reclaimed after `S3.MultipartUploadExpiryDays` (default 7).
+`200` with the page; `404` if the container does not exist.
 
-### `DELETE /v1.0/containers/{container}/multipart-uploads/{uploadId}`
+#### `DELETE /v1.0/containers/{container}/multipart-uploads/{uploadId}`
 
 Abort an in-progress multipart upload, discarding its staged parts. `204` on success; idempotent
-(aborting an unknown upload also returns `204`).
+(aborting an unknown upload also returns `204`). Force-deleting a container also purges any of its
+in-progress uploads.
 
 ### `DELETE /v1.0/containers/{container}`
 

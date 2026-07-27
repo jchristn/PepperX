@@ -56,6 +56,14 @@
     {
       "key": "part1Etag",
       "value": ""
+    },
+    {
+      "key": "restUploadId",
+      "value": ""
+    },
+    {
+      "key": "restPart1Etag",
+      "value": ""
     }
   ],
   "item": [
@@ -1032,6 +1040,231 @@
                   ]
                 },
                 "description": "DESTRUCTIVE. Bulk delete by filter, using the same parameters as the list. With no filter this deletes all retained history."
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "Multipart",
+          "description": "Native REST multipart upload: initiate, upload/copy parts, list, complete, list in-progress, abort. Run Initiate first (its test script captures the UploadId into restUploadId). Save each Upload part response ETag into restPart{n}Etag before running Complete.",
+          "item": [
+            {
+              "name": "Initiate multipart upload",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/v1.0/containers/{{container}}/multipart-uploads?key={{objectKey}}&contentType=application/octet-stream",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v1.0",
+                    "containers",
+                    "{{container}}",
+                    "multipart-uploads"
+                  ],
+                  "query": [
+                    {
+                      "key": "key",
+                      "value": "{{objectKey}}"
+                    },
+                    {
+                      "key": "contentType",
+                      "value": "application/octet-stream"
+                    }
+                  ]
+                },
+                "description": "Initiate a multipart upload. Content type via the contentType query parameter; tags via the x-pepperx-tags header. The test script captures UploadId into the restUploadId variable."
+              },
+              "response": [],
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "const j = pm.response.json();",
+                      "if (j && j.UploadId) { pm.collectionVariables.set('restUploadId', j.UploadId); }"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Upload part",
+              "request": {
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/octet-stream"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/v1.0/containers/{{container}}/multipart-uploads/{{restUploadId}}/parts/1",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v1.0",
+                    "containers",
+                    "{{container}}",
+                    "multipart-uploads",
+                    "{{restUploadId}}",
+                    "parts",
+                    "1"
+                  ]
+                },
+                "description": "Upload part 1. The raw body is the part payload; the response ETag is the part MD5 (save it into restPart1Etag).",
+                "body": {
+                  "mode": "raw",
+                  "raw": "part one payload bytes",
+                  "options": {
+                    "raw": {
+                      "language": "text"
+                    }
+                  }
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Upload part (copy from object)",
+              "request": {
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "x-pepperx-copy-source",
+                    "value": "{{container}}/{{objectKey}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/v1.0/containers/{{container}}/multipart-uploads/{{restUploadId}}/parts/2",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v1.0",
+                    "containers",
+                    "{{container}}",
+                    "multipart-uploads",
+                    "{{restUploadId}}",
+                    "parts",
+                    "2"
+                  ]
+                },
+                "description": "Copy a part from an existing object via x-pepperx-copy-source: {container}/{key} (optionally x-pepperx-copy-source-range: bytes=start-end). No request body."
+              },
+              "response": []
+            },
+            {
+              "name": "List parts",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/v1.0/containers/{{container}}/multipart-uploads/{{restUploadId}}/parts?maxParts=1000",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v1.0",
+                    "containers",
+                    "{{container}}",
+                    "multipart-uploads",
+                    "{{restUploadId}}",
+                    "parts"
+                  ],
+                  "query": [
+                    {
+                      "key": "maxParts",
+                      "value": "1000"
+                    }
+                  ]
+                },
+                "description": "List the upload's staged parts, paginated (maxParts, partNumberMarker)."
+              },
+              "response": []
+            },
+            {
+              "name": "Complete multipart upload",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/v1.0/containers/{{container}}/multipart-uploads/{{restUploadId}}/complete",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v1.0",
+                    "containers",
+                    "{{container}}",
+                    "multipart-uploads",
+                    "{{restUploadId}}",
+                    "complete"
+                  ]
+                },
+                "description": "Complete the upload, assembling the listed parts (ascending) into the object. Edit the body to list the parts you uploaded and their ETags.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"Parts\": [\n    { \"PartNumber\": 1, \"ETag\": \"{{restPart1Etag}}\" }\n  ]\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "List in-progress uploads",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/v1.0/containers/{{container}}/multipart-uploads",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v1.0",
+                    "containers",
+                    "{{container}}",
+                    "multipart-uploads"
+                  ]
+                },
+                "description": "List the container's in-progress multipart uploads, paginated (maxUploads, keyMarker, uploadIdMarker)."
+              },
+              "response": []
+            },
+            {
+              "name": "Abort multipart upload",
+              "request": {
+                "method": "DELETE",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/v1.0/containers/{{container}}/multipart-uploads/{{restUploadId}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v1.0",
+                    "containers",
+                    "{{container}}",
+                    "multipart-uploads",
+                    "{{restUploadId}}"
+                  ]
+                },
+                "description": "Abort an in-progress multipart upload, discarding its staged parts. Idempotent."
               },
               "response": []
             }

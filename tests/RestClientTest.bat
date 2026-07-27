@@ -125,6 +125,88 @@ call :req "POST search in container" "/v1.0/containers/%CT%/objects/enumerate" 2
 set "EXTRA=-X POST -H "Content-Type: application/json" --data-binary "@%JSONF%""
 call :req "POST search all containers" "/v1.0/objects/enumerate" 200
 
+:: --- multipart uploads (native REST) ----------------------------------------
+:: Single-part uploads exercise the full lifecycle without needing a 5 MiB part
+:: (only non-final parts have a minimum size).
+> "%WORK%\mppart.bin" echo REST multipart body
+
+set "UPLOADID="
+set "EXTRA=-X POST"
+call :req "POST initiate multipart" "/v1.0/containers/%CT%/multipart-uploads?key=mpkey&contentType=application/octet-stream" 201
+call :jsonprop UPLOADID UploadId
+
+if defined UPLOADID (
+    set "EXTRA=-X PUT --data-binary "@%WORK%\mppart.bin""
+    call :req "PUT upload part 1" "/v1.0/containers/%CT%/multipart-uploads/!UPLOADID!/parts/1" 200
+    call :jsonprop PARTETAG ETag
+
+    set "EXTRA="
+    call :req "GET list parts" "/v1.0/containers/%CT%/multipart-uploads/!UPLOADID!/parts" 200
+    call :contains "list parts shows part 1" "\"PartNumber\":1"
+
+    > "%JSONF%" echo {"Parts":[{"PartNumber":1,"ETag":"!PARTETAG!"}]}
+    set "EXTRA=-X POST -H "Content-Type: application/json" --data-binary "@%JSONF%""
+    call :req "POST complete multipart" "/v1.0/containers/%CT%/multipart-uploads/!UPLOADID!/complete" 200
+
+    set "EXTRA="
+    call :req "GET assembled object" "/v1.0/containers/%CT%/object?key=mpkey" 200
+    call :contains "assembled object body matches" "REST multipart body"
+
+    set "EXTRA=-X DELETE"
+    call :req "DELETE assembled object" "/v1.0/containers/%CT%/object?key=mpkey" 204
+) else (
+    echo [SKIP] multipart lifecycle ^(server did not return an UploadId^)
+)
+
+:: copy-part flow: a source object copied as the only (last) part
+> "%WORK%\mpsrc.bin" echo copied via rest
+set "EXTRA=-X PUT --data-binary "@%WORK%\mpsrc.bin""
+call :req "PUT copy source object" "/v1.0/containers/%CT%/object?key=mpsrc" 201
+
+set "UPLOADID2="
+set "EXTRA=-X POST"
+call :req "POST initiate multipart (copy)" "/v1.0/containers/%CT%/multipart-uploads?key=mpcopy" 201
+call :jsonprop UPLOADID2 UploadId
+
+if defined UPLOADID2 (
+    set "EXTRA=-X PUT -H "x-pepperx-copy-source: %CT%/mpsrc""
+    call :req "PUT upload part (copy)" "/v1.0/containers/%CT%/multipart-uploads/!UPLOADID2!/parts/1" 200
+    call :jsonprop COPYETAG ETag
+
+    > "%JSONF%" echo {"Parts":[{"PartNumber":1,"ETag":"!COPYETAG!"}]}
+    set "EXTRA=-X POST -H "Content-Type: application/json" --data-binary "@%JSONF%""
+    call :req "POST complete multipart (copy)" "/v1.0/containers/%CT%/multipart-uploads/!UPLOADID2!/complete" 200
+
+    set "EXTRA="
+    call :req "GET copied object" "/v1.0/containers/%CT%/object?key=mpcopy" 200
+    call :contains "copied object body matches" "copied via rest"
+
+    set "EXTRA=-X DELETE"
+    call :req "DELETE copied object" "/v1.0/containers/%CT%/object?key=mpcopy" 204
+)
+
+:: abort flow: initiate, list, abort, list-gone
+set "UPLOADID3="
+set "EXTRA=-X POST"
+call :req "POST initiate multipart (abort)" "/v1.0/containers/%CT%/multipart-uploads?key=mpabort" 201
+call :jsonprop UPLOADID3 UploadId
+
+if defined UPLOADID3 (
+    set "EXTRA="
+    call :req "GET list-uploads (present)" "/v1.0/containers/%CT%/multipart-uploads" 200
+    call :contains "list-uploads shows mpabort" "mpabort"
+
+    set "EXTRA=-X DELETE"
+    call :req "DELETE abort upload" "/v1.0/containers/%CT%/multipart-uploads/!UPLOADID3!" 204
+
+    set "EXTRA="
+    call :req "GET list-uploads (after abort)" "/v1.0/containers/%CT%/multipart-uploads" 200
+    call :notcontains "list-uploads no longer shows mpabort" "mpabort"
+)
+
+set "EXTRA="
+call :req "GET multipart-uploads missing container 404" "/v1.0/containers/no-such-mpu-zzz/multipart-uploads" 404
+
 :: --- admin (read-only + safe rehydrate) -------------------------------------
 set "EXTRA="
 call :req "GET /v1.0/admin/stats" "/v1.0/admin/stats" 200
@@ -188,6 +270,23 @@ if "!STATUS!"=="PASS" set /a PASS+=1
 if "!STATUS!"=="FAIL" set /a FAIL+=1
 echo [!STATUS!] %~1
 if "!STATUS!"=="FAIL" call :recordfail "  - %~1 [substring not found: %~2]"
+exit /b 0
+
+:notcontains
+:: %1 = test name, %2 = substring that must NOT be present in the last response body
+findstr /C:"%~2" "%BODYF%" >nul 2>nul
+set "STATUS=FAIL"
+if errorlevel 1 set "STATUS=PASS"
+if "!STATUS!"=="PASS" set /a PASS+=1
+if "!STATUS!"=="FAIL" set /a FAIL+=1
+echo [!STATUS!] %~1
+if "!STATUS!"=="FAIL" call :recordfail "  - %~1 [unexpected substring present: %~2]"
+exit /b 0
+
+:jsonprop
+:: %1 = variable name to set, %2 = JSON property to read from the last response body
+set "%~1="
+for /f "usebackq delims=" %%v in (`powershell -NoProfile -Command "try { (Get-Content -Raw -LiteralPath '%BODYF%' ^| ConvertFrom-Json).%~2 } catch { }" 2^>nul`) do set "%~1=%%v"
 exit /b 0
 
 :recordfail

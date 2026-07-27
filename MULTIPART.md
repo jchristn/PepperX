@@ -750,6 +750,23 @@ migration; all runners green at zero warnings; Postman and every doc (`S3_API.md
 Append one entry per phase gate: date, phase, what was verified, any deviation from this plan (record
 new decisions here and in the Decision Log table above).
 
+- **2026-07-26 — Follow-on: full multipart over REST + S3Server 7.3.1 ranged download + FK fix.** After
+  the S3 surface shipped, added the **complete multipart lifecycle to the native REST API** exposing the
+  existing `MultipartUploadService`: `POST …/multipart-uploads?key=` (initiate), `PUT …/{uploadId}/parts/{n}`
+  (upload; copy via `x-pepperx-copy-source`), `GET …/{uploadId}/parts` (list, paginated), `POST
+  …/{uploadId}/complete`, alongside the existing list/abort. New REST DTOs (`MultipartInitiateResponse`,
+  `MultipartPartResponse`, `MultipartPartInfo(+Page)`). **Fixed a real gap:** force-deleting a container
+  with an in-progress upload returned 500 (the `multipart_uploads`→`containers` FK); `ContainerService.
+  DeleteAsync` now purges uploads (rows + staged parts) first, via a new `IMultipartMethods.DeleteByContainerAsync`.
+  **S3Server 7.3.1** (published to NuGet) fixes ranged downloads: PepperX's `ObjectReadRangeAsync` returns
+  the requested byte range with `S3Object.TotalSize` set, so `aws s3 cp`/`mc cp`/SDK large-object downloads
+  round-trip. Docs (`REST_API.md`, `S3_API.md`, `CHANGELOG.md`), Postman (REST **Multipart** subfolder),
+  `RestClientTest.bat` (full REST lifecycle), and Touchstone (`RestApiSuite`: MultipartLifecycle,
+  MultipartAbort, ContainerDeleteWithInProgressUpload; `S3MultipartSuite.RangedDownload`) updated.
+  **Validated:** zero-warning Release build (net8.0 + net10.0); **198/198** across console + xUnit + NUnit
+  on both TFMs (0 failures, 1 soak skip on the console runner). `RestClientTest.bat` structurally verified
+  (its live multipart pass awaits a PepperX image rebuilt with these routes).
+
 - **2026-07-26 — M0 (Core types, IDs, settings) — complete.** Added `mpu_`/`mpp_` prefixes
   (`Constants`, `IdGenerator`); `MultipartUpload`, `MultipartPart` (clamped part number, 32/64-hex
   validated `Md5`/`Sha256`), `MultipartStageResult`, `CompletedPart` + `CompleteMultipartUploadRequest`

@@ -254,6 +254,25 @@ namespace PepperX.Core.Database.Postgresql.Implementations
         }
 
         /// <inheritdoc />
+        public async Task<IReadOnlyList<string>> DeleteByContainerAsync(string containerId, CancellationToken token = default)
+        {
+            if (String.IsNullOrEmpty(containerId)) throw new ArgumentNullException(nameof(containerId));
+
+            List<string> deleted = new List<string>();
+            await using (NpgsqlCommand cmd = _DataSource.CreateCommand(
+                "DELETE FROM multipart_uploads WHERE container_id = @cid RETURNING id;"))
+            {
+                cmd.Parameters.AddWithValue("cid", containerId);
+                await using (NpgsqlDataReader reader = await cmd.ExecuteReaderAsync(token).ConfigureAwait(false))
+                {
+                    while (await reader.ReadAsync(token).ConfigureAwait(false)) deleted.Add(reader.GetString(0));
+                }
+            }
+
+            return deleted;
+        }
+
+        /// <inheritdoc />
         public async Task<IReadOnlyList<string>> ListActiveUploadIdsAsync(CancellationToken token = default)
         {
             List<string> ids = new List<string>();

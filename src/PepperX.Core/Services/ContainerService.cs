@@ -252,6 +252,22 @@ namespace PepperX.Core.Services
                 await _DeleteService.BulkDeleteContainerAsync(container.Id, token).ConfigureAwait(false);
             }
 
+            // Purge in-progress multipart uploads (rows + staged parts) so their foreign key does not block
+            // the container delete. The staged blobs are removed best-effort; the janitor reclaims any that
+            // survive a failure here.
+            IReadOnlyList<string> uploads = await _Db.MultipartUploads.DeleteByContainerAsync(container.Id, token).ConfigureAwait(false);
+            foreach (string uploadId in uploads)
+            {
+                try
+                {
+                    await _Storage.DeletePartsAsync(uploadId, token).ConfigureAwait(false);
+                }
+                catch (Exception)
+                {
+                    // Best-effort; CleanupOrphanedPartsAsync reclaims staged parts whose upload row is gone.
+                }
+            }
+
             await _Db.Containers.DeleteAsync(container.Id, token).ConfigureAwait(false);
             await _Storage.DeleteContainerAsync(container.Id, token).ConfigureAwait(false);
             _Cache.Remove(container.Id);
