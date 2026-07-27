@@ -109,14 +109,24 @@ export default function BodyViewer({ body, contentType = '', emptyMessage = null
       {canFormat ? (
         <div className="body-viewer-toolbar">
           <span className="body-viewer-kind">{kind.toUpperCase()}</span>
-          <button
-            type="button"
-            className="body-viewer-toggle"
-            aria-pressed={pretty}
-            onClick={() => setPretty((value) => !value)}
-          >
-            {pretty ? t('common.rawText') : t('common.prettyPrint')}
-          </button>
+          <div className="segmented" role="group" aria-label={t('common.prettyPrint')}>
+            <button
+              type="button"
+              className={`segmented-option${pretty ? ' is-active' : ''}`}
+              aria-pressed={pretty}
+              onClick={() => setPretty(true)}
+            >
+              {t('common.prettyPrint')}
+            </button>
+            <button
+              type="button"
+              className={`segmented-option${!pretty ? ' is-active' : ''}`}
+              aria-pressed={!pretty}
+              onClick={() => setPretty(false)}
+            >
+              {t('common.rawText')}
+            </button>
+          </div>
         </div>
       ) : null}
 

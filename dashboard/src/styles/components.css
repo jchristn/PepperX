@@ -1105,25 +1105,65 @@
 .body-viewer-toolbar {
   display: flex;
   align-items: center;
+  justify-content: flex-end;
   gap: var(--spacing-sm);
   margin-bottom: var(--spacing-sm);
 }
 
 .body-viewer-kind {
-  margin-inline-end: auto;
+  padding: 2px var(--spacing-sm);
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  background-color: var(--color-surface-alt);
+  color: var(--color-text-secondary);
   font-size: var(--font-size-xs);
   font-weight: 600;
-  letter-spacing: 0.04em;
-  color: var(--color-text-secondary);
+  letter-spacing: 0.05em;
 }
 
+/* Two-state view switch (Pretty | Raw), rendered as a single joined control. */
+.segmented {
+  display: inline-flex;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+.segmented-option {
+  padding: var(--spacing-xs) var(--spacing-md);
+  border: 0;
+  border-radius: 0;
+  background-color: var(--color-surface);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+  line-height: 1.5;
+  transition: background-color 0.12s ease, color 0.12s ease;
+}
+
+.segmented-option + .segmented-option {
+  border-inline-start: 1px solid var(--color-border);
+}
+
+.segmented-option:hover:not(.is-active) {
+  color: var(--color-text);
+  background-color: var(--color-surface-alt);
+}
+
+.segmented-option.is-active {
+  background-color: var(--color-accent);
+  color: var(--color-text-inverse);
+  font-weight: 600;
+}
+
+/* Single-shot action button (e.g. "Pretty print" over an editable body). */
 .body-viewer-toggle {
-  padding: var(--spacing-xs) var(--spacing-sm);
+  padding: var(--spacing-xs) var(--spacing-md);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
   background-color: var(--color-surface);
   color: var(--color-text-secondary);
   font-size: var(--font-size-sm);
+  line-height: 1.5;
 }
 
 .body-viewer-toggle:hover:not(:disabled) {
