@@ -400,7 +400,9 @@ function DetailBlock({ title, value, empty, truncatedNote = null, defaultOpen = 
       {isEmpty ? (
         <pre className="request-block-body">{empty}</pre>
       ) : formattable ? (
-        <BodyViewer body={text} maxHeight="460px" />
+        <div className="request-block-viewer">
+          <BodyViewer body={text} maxHeight="460px" />
+        </div>
       ) : (
         <pre className="request-block-body">{text}</pre>
       )}

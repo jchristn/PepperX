@@ -1055,6 +1055,12 @@
   color: var(--color-text-muted);
 }
 
+/* The pretty/raw body viewer supplies its own bordered box, so it needs the block's padding as a
+   surround (the plain <pre> variants below bake padding into themselves instead). */
+.request-block-viewer {
+  padding: var(--spacing-md);
+}
+
 .request-block-body {
   max-height: 300px;
   margin: 0;
