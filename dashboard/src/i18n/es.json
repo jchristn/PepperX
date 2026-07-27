@@ -7,7 +7,7 @@
     "title": "Iniciar sesión en PepperX",
     "subtitle": "Indica la URL de tu servidor para gestionar tu infraestructura de PepperX.",
     "serverUrl": "URL del servidor",
-    "serverUrlPlaceholder": "http://localhost:8000",
+    "serverUrlPlaceholder": "http://127.0.0.1:8000",
     "connect": "Conectar",
     "connecting": "Conectando…",
     "recent": "Servidores recientes",

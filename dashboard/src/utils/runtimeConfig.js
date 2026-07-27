@@ -8,7 +8,9 @@
  */
 
 const DEFAULT_CONFIG = {
-  defaultServerUrl: 'http://localhost:8000',
+  // 127.0.0.1, not localhost: Windows browsers prefer IPv6 (::1) for localhost, and the WSL2 port
+  // relay can wedge that path after a container recreate. Pinning IPv4 avoids the resulting hang.
+  defaultServerUrl: 'http://127.0.0.1:8000',
 };
 
 let config = DEFAULT_CONFIG;

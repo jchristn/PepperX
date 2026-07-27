@@ -7,7 +7,7 @@
     "title": "PepperX ログイン",
     "subtitle": "サーバー URL を指定して、PepperX インフラストラクチャを管理します。",
     "serverUrl": "サーバー URL",
-    "serverUrlPlaceholder": "http://localhost:8000",
+    "serverUrlPlaceholder": "http://127.0.0.1:8000",
     "connect": "接続",
     "connecting": "接続しています…",
     "recent": "最近のサーバー",

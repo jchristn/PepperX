@@ -111,7 +111,7 @@ describe('runtime config', () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('not found')));
 
     await loadRuntimeConfig();
-    expect(defaultServerUrl()).toBe('http://localhost:8000');
+    expect(defaultServerUrl()).toBe('http://127.0.0.1:8000');
 
     vi.unstubAllGlobals();
   });
@@ -136,7 +136,7 @@ describe('runtime config', () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => ({}) }));
 
     await loadRuntimeConfig();
-    expect(defaultServerUrl()).toBe('http://localhost:8000');
+    expect(defaultServerUrl()).toBe('http://127.0.0.1:8000');
 
     vi.unstubAllGlobals();
   });

@@ -156,7 +156,7 @@ The dashboard is configured by environment variable instead, since it is a stati
 
 | Variable | Default | Notes |
 |---|---|---|
-| `PEPPERX_SERVER_URL` | `http://localhost:8000` | Pre-filled on the connect screen |
+| `PEPPERX_SERVER_URL` | `http://127.0.0.1:8000` | Pre-filled on the connect screen |
 
 The container writes it into `config.json` in the web root at startup and the app reads that before
 rendering. Note that the **browser** resolves the address: a compose service name like

@@ -116,7 +116,11 @@ services:
       # The browser resolves this, not the container, so it has to be an address reachable from
       # wherever the operator is: a compose service name like http://node1:8000 would resolve inside
       # the network and nowhere else.
-      PEPPERX_SERVER_URL: http://localhost:8000
+      #
+      # 127.0.0.1 rather than localhost: on Windows the browser prefers IPv6 (::1) for localhost, and
+      # WSL2's port relay can wedge the ::1 forward after a container recreate, leaving every call
+      # pending. Pinning IPv4 sidesteps that; operators on other hosts can still override this.
+      PEPPERX_SERVER_URL: http://127.0.0.1:8000
     ports:
       - "3000:80"
     networks:

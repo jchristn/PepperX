@@ -7,7 +7,7 @@
     "title": "登录 PepperX",
     "subtitle": "指定服务器 URL 以管理你的 PepperX 基础设施。",
     "serverUrl": "服务器 URL",
-    "serverUrlPlaceholder": "http://localhost:8000",
+    "serverUrlPlaceholder": "http://127.0.0.1:8000",
     "connect": "连接",
     "connecting": "正在连接…",
     "recent": "最近的服务器",

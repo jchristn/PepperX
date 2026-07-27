@@ -33,7 +33,7 @@ RUN chmod +x /entrypoint.sh
 # Default server URL offered on the connect screen. Override per deployment:
 #   docker run -e PEPPERX_SERVER_URL=http://node1.internal:8000 ...
 # The entrypoint writes it into the web root at start, so one image serves any node.
-ENV PEPPERX_SERVER_URL=http://localhost:8000
+ENV PEPPERX_SERVER_URL=http://127.0.0.1:8000
 
 EXPOSE 80
 

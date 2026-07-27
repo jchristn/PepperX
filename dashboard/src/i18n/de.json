@@ -7,7 +7,7 @@
     "title": "PepperX-Anmeldung",
     "subtitle": "Geben Sie Ihre Server-URL an, um Ihre PepperX-Infrastruktur zu verwalten.",
     "serverUrl": "Server-URL",
-    "serverUrlPlaceholder": "http://localhost:8000",
+    "serverUrlPlaceholder": "http://127.0.0.1:8000",
     "connect": "Verbinden",
     "connecting": "Verbindung wird hergestellt…",
     "recent": "Zuletzt verwendete Server",
