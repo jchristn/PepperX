@@ -166,7 +166,22 @@ namespace PepperX.Core.Services
             MultipartUpload upload = await RequireUploadAsync(containerName, uploadId, token).ConfigureAwait(false);
 
             IReadOnlyList<MultipartPart> staged = await _Db.MultipartUploads.ListAllPartsAsync(uploadId, token).ConfigureAwait(false);
-            List<MultipartPart> ordered = ValidateAndOrder(request, staged);
+            List<MultipartPart> ordered;
+            try
+            {
+                ordered = ValidateAndOrder(request, staged);
+            }
+            catch (InvalidPartException)
+            {
+                // A concurrent completion of the same id may have won and deleted the upload row between our
+                // upload read and our parts read; the delete cascades the part rows, so our staged list comes
+                // back empty and validation reports a missing part. That is a lost race, not a bad request:
+                // if the upload is gone, surface NoSuchUpload like the claim below would. A genuinely wrong
+                // part list (the upload still exists) keeps its InvalidPart error, so the client can retry.
+                if (await _Db.MultipartUploads.ReadUploadAsync(uploadId, token).ConfigureAwait(false) == null)
+                    throw new NoSuchUploadException(uploadId);
+                throw;
+            }
 
             // Claim the upload so a concurrent completion of the same id loses the race and gets NoSuchUpload.
             // Deleting the row cascades the part rows, but the staged blobs on disk survive until we remove
