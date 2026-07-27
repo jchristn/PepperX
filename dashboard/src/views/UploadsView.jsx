@@ -359,7 +359,7 @@ function MultipartPartsModal({ upload, container, onClose }) {
       >
         {upload ? (
           <>
-            <dl className="detail-grid">
+            <dl className="detail-grid" style={{ marginBottom: 'var(--spacing-lg)' }}>
               <dt>{t('multipart.key')}</dt>
               <dd className="mono">{upload.Key}</dd>
               <dt>{t('multipart.uploadId')}</dt>
