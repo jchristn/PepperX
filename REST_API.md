@@ -340,11 +340,31 @@ List an upload's staged parts, paginated ascending by part number.
 
 ```json
 {
-  "Parts": [ { "PartNumber": 1, "ETag": "9e107d9d...", "SizeBytes": 5242880, "CreatedUtc": "2026-07-26T12:00:01Z" } ],
+  "Parts": [
+    { "PartNumber": 1, "ETag": "9e107d9d...", "Md5": "9e107d9d...", "Sha256": "b94d27b9...",
+      "SizeBytes": 5242880, "CreatedUtc": "2026-07-26T12:00:01Z" }
+  ],
   "IsTruncated": false,
   "NextPartNumberMarker": null
 }
 ```
+
+Each part carries both its `Md5` (also surfaced as `ETag`) and its `Sha256`.
+
+#### `GET /v1.0/containers/{container}/multipart-uploads/{uploadId}/parts/{partNumber}`
+
+Read a single staged part's metadata (size, MD5/ETag, SHA-256, staged timestamp).
+
+```json
+{ "PartNumber": 1, "ETag": "9e107d9d...", "Md5": "9e107d9d...", "Sha256": "b94d27b9...", "SizeBytes": 5242880, "CreatedUtc": "2026-07-26T12:00:01Z" }
+```
+`200` on success; `404` if the upload or the part does not exist.
+
+#### `DELETE /v1.0/containers/{container}/multipart-uploads/{uploadId}/parts/{partNumber}`
+
+Delete a single staged part, discarding its blob. `204` on success; `404` if the part does not exist.
+Completing the upload while its part list still references the deleted part fails with `InvalidPart`
+until the part is re-uploaded.
 
 #### `GET /v1.0/containers/{container}/multipart-uploads`
 

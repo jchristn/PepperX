@@ -218,7 +218,21 @@
     "abortTitle": "Abort multipart upload",
     "abortConfirm": "Abort the multipart upload for {{key}}? Any parts already uploaded are discarded.",
     "aborted": "Multipart upload aborted.",
-    "empty": "No multipart uploads in progress."
+    "empty": "No multipart uploads in progress.",
+    "partsTitle": "Parts of {{key}}",
+    "partsHint": "The parts already staged for this upload. Deleting one discards its data until it is re-uploaded.",
+    "partNumber": "Part",
+    "partSize": "Size",
+    "partMd5": "MD5",
+    "partSha256": "SHA-256",
+    "partCreated": "Created",
+    "partsEmpty": "No parts have been uploaded yet.",
+    "viewPart": "View metadata",
+    "partDetailTitle": "Part {{partNumber}} metadata",
+    "deletePart": "Delete part",
+    "deletePartTitle": "Delete part",
+    "deletePartConfirm": "Delete part {{partNumber}}? Its data is discarded and completing the upload will fail until it is re-uploaded.",
+    "partDeleted": "Part deleted."
   },
   "objects": {
     "title": "Objects in {{container}}",

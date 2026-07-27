@@ -218,7 +218,21 @@
     "abortTitle": "中止分段上传",
     "abortConfirm": "要中止 {{key}} 的分段上传吗？已上传的分段将被丢弃。",
     "aborted": "分段上传已中止。",
-    "empty": "没有进行中的分段上传。"
+    "empty": "没有进行中的分段上传。",
+    "partsTitle": "{{key}} 的分段",
+    "partsHint": "此上传已暂存的分段。删除某个分段会丢弃其数据，直到重新上传为止。",
+    "partNumber": "分段",
+    "partSize": "大小",
+    "partMd5": "MD5",
+    "partSha256": "SHA-256",
+    "partCreated": "创建时间",
+    "partsEmpty": "尚未上传任何分段。",
+    "viewPart": "查看元数据",
+    "partDetailTitle": "分段 {{partNumber}} 元数据",
+    "deletePart": "删除分段",
+    "deletePartTitle": "删除分段",
+    "deletePartConfirm": "要删除分段 {{partNumber}} 吗？其数据将被丢弃，在重新上传之前将无法完成上传。",
+    "partDeleted": "分段已删除。"
   },
   "objects": {
     "title": "{{container}} 中的对象",

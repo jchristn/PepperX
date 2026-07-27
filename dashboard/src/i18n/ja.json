@@ -218,7 +218,21 @@
     "abortTitle": "マルチパートアップロードを中止",
     "abortConfirm": "{{key}} のマルチパートアップロードを中止しますか？アップロード済みのパートは破棄されます。",
     "aborted": "マルチパートアップロードを中止しました。",
-    "empty": "進行中のマルチパートアップロードはありません。"
+    "empty": "進行中のマルチパートアップロードはありません。",
+    "partsTitle": "{{key}} のパート",
+    "partsHint": "このアップロードに対してすでにステージングされたパートです。パートを削除するとそのデータは破棄され、再アップロードするまで復元されません。",
+    "partNumber": "パート",
+    "partSize": "サイズ",
+    "partMd5": "MD5",
+    "partSha256": "SHA-256",
+    "partCreated": "作成",
+    "partsEmpty": "まだパートはアップロードされていません。",
+    "viewPart": "メタデータを表示",
+    "partDetailTitle": "パート {{partNumber}} のメタデータ",
+    "deletePart": "パートを削除",
+    "deletePartTitle": "パートを削除",
+    "deletePartConfirm": "パート {{partNumber}} を削除しますか？データは破棄され、再アップロードするまでアップロードを完了できません。",
+    "partDeleted": "パートを削除しました。"
   },
   "objects": {
     "title": "{{container}} のオブジェクト",

@@ -21,6 +21,16 @@ namespace PepperX.Core.Responses
         public string ETag { get; set; } = String.Empty;
 
         /// <summary>
+        /// Lowercase hex MD5 of the part (same value as <see cref="ETag"/>, without quotes).
+        /// </summary>
+        public string Md5 { get; set; } = String.Empty;
+
+        /// <summary>
+        /// Lowercase hex SHA-256 of the part.
+        /// </summary>
+        public string Sha256 { get; set; } = String.Empty;
+
+        /// <summary>
         /// Staged part size in bytes.
         /// </summary>
         public long SizeBytes { get; set; } = 0;

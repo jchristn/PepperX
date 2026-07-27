@@ -146,12 +146,28 @@ namespace PepperX.Server.Api.Rest
                 .WithResponse(404, OpenApiResponseMetadata.NotFound()));
 
             server.Get("/v1.0/containers/{container}/multipart-uploads/{uploadId}/parts", ListPartsAsync, openApi => openApi
-                .WithTag("Containers").WithDescription("List the staged parts of an in-progress multipart upload, paginated ascending by part number.")
+                .WithTag("Containers").WithDescription("List the staged parts of an in-progress multipart upload, paginated ascending by part number. Each part carries its size, MD5/ETag, SHA-256, and staged timestamp.")
                 .WithParameter(OpenApiParameterMetadata.Path("container", "Container name"))
                 .WithParameter(OpenApiParameterMetadata.Path("uploadId", "Upload id"))
                 .WithParameter(OpenApiParameterMetadata.Query("partNumberMarker", "Resume after this part number", false))
                 .WithParameter(OpenApiParameterMetadata.Query("maxParts", "Maximum parts to return (1-1000)", false))
                 .WithResponse(200, OpenApiResponseMetadata.Json("Paginated parts", null))
+                .WithResponse(404, OpenApiResponseMetadata.NotFound()));
+
+            server.Get("/v1.0/containers/{container}/multipart-uploads/{uploadId}/parts/{partNumber}", GetPartAsync, openApi => openApi
+                .WithTag("Containers").WithDescription("Read a single staged part's metadata: size, MD5/ETag, SHA-256, and staged timestamp.")
+                .WithParameter(OpenApiParameterMetadata.Path("container", "Container name"))
+                .WithParameter(OpenApiParameterMetadata.Path("uploadId", "Upload id"))
+                .WithParameter(OpenApiParameterMetadata.Path("partNumber", "Part number"))
+                .WithResponse(200, OpenApiResponseMetadata.Json("Part metadata", null))
+                .WithResponse(404, OpenApiResponseMetadata.NotFound()));
+
+            server.Delete("/v1.0/containers/{container}/multipart-uploads/{uploadId}/parts/{partNumber}", DeletePartAsync, openApi => openApi
+                .WithTag("Containers").WithDescription("Delete a single staged part, discarding its blob. Completing the upload while still listing the deleted part will fail until it is re-uploaded.")
+                .WithParameter(OpenApiParameterMetadata.Path("container", "Container name"))
+                .WithParameter(OpenApiParameterMetadata.Path("uploadId", "Upload id"))
+                .WithParameter(OpenApiParameterMetadata.Path("partNumber", "Part number"))
+                .WithResponse(204, OpenApiResponseMetadata.NoContent())
                 .WithResponse(404, OpenApiResponseMetadata.NotFound()));
 
             server.Post<CompleteMultipartUploadRequest>("/v1.0/containers/{container}/multipart-uploads/{uploadId}/complete", CompleteMultipartUploadAsync, openApi => openApi
@@ -398,11 +414,61 @@ namespace PepperX.Server.Api.Rest
                 };
                 foreach (MultipartPart p in result.Parts)
                 {
-                    page.Parts.Add(new MultipartPartInfo { PartNumber = p.PartNumber, ETag = p.Md5, SizeBytes = p.SizeBytes, CreatedUtc = p.CreatedUtc });
+                    page.Parts.Add(ToPartInfo(p));
                 }
 
                 return page;
             });
+        }
+
+        private Task<object> GetPartAsync(ApiRequest request)
+        {
+            return RouteHelpers.HandleAsync(request, async () =>
+            {
+                string name = RouteHelpers.Container(request);
+                string uploadId = request.Parameters["uploadId"] ?? String.Empty;
+                int partNumber = ParsePartNumber(request);
+
+                MultipartPart? part = await _Multipart.GetPartAsync(name, uploadId, partNumber, request.CancellationToken).ConfigureAwait(false);
+                if (part == null)
+                {
+                    request.Http.Response.StatusCode = 404;
+                    return new ApiErrorResponse(Core.Enums.ApiErrorEnum.NotFound, "Part " + partNumber + " was not found for upload '" + uploadId + "'.", 404);
+                }
+                return ToPartInfo(part);
+            });
+        }
+
+        private Task<object> DeletePartAsync(ApiRequest request)
+        {
+            return RouteHelpers.HandleAsync(request, async () =>
+            {
+                string name = RouteHelpers.Container(request);
+                string uploadId = request.Parameters["uploadId"] ?? String.Empty;
+                int partNumber = ParsePartNumber(request);
+
+                bool deleted = await _Multipart.DeletePartAsync(name, uploadId, partNumber, request.CancellationToken).ConfigureAwait(false);
+                if (!deleted)
+                {
+                    request.Http.Response.StatusCode = 404;
+                    return new ApiErrorResponse(Core.Enums.ApiErrorEnum.NotFound, "Part " + partNumber + " was not found for upload '" + uploadId + "'.", 404);
+                }
+                request.Http.Response.StatusCode = 204;
+                return null!;
+            });
+        }
+
+        private static MultipartPartInfo ToPartInfo(MultipartPart p)
+        {
+            return new MultipartPartInfo
+            {
+                PartNumber = p.PartNumber,
+                ETag = p.Md5,
+                Md5 = p.Md5,
+                Sha256 = p.Sha256,
+                SizeBytes = p.SizeBytes,
+                CreatedUtc = p.CreatedUtc
+            };
         }
 
         private Task<object> CompleteMultipartUploadAsync(ApiRequest request)

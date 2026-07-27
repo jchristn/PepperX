@@ -205,6 +205,40 @@ namespace PepperX.Core.Database.Postgresql.Implementations
         }
 
         /// <inheritdoc />
+        public async Task<MultipartPart?> ReadPartAsync(string uploadId, int partNumber, CancellationToken token = default)
+        {
+            if (String.IsNullOrEmpty(uploadId)) throw new ArgumentNullException(nameof(uploadId));
+
+            await using (NpgsqlCommand cmd = _DataSource.CreateCommand(
+                "SELECT " + _PartColumns + " FROM multipart_parts WHERE upload_id = @uid AND part_number = @pn LIMIT 1;"))
+            {
+                cmd.Parameters.AddWithValue("uid", uploadId);
+                cmd.Parameters.AddWithValue("pn", partNumber);
+                await using (NpgsqlDataReader reader = await cmd.ExecuteReaderAsync(token).ConfigureAwait(false))
+                {
+                    if (await reader.ReadAsync(token).ConfigureAwait(false)) return Converters.ReadMultipartPart(reader);
+                }
+            }
+
+            return null;
+        }
+
+        /// <inheritdoc />
+        public async Task<string?> DeletePartAsync(string uploadId, int partNumber, CancellationToken token = default)
+        {
+            if (String.IsNullOrEmpty(uploadId)) throw new ArgumentNullException(nameof(uploadId));
+
+            await using (NpgsqlCommand cmd = _DataSource.CreateCommand(
+                "DELETE FROM multipart_parts WHERE upload_id = @uid AND part_number = @pn RETURNING storage_location;"))
+            {
+                cmd.Parameters.AddWithValue("uid", uploadId);
+                cmd.Parameters.AddWithValue("pn", partNumber);
+                object? result = await cmd.ExecuteScalarAsync(token).ConfigureAwait(false);
+                return result == null || result == DBNull.Value ? null : (string)result;
+            }
+        }
+
+        /// <inheritdoc />
         public async Task<MultipartPartListResult> ListPartsAsync(string uploadId, int partNumberMarker, int maxParts, CancellationToken token = default)
         {
             if (String.IsNullOrEmpty(uploadId)) throw new ArgumentNullException(nameof(uploadId));

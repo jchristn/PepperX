@@ -24,8 +24,11 @@ All notable changes to PepperX are documented here. The format follows
   `PUT …/multipart-uploads/{uploadId}/parts/{partNumber}` (upload a part, or copy one from an existing
   object via `x-pepperx-copy-source`), `GET …/multipart-uploads/{uploadId}/parts` (list parts, paginated),
   `POST …/multipart-uploads/{uploadId}/complete` (assemble), plus `GET …/multipart-uploads` (list
-  in-progress) and `DELETE …/multipart-uploads/{uploadId}` (abort). In-progress uploads are surfaced in the
-  dashboard's container detail view.
+  in-progress) and `DELETE …/multipart-uploads/{uploadId}` (abort). Individual parts can be inspected and
+  managed: `GET …/parts/{partNumber}` returns a part's metadata (size, MD5/ETag, SHA-256, timestamp) and
+  `DELETE …/parts/{partNumber}` discards a single staged part; the parts list now includes each part's
+  SHA-256 alongside its MD5. In-progress uploads — and, per upload, their parts — are surfaced and
+  manageable in the dashboard (a dedicated Uploads page and an upload-detail parts modal).
 - **S3 ranged / large-object downloads.** `GetObject` now honors `Range` requests, returning `206 Partial
   Content` with a `Content-Range: bytes start-end/total` header (via S3Server 7.3.1's `S3Object.TotalSize`).
   Ranged/multipart downloads over `aws s3 cp`, the AWS SDKs, and `mc cp` now round-trip large objects

@@ -218,7 +218,21 @@
     "abortTitle": "Cancelar carga multiparte",
     "abortConfirm": "¿Cancelar la carga multiparte de {{key}}? Se descartarán las partes ya cargadas.",
     "aborted": "Carga multiparte cancelada.",
-    "empty": "No hay cargas multiparte en curso."
+    "empty": "No hay cargas multiparte en curso.",
+    "partsTitle": "Partes de {{key}}",
+    "partsHint": "Las partes ya preparadas para esta carga. Eliminar una descarta sus datos hasta que se vuelva a cargar.",
+    "partNumber": "Parte",
+    "partSize": "Tamaño",
+    "partMd5": "MD5",
+    "partSha256": "SHA-256",
+    "partCreated": "Creada",
+    "partsEmpty": "Aún no se ha cargado ninguna parte.",
+    "viewPart": "Ver metadatos",
+    "partDetailTitle": "Metadatos de la parte {{partNumber}}",
+    "deletePart": "Eliminar parte",
+    "deletePartTitle": "Eliminar parte",
+    "deletePartConfirm": "¿Eliminar la parte {{partNumber}}? Sus datos se descartan y no se podrá completar la carga hasta que se vuelva a cargar.",
+    "partDeleted": "Parte eliminada."
   },
   "objects": {
     "title": "Objetos en {{container}}",

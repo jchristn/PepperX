@@ -218,7 +218,21 @@
     "abortTitle": "Mehrteiligen Upload abbrechen",
     "abortConfirm": "Den mehrteiligen Upload für {{key}} abbrechen? Bereits hochgeladene Teile werden verworfen.",
     "aborted": "Mehrteiliger Upload abgebrochen.",
-    "empty": "Keine laufenden mehrteiligen Uploads."
+    "empty": "Keine laufenden mehrteiligen Uploads.",
+    "partsTitle": "Teile von {{key}}",
+    "partsHint": "Die für diesen Upload bereits bereitgestellten Teile. Das Löschen eines Teils verwirft seine Daten, bis er erneut hochgeladen wird.",
+    "partNumber": "Teil",
+    "partSize": "Größe",
+    "partMd5": "MD5",
+    "partSha256": "SHA-256",
+    "partCreated": "Erstellt",
+    "partsEmpty": "Es wurden noch keine Teile hochgeladen.",
+    "viewPart": "Metadaten anzeigen",
+    "partDetailTitle": "Metadaten von Teil {{partNumber}}",
+    "deletePart": "Teil löschen",
+    "deletePartTitle": "Teil löschen",
+    "deletePartConfirm": "Teil {{partNumber}} löschen? Seine Daten werden verworfen und der Upload kann erst abgeschlossen werden, wenn der Teil erneut hochgeladen wurde.",
+    "partDeleted": "Teil gelöscht."
   },
   "objects": {
     "title": "Objekte in {{container}}",

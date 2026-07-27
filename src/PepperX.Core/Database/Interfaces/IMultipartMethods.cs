@@ -68,6 +68,25 @@ namespace PepperX.Core.Database.Interfaces
         Task<IReadOnlyList<MultipartPart>> ListAllPartsAsync(string uploadId, CancellationToken token = default);
 
         /// <summary>
+        /// Read a single staged part by upload and part number.
+        /// </summary>
+        /// <param name="uploadId">Upload identifier.</param>
+        /// <param name="partNumber">Part number.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The part, or null if it does not exist.</returns>
+        Task<MultipartPart?> ReadPartAsync(string uploadId, int partNumber, CancellationToken token = default);
+
+        /// <summary>
+        /// Delete a single staged part row and return its storage location so the caller can reclaim the
+        /// staged blob.
+        /// </summary>
+        /// <param name="uploadId">Upload identifier.</param>
+        /// <param name="partNumber">Part number.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The deleted part's storage location, or null if no such part existed.</returns>
+        Task<string?> DeletePartAsync(string uploadId, int partNumber, CancellationToken token = default);
+
+        /// <summary>
         /// List staged parts for an upload, paginated ascending by part number.
         /// </summary>
         /// <param name="uploadId">Upload identifier.</param>

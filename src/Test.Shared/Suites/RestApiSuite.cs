@@ -129,6 +129,37 @@ namespace Test.Shared.Suites
                         await client.DeleteAsync("/v1.0/containers/" + name + "?force=true", ct);
                     }),
 
+                    new TestCaseDescriptor("RestApi", "MultipartPartManagement", "Per-part metadata (with SHA-256) and discrete part deletion over REST", async ct =>
+                    {
+                        HttpClient client = await ClientAsync(ct);
+                        string name = DbTest.NewContainerName();
+                        await client.PutAsync("/v1.0/containers", Json("{\"Name\":\"" + name + "\"}"), ct);
+
+                        HttpResponseMessage init = await client.PostAsync("/v1.0/containers/" + name + "/multipart-uploads?key=k", Json("{}"), ct);
+                        string uploadId = await JsonStringAsync(init, "UploadId", ct);
+
+                        await client.PutAsync("/v1.0/containers/" + name + "/multipart-uploads/" + uploadId + "/parts/1", new ByteArrayContent(Encoding.UTF8.GetBytes("part-one")), ct);
+                        await client.PutAsync("/v1.0/containers/" + name + "/multipart-uploads/" + uploadId + "/parts/2", new ByteArrayContent(Encoding.UTF8.GetBytes("part-two")), ct);
+
+                        // Single-part metadata carries both hashes.
+                        HttpResponseMessage getPart = await client.GetAsync("/v1.0/containers/" + name + "/multipart-uploads/" + uploadId + "/parts/1", ct);
+                        Check.Equal(HttpStatusCode.OK, getPart.StatusCode, "get part 1 200");
+                        string partBody = await getPart.Content.ReadAsStringAsync(ct);
+                        Check.True(partBody.Contains("\"Md5\"", StringComparison.Ordinal) && partBody.Contains("\"Sha256\"", StringComparison.Ordinal), "part metadata carries md5 and sha256");
+
+                        string listBody = await (await client.GetAsync("/v1.0/containers/" + name + "/multipart-uploads/" + uploadId + "/parts", ct)).Content.ReadAsStringAsync(ct);
+                        Check.True(listBody.Contains("\"PartNumber\":1", StringComparison.Ordinal) && listBody.Contains("\"PartNumber\":2", StringComparison.Ordinal), "both parts listed");
+
+                        // Delete part 1 discretely; part 2 remains.
+                        HttpResponseMessage del = await client.DeleteAsync("/v1.0/containers/" + name + "/multipart-uploads/" + uploadId + "/parts/1", ct);
+                        Check.Equal(HttpStatusCode.NoContent, del.StatusCode, "delete part 1 204");
+                        Check.Equal(HttpStatusCode.NotFound, (await client.GetAsync("/v1.0/containers/" + name + "/multipart-uploads/" + uploadId + "/parts/1", ct)).StatusCode, "part 1 gone");
+                        Check.Equal(HttpStatusCode.OK, (await client.GetAsync("/v1.0/containers/" + name + "/multipart-uploads/" + uploadId + "/parts/2", ct)).StatusCode, "part 2 remains");
+                        Check.Equal(HttpStatusCode.NotFound, (await client.GetAsync("/v1.0/containers/" + name + "/multipart-uploads/" + uploadId + "/parts/99", ct)).StatusCode, "missing part 404");
+
+                        await client.DeleteAsync("/v1.0/containers/" + name + "?force=true", ct);
+                    }),
+
                     new TestCaseDescriptor("RestApi", "MultipartAbort", "An initiated upload lists, aborts, and then cannot complete over REST", async ct =>
                     {
                         HttpClient client = await ClientAsync(ct);

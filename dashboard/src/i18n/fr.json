@@ -218,7 +218,21 @@
     "abortTitle": "Annuler le téléversement multipartite",
     "abortConfirm": "Annuler le téléversement multipartite de {{key}} ? Les parties déjà téléversées seront supprimées.",
     "aborted": "Téléversement multipartite annulé.",
-    "empty": "Aucun téléversement multipartite en cours."
+    "empty": "Aucun téléversement multipartite en cours.",
+    "partsTitle": "Parties de {{key}}",
+    "partsHint": "Les parties déjà préparées pour ce téléversement. En supprimer une supprime ses données jusqu'à ce qu'elle soit à nouveau téléversée.",
+    "partNumber": "Partie",
+    "partSize": "Taille",
+    "partMd5": "MD5",
+    "partSha256": "SHA-256",
+    "partCreated": "Créée",
+    "partsEmpty": "Aucune partie n'a encore été téléversée.",
+    "viewPart": "Voir les métadonnées",
+    "partDetailTitle": "Métadonnées de la partie {{partNumber}}",
+    "deletePart": "Supprimer la partie",
+    "deletePartTitle": "Supprimer la partie",
+    "deletePartConfirm": "Supprimer la partie {{partNumber}} ? Ses données sont supprimées et le téléversement ne pourra pas être finalisé tant qu'elle n'aura pas été à nouveau téléversée.",
+    "partDeleted": "Partie supprimée."
   },
   "objects": {
     "title": "Objets dans {{container}}",

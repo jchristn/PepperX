@@ -207,6 +207,40 @@ export default class ApiClient {
     );
   }
 
+  /**
+   * List the parts already staged for one in-progress multipart upload. Returns the server's envelope
+   * ({ Parts, IsTruncated, NextPartNumberMarker }); the cap is high enough that the console shows every
+   * part without paging. Fails 404 if the container or upload does not exist.
+   */
+  multipartUploadParts(name, uploadId) {
+    return this._request(
+      'GET',
+      `/v1.0/containers/${encodeURIComponent(name)}/multipart-uploads/${encodeURIComponent(uploadId)}/parts?maxParts=1000`,
+    );
+  }
+
+  /**
+   * Read a single staged part's metadata (PartNumber, ETag, Md5, Sha256, SizeBytes, CreatedUtc). Fails
+   * 404 if the container, upload, or part does not exist.
+   */
+  multipartUploadPart(name, uploadId, partNumber) {
+    return this._request(
+      'GET',
+      `/v1.0/containers/${encodeURIComponent(name)}/multipart-uploads/${encodeURIComponent(uploadId)}/parts/${encodeURIComponent(partNumber)}`,
+    );
+  }
+
+  /**
+   * Delete a single staged part, discarding its data. Completing the upload will fail until the part is
+   * re-uploaded. Fails 404 if the container, upload, or part does not exist.
+   */
+  deleteMultipartUploadPart(name, uploadId, partNumber) {
+    return this._request(
+      'DELETE',
+      `/v1.0/containers/${encodeURIComponent(name)}/multipart-uploads/${encodeURIComponent(uploadId)}/parts/${encodeURIComponent(partNumber)}`,
+    );
+  }
+
   // --------------------------------------------------------------- objects
 
   objectUrl(container, key) {

@@ -244,6 +244,49 @@ namespace PepperX.Core.Services
         }
 
         /// <summary>
+        /// Read a single staged part's metadata.
+        /// </summary>
+        /// <param name="containerName">Container (bucket) name.</param>
+        /// <param name="uploadId">Upload id.</param>
+        /// <param name="partNumber">Part number.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The part, or null if the part does not exist.</returns>
+        /// <exception cref="NoSuchUploadException">The upload does not exist or belongs to another container.</exception>
+        public async Task<MultipartPart?> GetPartAsync(string containerName, string uploadId, int partNumber, CancellationToken token = default)
+        {
+            await RequireUploadAsync(containerName, uploadId, token).ConfigureAwait(false);
+            return await _Db.MultipartUploads.ReadPartAsync(uploadId, partNumber, token).ConfigureAwait(false);
+        }
+
+        /// <summary>
+        /// Delete a single staged part (its row and staged blob). A completion that still lists the deleted
+        /// part will fail with <see cref="InvalidPartException"/> until the client re-uploads it.
+        /// </summary>
+        /// <param name="containerName">Container (bucket) name.</param>
+        /// <param name="uploadId">Upload id.</param>
+        /// <param name="partNumber">Part number.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>True if a part was deleted; false if no such part existed.</returns>
+        /// <exception cref="NoSuchUploadException">The upload does not exist or belongs to another container.</exception>
+        public async Task<bool> DeletePartAsync(string containerName, string uploadId, int partNumber, CancellationToken token = default)
+        {
+            await RequireUploadAsync(containerName, uploadId, token).ConfigureAwait(false);
+            string? location = await _Db.MultipartUploads.DeletePartAsync(uploadId, partNumber, token).ConfigureAwait(false);
+            if (location == null) return false;
+
+            try
+            {
+                await _Storage.DeletePartAsync(location, token).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                _Logging?.Debug(_Header + "failed to delete staged part blob " + location + ": " + ex.Message);
+            }
+
+            return true;
+        }
+
+        /// <summary>
         /// List in-progress uploads for a container (paginated).
         /// </summary>
         /// <param name="containerName">Container (bucket) name.</param>

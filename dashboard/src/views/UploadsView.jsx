@@ -12,8 +12,12 @@ import { useTranslation } from 'react-i18next';
 
 import { useApp } from '@context/AppContext.jsx';
 import useFormatters from '@hooks/useFormatters.js';
+import ActionMenu from '@components/ActionMenu.jsx';
 import ConfirmModal from '@components/ConfirmModal.jsx';
 import DataTable from '@components/DataTable.jsx';
+import Modal from '@components/Modal.jsx';
+import { JsonViewerModal } from '@components/JsonViewer.jsx';
+import { CopyableId } from '@components/CopyButton.jsx';
 import PageHeader, { Card, Metric } from '@components/PageHeader.jsx';
 import EmptyState, { ErrorBanner } from '@components/EmptyState.jsx';
 import { Field } from '@components/FilterBar.jsx';
@@ -36,6 +40,7 @@ export default function UploadsView() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [abortTarget, setAbortTarget] = useState(null);
+  const [partsTarget, setPartsTarget] = useState(null);
 
   useEffect(() => {
     if (!client) return;
@@ -70,6 +75,7 @@ export default function UploadsView() {
 
   useEffect(() => {
     setAbortTarget(null);
+    setPartsTarget(null);
     void load();
   }, [load]);
 
@@ -125,7 +131,15 @@ export default function UploadsView() {
       label: '',
       style: { width: '48px' },
       render: (item) => (
-        <button type="button" className="button-danger" onClick={() => setAbortTarget(item)}>
+        <button
+          type="button"
+          className="button-danger"
+          onClick={(event) => {
+            // The row is clickable to open its parts; keep Abort from also triggering that.
+            event.stopPropagation();
+            setAbortTarget(item);
+          }}
+        >
           {t('multipart.abort')}
         </button>
       ),
@@ -200,6 +214,7 @@ export default function UploadsView() {
             loading={loading}
             rowId={(item) => item.UploadId}
             emptyMessage={t('multipart.empty')}
+            onRowClick={(item) => setPartsTarget(item)}
           />
         </Card>
       )}
@@ -213,6 +228,179 @@ export default function UploadsView() {
         onConfirm={submitAbort}
         onCancel={() => setAbortTarget(null)}
       />
+
+      <MultipartPartsModal
+        upload={partsTarget}
+        container={container}
+        onClose={() => setPartsTarget(null)}
+      />
     </div>
+  );
+}
+
+/**
+ * The parts of one in-progress multipart upload: inspect, view a single part's fresh metadata, and
+ * delete parts. The list is fetched on open and re-fetched after a delete so the modal always reflects
+ * what is actually staged server-side.
+ */
+function MultipartPartsModal({ upload, container, onClose }) {
+  const { t } = useTranslation();
+  const { client, notify } = useApp();
+  const formatters = useFormatters();
+
+  const [parts, setParts] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [detailPart, setDetailPart] = useState(null);
+  const [deleteTarget, setDeleteTarget] = useState(null);
+
+  const uploadId = upload?.UploadId;
+
+  const load = useCallback(async () => {
+    if (!client || !container || !uploadId) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const result = await client.multipartUploadParts(container, uploadId);
+      // The server returns PascalCase: parts live under `Parts`, each with `PartNumber`, `Md5`,
+      // `Sha256`, `SizeBytes`, `CreatedUtc`, `ETag`.
+      setParts(result?.Parts ?? []);
+    } catch (caught) {
+      setError(caught);
+      setParts([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [client, container, uploadId]);
+
+  useEffect(() => {
+    if (!uploadId) {
+      setParts([]);
+      setError(null);
+      setDetailPart(null);
+      setDeleteTarget(null);
+      return;
+    }
+    void load();
+  }, [uploadId, load]);
+
+  const openPartDetail = async (item) => {
+    try {
+      const full = await client.multipartUploadPart(container, uploadId, item.PartNumber);
+      setDetailPart(full);
+    } catch (caught) {
+      notify(caught.message, 'danger');
+    }
+  };
+
+  const submitDelete = async () => {
+    try {
+      await client.deleteMultipartUploadPart(container, uploadId, deleteTarget.PartNumber);
+      setDeleteTarget(null);
+      notify(t('multipart.partDeleted'), 'success');
+      await load();
+    } catch (caught) {
+      notify(caught.message, 'danger');
+    }
+  };
+
+  const columns = [
+    {
+      key: 'PartNumber',
+      label: t('multipart.partNumber'),
+      render: (item) => <span className="mono">{item.PartNumber}</span>,
+    },
+    {
+      key: 'SizeBytes',
+      label: t('multipart.partSize'),
+      align: 'right',
+      render: (item) => formatters.bytes(item.SizeBytes),
+    },
+    {
+      key: 'Md5',
+      label: t('multipart.partMd5'),
+      render: (item) => <CopyableId value={item.Md5} truncate={12} />,
+    },
+    {
+      key: 'Sha256',
+      label: t('multipart.partSha256'),
+      render: (item) => <CopyableId value={item.Sha256} truncate={12} />,
+    },
+    {
+      key: 'CreatedUtc',
+      label: t('multipart.partCreated'),
+      render: (item) => (
+        <span title={formatters.dateTime(item.CreatedUtc)}>{formatters.relative(item.CreatedUtc)}</span>
+      ),
+    },
+    {
+      key: 'actions',
+      label: '',
+      style: { width: '48px' },
+      render: (item) => (
+        <ActionMenu
+          items={[
+            { key: 'view', label: t('multipart.viewPart'), onClick: () => void openPartDetail(item) },
+            { key: 'delete', label: t('multipart.deletePart'), variant: 'danger', onClick: () => setDeleteTarget(item) },
+          ]}
+        />
+      ),
+    },
+  ];
+
+  return (
+    <>
+      <Modal
+        open={Boolean(upload)}
+        onClose={onClose}
+        title={upload ? t('multipart.partsTitle', { key: upload.Key }) : ''}
+        subtitle={t('multipart.partsHint')}
+        size="large"
+      >
+        {upload ? (
+          <>
+            <dl className="detail-grid">
+              <dt>{t('multipart.key')}</dt>
+              <dd className="mono">{upload.Key}</dd>
+              <dt>{t('multipart.uploadId')}</dt>
+              <dd>
+                <CopyableId value={upload.UploadId} />
+              </dd>
+              <dt>{t('multipart.initiated')}</dt>
+              <dd title={formatters.dateTime(upload.InitiatedUtc)}>{formatters.relative(upload.InitiatedUtc)}</dd>
+              <dt>{t('multipart.expires')}</dt>
+              <dd title={formatters.dateTime(upload.ExpiresUtc)}>{formatters.relative(upload.ExpiresUtc)}</dd>
+            </dl>
+
+            <ErrorBanner error={error} onRetry={() => void load()} />
+
+            <DataTable
+              columns={columns}
+              items={parts}
+              loading={loading}
+              rowId={(item) => item.PartNumber}
+              emptyMessage={t('multipart.partsEmpty')}
+            />
+          </>
+        ) : null}
+      </Modal>
+
+      <JsonViewerModal
+        open={Boolean(detailPart)}
+        onClose={() => setDetailPart(null)}
+        title={detailPart ? t('multipart.partDetailTitle', { partNumber: detailPart.PartNumber }) : ''}
+        value={detailPart}
+      />
+
+      <ConfirmModal
+        open={Boolean(deleteTarget)}
+        danger
+        title={t('multipart.deletePartTitle')}
+        message={deleteTarget ? t('multipart.deletePartConfirm', { partNumber: deleteTarget.PartNumber }) : ''}
+        confirmLabel={t('multipart.deletePart')}
+        onConfirm={submitDelete}
+        onCancel={() => setDeleteTarget(null)}
+      />
+    </>
   );
 }
