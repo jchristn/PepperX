@@ -286,7 +286,8 @@ exit /b 0
 :jsonprop
 :: %1 = variable name to set, %2 = JSON property to read from the last response body
 set "%~1="
-for /f "usebackq delims=" %%v in (`powershell -NoProfile -Command "try { (Get-Content -Raw -LiteralPath '%BODYF%' ^| ConvertFrom-Json).%~2 } catch { }" 2^>nul`) do set "%~1=%%v"
+powershell -NoProfile -Command "try { (ConvertFrom-Json (Get-Content -Raw -LiteralPath '%BODYF%')).%~2 } catch { }" > "%WORK%\jsonprop.txt" 2>nul
+set /p %~1=<"%WORK%\jsonprop.txt"
 exit /b 0
 
 :recordfail
