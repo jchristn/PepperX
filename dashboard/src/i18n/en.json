@@ -73,6 +73,8 @@
     "no": "No",
     "apply": "Apply",
     "clear": "Clear",
+    "prettyPrint": "Pretty print",
+    "rawText": "Raw",
     "of": "of",
     "unknown": "Unknown",
     "typeDetails": "{{type}} Details",

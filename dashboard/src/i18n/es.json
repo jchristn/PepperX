@@ -73,6 +73,8 @@
     "no": "No",
     "apply": "Aplicar",
     "clear": "Limpiar",
+    "prettyPrint": "Formatear",
+    "rawText": "Sin formato",
     "of": "de",
     "unknown": "Desconocido",
     "typeDetails": "Detalles de {{type}}",

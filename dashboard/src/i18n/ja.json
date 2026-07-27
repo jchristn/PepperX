@@ -73,6 +73,8 @@
     "no": "いいえ",
     "apply": "適用",
     "clear": "クリア",
+    "prettyPrint": "整形",
+    "rawText": "元のまま",
     "of": "/",
     "unknown": "不明",
     "typeDetails": "{{type}}の詳細",

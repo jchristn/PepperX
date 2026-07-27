@@ -14,7 +14,7 @@ import useFormatters from '@hooks/useFormatters.js';
 import ConfirmModal from '@components/ConfirmModal.jsx';
 import PageHeader, { Card } from '@components/PageHeader.jsx';
 import CopyButton from '@components/CopyButton.jsx';
-import JsonViewer from '@components/JsonViewer.jsx';
+import BodyViewer, { formatBody } from '@components/BodyViewer.jsx';
 import { LoadingState } from '@components/EmptyState.jsx';
 import { Field } from '@components/FilterBar.jsx';
 import { MethodBadge, StatusBadge } from '@components/Badges.jsx';
@@ -255,6 +255,16 @@ export default function ApiExplorerView() {
 
             {selected.hasBody ? (
               <Field id="explorer-body" label={t('explorer.body')}>
+                <div className="body-viewer-toolbar">
+                  <button
+                    type="button"
+                    className="body-viewer-toggle"
+                    disabled={!bodyText.trim()}
+                    onClick={() => setBodyText(formatBody(bodyText))}
+                  >
+                    {t('common.prettyPrint')}
+                  </button>
+                </div>
                 <textarea
                   id="explorer-body"
                   rows={8}
@@ -304,7 +314,12 @@ export default function ApiExplorerView() {
               <div className="tab-panel">
                 {responseTab === 'body' ? (
                   result.body ? (
-                    <JsonViewer value={result.body} maxHeight="460px" />
+                    <BodyViewer
+                      body={result.body}
+                      contentType={result.headers['content-type'] || ''}
+                      maxHeight="460px"
+                      emptyMessage={t('requests.noBody')}
+                    />
                   ) : (
                     <p className="muted">{t('requests.noBody')}</p>
                   )

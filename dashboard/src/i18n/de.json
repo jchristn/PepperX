@@ -73,6 +73,8 @@
     "no": "Nein",
     "apply": "Anwenden",
     "clear": "Zurücksetzen",
+    "prettyPrint": "Formatieren",
+    "rawText": "Rohtext",
     "of": "von",
     "unknown": "Unbekannt",
     "typeDetails": "{{type}}-Details",

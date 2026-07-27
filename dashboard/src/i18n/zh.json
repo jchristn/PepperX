@@ -73,6 +73,8 @@
     "no": "否",
     "apply": "应用",
     "clear": "清除",
+    "prettyPrint": "格式化",
+    "rawText": "原始",
     "of": "/",
     "unknown": "未知",
     "typeDetails": "{{type}}详情",

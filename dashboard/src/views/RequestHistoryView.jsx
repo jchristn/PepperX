@@ -21,6 +21,7 @@ import CopyButton, { CopyableId } from '@components/CopyButton.jsx';
 import { ErrorBanner } from '@components/EmptyState.jsx';
 import { Field, FilterActions, FilterGrid } from '@components/FilterBar.jsx';
 import { JsonViewerModal } from '@components/JsonViewer.jsx';
+import BodyViewer from '@components/BodyViewer.jsx';
 import { MethodBadge, StatusBadge } from '@components/Badges.jsx';
 import { persistedPageSize } from '@components/TablePagination.jsx';
 
@@ -384,17 +385,25 @@ function stringifyHeaders(headers) {
  * flag truncation. Empty content still renders a block so the operator can see there was nothing,
  * rather than the section silently disappearing.
  */
-function DetailBlock({ title, value, empty, truncatedNote = null, defaultOpen = true }) {
+function DetailBlock({ title, value, empty, truncatedNote = null, defaultOpen = true, formattable = false }) {
   const text = value ?? '';
   const isEmpty = text.length === 0;
+  // Bodies may be minified JSON or XML; the viewer supplies its own copy button and pretty/raw toggle, so
+  // the block's own copy affordance would be redundant there. Headers stay a plain pre with the copy button.
   return (
     <Collapsible
       title={title}
       defaultOpen={defaultOpen}
-      actions={isEmpty ? null : <CopyButton value={text} />}
+      actions={isEmpty || formattable ? null : <CopyButton value={text} />}
     >
       {truncatedNote ? <p className="field-hint request-block-note">{truncatedNote}</p> : null}
-      <pre className="request-block-body">{isEmpty ? empty : text}</pre>
+      {isEmpty ? (
+        <pre className="request-block-body">{empty}</pre>
+      ) : formattable ? (
+        <BodyViewer body={text} maxHeight="460px" />
+      ) : (
+        <pre className="request-block-body">{text}</pre>
+      )}
     </Collapsible>
   );
 }
@@ -474,6 +483,7 @@ function RequestDetailModal({ detail, onClose }) {
               value={detail.RequestBody}
               empty={t('requests.noBody')}
               truncatedNote={requestBodyNote}
+              formattable
             />
           </section>
 
@@ -485,6 +495,7 @@ function RequestDetailModal({ detail, onClose }) {
               value={detail.ResponseBody}
               empty={t('requests.noBody')}
               truncatedNote={responseBodyNote}
+              formattable
             />
           </section>
         </div>

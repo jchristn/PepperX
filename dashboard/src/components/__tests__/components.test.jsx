@@ -18,6 +18,7 @@ import { StatusBadge, toneForStatus } from '../Badges.jsx';
 import { buildQuery, toEnumerationBody } from '../../utils/api.js';
 import { defaultServerUrl, loadRuntimeConfig, runtimeConfig } from '../../utils/runtimeConfig.js';
 import { formatBytes, formatDuration, formatNumber, formatPercent } from '../../i18n/formatters.js';
+import { detectBodyKind, formatBody, prettyXml } from '../BodyViewer.jsx';
 import { directionFor, normalizeLocale } from '../../i18n/localeRegistry.js';
 import resources from '../../i18n/resources.js';
 
@@ -227,5 +228,32 @@ describe('TablePagination', () => {
 
     // 130 records at 25 per page is 6 pages.
     expect(onPageChange).toHaveBeenCalledWith(6);
+  });
+});
+
+describe('body formatting', () => {
+  it('detects the body kind from content or a content-type hint', () => {
+    expect(detectBodyKind('{"a":1}')).toBe('json');
+    expect(detectBodyKind('[1,2]')).toBe('json');
+    expect(detectBodyKind('<Root><A>x</A></Root>')).toBe('xml');
+    expect(detectBodyKind('plain words')).toBe('text');
+    expect(detectBodyKind('')).toBe('empty');
+    // A content-type hint decides even when the body itself is ambiguous.
+    expect(detectBodyKind('not-really', 'application/json')).toBe('text'); // hint but parse fails -> text
+    expect(detectBodyKind('<x/>', 'application/xml')).toBe('xml');
+  });
+
+  it('pretty-prints minified JSON', () => {
+    expect(formatBody('{"a":1,"b":[2,3]}')).toBe('{\n  "a": 1,\n  "b": [\n    2,\n    3\n  ]\n}');
+  });
+
+  it('indents XML by nesting depth', () => {
+    const out = prettyXml('<Root><Child>value</Child><Empty/></Root>');
+    expect(out).toBe('<Root>\n  <Child>value</Child>\n  <Empty/>\n</Root>');
+  });
+
+  it('leaves plain text and invalid payloads untouched', () => {
+    expect(formatBody('just text')).toBe('just text');
+    expect(formatBody('{not valid json}')).toBe('{not valid json}');
   });
 });
