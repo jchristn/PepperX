@@ -17,7 +17,7 @@
 
 ## Status
 
-**Alpha, v0.1.0.** Everything documented here works and is covered by tests — 165 backend tests
+**Alpha, v0.1.0.** Everything documented here works and is covered by tests — 201 backend tests
 across three runners (console, xUnit, NUnit), on .NET 8 and .NET 10 — but it has not been run in
 production. Interfaces and the on-disk extent format may change before 1.0. Pin your versions.
 
@@ -92,8 +92,9 @@ the layer above owns access control and business logic.
   own access control. See [Security](#security).
 - **Not a Redis replacement.** The RESP surface is durable storage, not an in-memory cache. It is far
   slower than Redis and always will be.
-- **Not a full S3.** Buckets, objects, tags, and multipart uploads (including `UploadPartCopy`). No
-  versioning, ACLs, or lifecycle rules.
+- **Not a full S3.** Buckets and objects — with ranged/large-object reads, multi-object delete, and
+  bucket and object tags — plus the full multipart lifecycle including `UploadPartCopy`. No
+  versioning, ACLs, lifecycle rules, or whole-object `CopyObject`.
 
 ---
 
