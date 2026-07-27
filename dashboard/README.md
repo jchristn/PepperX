@@ -165,6 +165,35 @@ action on each row calls `ApiClient.abortMultipartUpload(name, uploadId)` behind
 refreshes the list; the abort is idempotent server-side. When there are none, the panel shows a clear
 empty state. All strings live under the `multipart.*` translation keys.
 
+## Objects and Uploads pages
+
+Two discrete Store-group pages sit alongside the container drill-down.
+
+**Objects** (`/objects`) is the same object manager as the `containers/:container` drill-down —
+`ObjectsView` serves both. Mounted on the route param it behaves exactly as before; mounted at
+`/objects` it shows a container `<select>` at the top and mirrors the choice in `?container=`, so a
+refresh or a shared link reopens the same container. Selecting one reveals the identical
+list/filter/upload/download/view/edit/delete UI (`ObjectModals`, `TableFrame`); with none selected it
+shows an `EmptyState` prompting a choice. The drill-down path is unchanged.
+
+**Uploads** (`/uploads`, `UploadsView`) is a discrete page over the same in-progress multipart-upload
+list the container detail modal shows. A container `<select>` (reflected in `?container=`) drives a
+`DataTable` with the object key, upload ID, and initiated/expires times; each row has an **Abort**
+action behind a `ConfirmModal` that calls `ApiClient.abortMultipartUpload(name, uploadId)`, refreshes,
+and toasts. Empty states distinguish "no container selected" from "no multipart uploads in progress".
+Strings live under `uploads.*` for the page chrome and reuse `multipart.*` for the shared table and
+abort flow.
+
+### KPI cards
+
+The Containers, Objects, and Uploads pages each carry a `metric-grid` KPI row using the same `Metric`
+component as Home, sourced from `ApiClient.statistics()`. Containers shows the cluster rollup (total
+containers, objects, stored bytes, free storage). Objects shows the selected container's object count
+and size (from the matching `statistics().Containers` entry) plus a global rollup, falling back to
+the cluster rollup when no container is selected. Uploads shows the selected container's in-progress
+upload count plus its object/size rollup, and the cluster rollup when none is selected. Every card
+falls back to an em dash rather than surfacing an error when statistics are unavailable.
+
 ## Known gaps
 
 - **No focus trap in modals.** Escape closes them and focus moves into the dialog on open, but Tab

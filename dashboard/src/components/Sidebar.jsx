@@ -15,10 +15,12 @@ import {
   ChevronRightIcon,
   ContainerIcon,
   ExplorerIcon,
+  FileIcon,
   HistoryIcon,
   HomeIcon,
   SearchIcon,
   SettingsIcon,
+  UploadIcon,
 } from './Icons.jsx';
 
 const GROUPS = [
@@ -27,6 +29,8 @@ const GROUPS = [
     items: [
       { to: '/', labelKey: 'nav.home', Icon: HomeIcon, end: true },
       { to: '/containers', labelKey: 'nav.containers', Icon: ContainerIcon },
+      { to: '/objects', labelKey: 'nav.objects', Icon: FileIcon },
+      { to: '/uploads', labelKey: 'nav.uploads', Icon: UploadIcon },
       { to: '/search', labelKey: 'nav.search', Icon: SearchIcon },
     ],
   },

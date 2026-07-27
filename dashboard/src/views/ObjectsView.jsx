@@ -1,13 +1,18 @@
 /**
  * Objects inside one container: browse, filter, upload, inspect, and delete.
  *
+ * Mounts two ways from one component. At `containers/:container` the container is the route param —
+ * the drill-down from the container list. At `/objects` it is a discrete page with a container
+ * dropdown, and the choice is mirrored in `?container=` so a refresh or a shared link lands on the
+ * same container. Either way the object-management UI below is identical.
+ *
  * Metadata editing rewrites the object with its existing payload, because extents are immutable —
  * there is no in-place metadata update to expose, and pretending otherwise would misrepresent what
  * the store does.
  */
 
 import React, { useCallback, useEffect, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 
 import { useApp } from '@context/AppContext.jsx';
@@ -17,18 +22,24 @@ import ConfirmModal from '@components/ConfirmModal.jsx';
 import { JsonViewerModal } from '@components/JsonViewer.jsx';
 import { EditMetadataModal, ObjectDetailModal } from '@components/ObjectModals.jsx';
 import Modal from '@components/Modal.jsx';
-import PageHeader, { Card } from '@components/PageHeader.jsx';
+import PageHeader, { Card, Metric } from '@components/PageHeader.jsx';
 import TableFrame from '@components/TableFrame.jsx';
-import { ErrorBanner } from '@components/EmptyState.jsx';
+import EmptyState, { ErrorBanner } from '@components/EmptyState.jsx';
 import { ChipInput, Field, FilterActions, FilterGrid, TagEditor, cleanTags } from '@components/FilterBar.jsx';
-import { UploadIcon } from '@components/Icons.jsx';
+import { ContainerIcon, UploadIcon } from '@components/Icons.jsx';
 import { persistedPageSize } from '@components/TablePagination.jsx';
 
 const EMPTY_FILTERS = { prefix: '', labels: [], tags: {} };
 
 export default function ObjectsView() {
   const { t } = useTranslation();
-  const { container } = useParams();
+  // Two entry points share this view: the `containers/:container` drill-down (route param) and the
+  // discrete `/objects` page (dropdown-driven, reflected in `?container=`).
+  const { container: routeContainer } = useParams();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const discrete = routeContainer === undefined;
+  const container = discrete ? searchParams.get('container') || '' : routeContainer;
+
   const { client, notify } = useApp();
   const formatters = useFormatters();
 
@@ -39,6 +50,11 @@ export default function ObjectsView() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
+  // The container list feeds the discrete dropdown; statistics drive the KPI cards. Both are
+  // supplementary — a failure leaves the object management below fully usable.
+  const [containers, setContainers] = useState([]);
+  const [stats, setStats] = useState(null);
+
   const [uploadOpen, setUploadOpen] = useState(false);
   const [detail, setDetail] = useState(null);
   const [jsonTarget, setJsonTarget] = useState(null);
@@ -47,7 +63,7 @@ export default function ObjectsView() {
 
   const load = useCallback(
     async (nextFilters = filters, nextPageNumber = pageNumber, nextPageSize = pageSize) => {
-      if (!client) return;
+      if (!client || !container) return;
       setLoading(true);
       setError(null);
       try {
@@ -67,6 +83,26 @@ export default function ObjectsView() {
     },
     [client, container, filters, pageNumber, pageSize],
   );
+
+  useEffect(() => {
+    if (!client || !discrete) return;
+    client
+      .enumerateContainers({ pageSize: 100 })
+      .then((result) => setContainers(result.items))
+      .catch(() => setContainers([]));
+  }, [client, discrete]);
+
+  useEffect(() => {
+    if (!client) return;
+    client.statistics().then(setStats).catch(() => setStats(null));
+  }, [client]);
+
+  const selectContainer = (name) => {
+    const next = new URLSearchParams(searchParams);
+    if (name) next.set('container', name);
+    else next.delete('container');
+    setSearchParams(next, { replace: true });
+  };
 
   useEffect(() => {
     setFilters(EMPTY_FILTERS);
@@ -171,87 +207,134 @@ export default function ObjectsView() {
     },
   ];
 
+  // The selected container's rollup comes from the statistics envelope, which carries a per-container
+  // object count and size — cheaper and more complete than re-reading the container here.
+  const containerStats = container ? (stats?.Containers ?? []).find((entry) => entry.Name === container) : null;
+
   return (
     <div className="page">
       <PageHeader
-        breadcrumb={<Link to="/containers">{t('nav.containers')}</Link>}
-        title={t('objects.title', { container })}
+        breadcrumb={discrete ? null : <Link to="/containers">{t('nav.containers')}</Link>}
+        title={discrete ? t('objects.pageTitle') : t('objects.title', { container })}
         subtitle={t('objects.subtitle')}
         actions={
-          <button type="button" className="button-primary" onClick={() => setUploadOpen(true)}>
-            <UploadIcon size={16} />
-            {t('objects.upload')}
-          </button>
+          container ? (
+            <button type="button" className="button-primary" onClick={() => setUploadOpen(true)}>
+              <UploadIcon size={16} />
+              {t('objects.upload')}
+            </button>
+          ) : null
         }
       />
 
       <ErrorBanner error={error} onRetry={() => void load()} />
 
-      <Card
-        title={t('common.filters')}
-        actions={
-          <FilterActions
-            disabled={loading}
-            onApply={() => {
-              setPageNumber(1);
-              void load(filters, 1, pageSize);
-            }}
-            onClear={() => {
-              setFilters(EMPTY_FILTERS);
-              setPageNumber(1);
-              void load(EMPTY_FILTERS, 1, pageSize);
-            }}
-          />
-        }
-      >
-        <FilterGrid wide>
-          <Field id="filter-prefix" label={t('objects.filterPrefix')}>
-            <input
-              id="filter-prefix"
-              type="text"
-              value={filters.prefix}
-              spellCheck={false}
-              onChange={(event) => setFilters({ ...filters, prefix: event.target.value })}
-            />
-          </Field>
-          <Field id="filter-labels" label={t('objects.filterLabels')}>
-            <ChipInput
-              id="filter-labels"
-              values={filters.labels}
-              onChange={(labels) => setFilters({ ...filters, labels })}
-              placeholder={t('objects.labelsPlaceholder')}
-            />
-          </Field>
-          <Field id="filter-tags" label={t('objects.filterTags')}>
-            <TagEditor
-              tags={filters.tags}
-              onChange={(tags) => setFilters({ ...filters, tags })}
-              keyLabel={t('containers.tagKey')}
-              valueLabel={t('containers.tagValue')}
-              addLabel={t('containers.addTag')}
-            />
-          </Field>
-        </FilterGrid>
-      </Card>
+      {container ? (
+        <div className="metric-grid">
+          <Metric label={t('objects.kpiObjects')} value={formatters.number(containerStats?.ObjectCount ?? page.totalCount)} />
+          <Metric label={t('objects.kpiSize')} value={containerStats ? formatters.bytes(containerStats.TotalBytes) : '—'} />
+          <Metric label={t('objects.kpiContainers')} value={stats ? formatters.number(stats.ContainerCount) : '—'} />
+          <Metric label={t('objects.kpiStored')} value={stats ? formatters.bytes(stats.TotalBytes) : '—'} />
+        </div>
+      ) : (
+        <div className="metric-grid">
+          <Metric label={t('objects.kpiContainers')} value={stats ? formatters.number(stats.ContainerCount) : '—'} />
+          <Metric label={t('objects.kpiObjects')} value={stats ? formatters.number(stats.ObjectCount) : '—'} />
+          <Metric label={t('objects.kpiStored')} value={stats ? formatters.bytes(stats.TotalBytes) : '—'} />
+          <Metric label={t('capacity.storageFree')} value={stats ? formatters.bytes(stats.StorageFreeBytes) : '—'} />
+        </div>
+      )}
 
-      <TableFrame
-        columns={columns}
-        items={page.items}
-        totalRecords={page.totalCount}
-        pageNumber={pageNumber}
-        pageSize={pageSize}
-        onPageChange={setPageNumber}
-        onPageSizeChange={(size) => {
-          setPageSize(size);
-          setPageNumber(1);
-        }}
-        onRefresh={() => void load()}
-        loading={loading}
-        storageKey="objects"
-        emptyMessage={filters.prefix || filters.labels.length ? t('objects.noMatches') : t('objects.empty')}
-        rowId={(item) => item.Key}
-        onRowClick={(item) => void openDetail(item)}
-      />
+      {discrete ? (
+        <Card>
+          <Field id="objects-container" label={t('objects.selectContainer')}>
+            <select id="objects-container" value={container} onChange={(event) => selectContainer(event.target.value)}>
+              <option value="">{t('objects.selectContainerPlaceholder')}</option>
+              {containers.map((entry) => (
+                <option key={entry.Id} value={entry.Name}>
+                  {entry.Name}
+                </option>
+              ))}
+            </select>
+          </Field>
+        </Card>
+      ) : null}
+
+      {!container ? (
+        <EmptyState
+          icon={<ContainerIcon size={22} />}
+          title={t('objects.selectPrompt')}
+          message={t('objects.selectPromptHint')}
+        />
+      ) : (
+        <>
+          <Card
+            title={t('common.filters')}
+            actions={
+              <FilterActions
+                disabled={loading}
+                onApply={() => {
+                  setPageNumber(1);
+                  void load(filters, 1, pageSize);
+                }}
+                onClear={() => {
+                  setFilters(EMPTY_FILTERS);
+                  setPageNumber(1);
+                  void load(EMPTY_FILTERS, 1, pageSize);
+                }}
+              />
+            }
+          >
+            <FilterGrid wide>
+              <Field id="filter-prefix" label={t('objects.filterPrefix')}>
+                <input
+                  id="filter-prefix"
+                  type="text"
+                  value={filters.prefix}
+                  spellCheck={false}
+                  onChange={(event) => setFilters({ ...filters, prefix: event.target.value })}
+                />
+              </Field>
+              <Field id="filter-labels" label={t('objects.filterLabels')}>
+                <ChipInput
+                  id="filter-labels"
+                  values={filters.labels}
+                  onChange={(labels) => setFilters({ ...filters, labels })}
+                  placeholder={t('objects.labelsPlaceholder')}
+                />
+              </Field>
+              <Field id="filter-tags" label={t('objects.filterTags')}>
+                <TagEditor
+                  tags={filters.tags}
+                  onChange={(tags) => setFilters({ ...filters, tags })}
+                  keyLabel={t('containers.tagKey')}
+                  valueLabel={t('containers.tagValue')}
+                  addLabel={t('containers.addTag')}
+                />
+              </Field>
+            </FilterGrid>
+          </Card>
+
+          <TableFrame
+            columns={columns}
+            items={page.items}
+            totalRecords={page.totalCount}
+            pageNumber={pageNumber}
+            pageSize={pageSize}
+            onPageChange={setPageNumber}
+            onPageSizeChange={(size) => {
+              setPageSize(size);
+              setPageNumber(1);
+            }}
+            onRefresh={() => void load()}
+            loading={loading}
+            storageKey="objects"
+            emptyMessage={filters.prefix || filters.labels.length ? t('objects.noMatches') : t('objects.empty')}
+            rowId={(item) => item.Key}
+            onRowClick={(item) => void openDetail(item)}
+          />
+        </>
+      )}
 
       <UploadModal
         open={uploadOpen}

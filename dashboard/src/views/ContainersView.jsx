@@ -15,7 +15,7 @@ import ActionMenu from '@components/ActionMenu.jsx';
 import ConfirmModal from '@components/ConfirmModal.jsx';
 import DataTable from '@components/DataTable.jsx';
 import Modal from '@components/Modal.jsx';
-import PageHeader from '@components/PageHeader.jsx';
+import PageHeader, { Metric } from '@components/PageHeader.jsx';
 import TableFrame from '@components/TableFrame.jsx';
 import { CopyableId } from '@components/CopyButton.jsx';
 import { ErrorBanner } from '@components/EmptyState.jsx';
@@ -226,6 +226,10 @@ export default function ContainersView() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
+  // Cluster-wide rollup for the KPI cards. Supplementary to the table — a failure here leaves the
+  // list fully usable, so the cards fall back to an em dash rather than surfacing an error.
+  const [stats, setStats] = useState(null);
+
   const [createOpen, setCreateOpen] = useState(false);
   const [newName, setNewName] = useState('');
   const [newTags, setNewTags] = useState({});
@@ -266,6 +270,15 @@ export default function ContainersView() {
   useEffect(() => {
     void load(pageNumber, pageSize);
   }, [load, pageNumber, pageSize]);
+
+  const loadStats = useCallback(() => {
+    if (!client) return;
+    client.statistics().then(setStats).catch(() => setStats(null));
+  }, [client]);
+
+  useEffect(() => {
+    loadStats();
+  }, [loadStats]);
 
   const openCreate = () => {
     setNewName('');
@@ -309,6 +322,7 @@ export default function ContainersView() {
       notify(t('containers.create'), 'success');
       setPageNumber(1);
       await load(1, pageSize);
+      loadStats();
     } catch (caught) {
       // A create can 409 on a duplicate name or on an already-claimed RESP index; when the operator
       // supplied an index, attribute the conflict to it and surface it beside that field.
@@ -337,6 +351,7 @@ export default function ContainersView() {
       setDeleteTarget(null);
       notify(t('common.delete'), 'success');
       await load();
+      loadStats();
     } catch (caught) {
       notify(caught.message, 'danger');
     }
@@ -416,6 +431,16 @@ export default function ContainersView() {
       />
 
       <ErrorBanner error={error} onRetry={() => void load()} />
+
+      <div className="metric-grid">
+        <Metric label={t('home.containers')} value={stats ? formatters.number(stats.ContainerCount) : '—'} />
+        <Metric label={t('home.objects')} value={stats ? formatters.number(stats.ObjectCount) : '—'} />
+        <Metric label={t('home.stored')} value={stats ? formatters.bytes(stats.TotalBytes) : '—'} />
+        <Metric
+          label={t('capacity.storageFree')}
+          value={stats?.StorageFreeBytes > 0 ? formatters.bytes(stats.StorageFreeBytes) : '—'}
+        />
+      </div>
 
       <TableFrame
         columns={columns}

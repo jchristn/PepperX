@@ -21,6 +21,7 @@ import ObjectsView from '@views/ObjectsView.jsx';
 import RequestHistoryView from '@views/RequestHistoryView.jsx';
 import SearchView from '@views/SearchView.jsx';
 import SettingsView from '@views/SettingsView.jsx';
+import UploadsView from '@views/UploadsView.jsx';
 
 export default function App() {
   return (
@@ -31,6 +32,8 @@ export default function App() {
           <Route index element={<HomeView />} />
           <Route path="containers" element={<ContainersView />} />
           <Route path="containers/:container" element={<ObjectsView />} />
+          <Route path="objects" element={<ObjectsView />} />
+          <Route path="uploads" element={<UploadsView />} />
           <Route path="search" element={<SearchView />} />
           <Route path="capacity" element={<CapacityView />} />
           <Route path="requests" element={<RequestHistoryView />} />
