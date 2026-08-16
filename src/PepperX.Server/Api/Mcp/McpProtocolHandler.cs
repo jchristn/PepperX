@@ -14,6 +14,7 @@ namespace PepperX.Server.Api.Mcp
     using PepperX.Core.Services;
     using PepperX.Core.Settings;
     using SyslogLogging;
+    using Voltaic.Core;
     using Voltaic.Mcp;
 
     /// <summary>
@@ -374,7 +375,7 @@ namespace PepperX.Server.Api.Mcp
 
         private void Reg(string name, string description, object schema, Func<McpToolArgs, CancellationToken, Task<McpToolCallResult>> handler)
         {
-            Func<JsonElement?, CancellationToken, Task<object>> wrapped = async (JsonElement? input, CancellationToken ct) =>
+            Func<RpcParameters?, CancellationToken, Task<object>> wrapped = async (RpcParameters? input, CancellationToken ct) =>
             {
                 try
                 {
@@ -423,10 +424,10 @@ namespace PepperX.Server.Api.Mcp
             }
         }
 
-        private static McpToolArgs Parse(JsonElement? input)
+        private static McpToolArgs Parse(RpcParameters? input)
         {
-            if (input == null || input.Value.ValueKind == JsonValueKind.Null || input.Value.ValueKind == JsonValueKind.Undefined) return new McpToolArgs();
-            return JsonSerializer.Deserialize<McpToolArgs>(input.Value.GetRawText(), _ArgumentOptions) ?? new McpToolArgs();
+            if (input == null || !input.HasValue) return new McpToolArgs();
+            return JsonSerializer.Deserialize<McpToolArgs>(input.RawJson!, _ArgumentOptions) ?? new McpToolArgs();
         }
 
         private EnumerationQuery BuildQuery(McpToolArgs a)

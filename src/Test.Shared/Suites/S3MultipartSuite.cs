@@ -70,8 +70,8 @@ namespace Test.Shared.Suites
                             {
                                 ListPartsResponse parts = await s3.ListPartsAsync(new ListPartsRequest { BucketName = bucket, Key = "big", UploadId = init.UploadId, MaxParts = 1000, PartNumberMarker = partMarker.ToString() }, ct);
                                 listed += parts.Parts.Count;
-                                if (!parts.IsTruncated) break;
-                                partMarker = parts.NextPartNumberMarker;
+                                if (parts.IsTruncated != true) break;
+                                partMarker = parts.NextPartNumberMarker ?? 0;
                             }
                             Check.Equal(2, listed, "two parts listed");
 
@@ -113,8 +113,10 @@ namespace Test.Shared.Suites
 
                             await s3.AbortMultipartUploadAsync(new AbortMultipartUploadRequest { BucketName = bucket, Key = "k", UploadId = init.UploadId }, ct);
 
+                            // AWS SDK v4 leaves response collections null when the server returns an empty
+                            // list, and after an abort there are no in-progress uploads to enumerate.
                             ListMultipartUploadsResponse uploads = await s3.ListMultipartUploadsAsync(new ListMultipartUploadsRequest { BucketName = bucket }, ct);
-                            foreach (MultipartUpload u in uploads.MultipartUploads) Check.True(u.UploadId != init.UploadId, "aborted upload not listed");
+                            foreach (MultipartUpload u in uploads.MultipartUploads ?? new List<MultipartUpload>()) Check.True(u.UploadId != init.UploadId, "aborted upload not listed");
 
                             await s3.DeleteBucketAsync(new DeleteBucketRequest { BucketName = bucket }, ct);
                         }
@@ -209,6 +211,23 @@ namespace Test.Shared.Suites
 
                             await s3.DeleteObjectAsync(new DeleteObjectRequest { BucketName = bucket, Key = "single" }, ct);
                             await s3.DeleteObjectAsync(new DeleteObjectRequest { BucketName = bucket, Key = "multi" }, ct);
+                            await s3.DeleteBucketAsync(new DeleteBucketRequest { BucketName = bucket }, ct);
+                        }
+                    }),
+
+                    new TestCaseDescriptor("S3Multipart", "ListPartsUnknownUpload", "ListParts on an unknown upload id fails rather than returning an empty page", async ct =>
+                    {
+                        using (AmazonS3Client s3 = await NewClientAsync(ct))
+                        {
+                            string bucket = DbTest.NewContainerName();
+                            await s3.PutBucketAsync(new PutBucketRequest { BucketName = bucket }, ct);
+
+                            // A bogus upload id must be rejected, not silently answered with an empty part
+                            // list -- otherwise a client resuming a lost upload would never learn it is gone.
+                            await Check.ThrowsAsync<AmazonS3Exception>(
+                                () => s3.ListPartsAsync(new ListPartsRequest { BucketName = bucket, Key = "ghost", UploadId = "pepperx-nonexistent-upload" }, ct),
+                                "unknown upload id is rejected");
+
                             await s3.DeleteBucketAsync(new DeleteBucketRequest { BucketName = bucket }, ct);
                         }
                     })
