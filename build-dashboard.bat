@@ -35,5 +35,21 @@ if errorlevel 1 (
     exit /b %errorlevel%
 )
 
+rem The multi-arch build above pushes to Docker Hub but leaves nothing in the local image store:
+rem a multi-platform manifest cannot be --load'ed, and a second --load build would invoke the build
+rem cloud again. Pull the tags we just pushed instead -- that hydrates the local store for the current
+rem platform without a second cloud build.
+echo Updating local image store from registry...
+docker pull jchristn77/pepperx-dashboard:%VERSION_TAG%
+if errorlevel 1 (
+    echo Failed to pull jchristn77/pepperx-dashboard:%VERSION_TAG% into the local store.
+    exit /b %errorlevel%
+)
+docker pull jchristn77/pepperx-dashboard:latest
+if errorlevel 1 (
+    echo Failed to pull jchristn77/pepperx-dashboard:latest into the local store.
+    exit /b %errorlevel%
+)
+
 echo Done.
 exit /b 0

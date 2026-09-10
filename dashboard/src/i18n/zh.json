@@ -40,6 +40,7 @@
     "theme": "切换主题",
     "language": "切换语言",
     "repository": "打开代码仓库",
+    "discord": "加入我们的 Discord",
     "disconnect": "断开连接",
     "runSetup": "运行安装向导",
     "tour": "开始导览"

@@ -10,7 +10,7 @@ import React from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { useApp } from '@context/AppContext.jsx';
-import { GlobeIcon, MoonIcon, PowerIcon, SunIcon } from './Icons.jsx';
+import { DiscordIcon, GlobeIcon, MoonIcon, PowerIcon, SunIcon } from './Icons.jsx';
 
 export default function Topbar() {
   const { t } = useTranslation();
@@ -52,6 +52,17 @@ export default function Topbar() {
         >
           {theme === 'dark' ? <SunIcon size={16} /> : <MoonIcon size={16} />}
         </button>
+
+        <a
+          className="button-icon"
+          href="https://discord.gg/tRAN8HgvK5"
+          target="_blank"
+          rel="noopener noreferrer"
+          title={t('topbar.discord')}
+          aria-label={t('topbar.discord')}
+        >
+          <DiscordIcon size={16} />
+        </a>
 
         <button
           type="button"

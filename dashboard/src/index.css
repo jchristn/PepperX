@@ -273,6 +273,24 @@ button {
   background-color: var(--color-surface-hover);
 }
 
+/* An anchor styled as an icon button (e.g. the Discord link) needs the button box explicitly, since
+   the base button layout above only targets the <button> element. */
+a.button-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: var(--control-height);
+  min-width: var(--control-height);
+  padding: 0;
+  border: 1px solid transparent;
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+a.button-icon:hover {
+  color: var(--color-text);
+  background-color: var(--color-surface-hover);
+}
+
 /* Utilities -------------------------------------------------------------- */
 
 .stack {
