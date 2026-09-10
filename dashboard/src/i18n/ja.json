@@ -27,6 +27,7 @@
     "search": "検索",
     "capacity": "容量",
     "requests": "リクエスト履歴",
+    "observability": "オブザーバビリティ",
     "explorer": "API エクスプローラー",
     "settings": "設定",
     "collapse": "サイドバーを折りたたむ",
@@ -381,6 +382,23 @@
     "empty": "まだリクエストは記録されていません。",
     "noMatches": "この条件に一致するリクエストはありません。",
     "disabled": "このノードではリクエストの記録が無効になっているため、履歴は保持されません。"
+  },
+  "observability": {
+    "title": "オブザーバビリティ",
+    "subtitle": "このデプロイのメトリクス、トレース、ログ。",
+    "intro": "テレメトリはデフォルトで無効です。docker compose スタックで起動し、Grafana を開いてください。Grafana はダッシュボード、メトリクス、トレース、ログの主な入口です。以下に表示される認証情報はスタックのデフォルトです。ローカル以外での利用では必ず変更してください。設定の詳細は TELEMETRY.md を参照してください。",
+    "primaryTag": "ここから開始",
+    "credentials": "デフォルトの認証情報",
+    "noAuth": "なし（認証なし）",
+    "url": "URL",
+    "urlHttp": "URL (HTTP)",
+    "urlGrpc": "URL (gRPC)",
+    "open": "開く",
+    "grafanaDesc": "ダッシュボード、メトリクス、トレース、ログ。主要な可観測性 UI。",
+    "prometheusDesc": "メトリクスストアとクエリ UI。",
+    "tempoDesc": "分散トレーシングのバックエンド。トレースはここではなく Grafana から照会します。",
+    "lokiDesc": "ログ集約のバックエンド。ログはここではなく Grafana から照会します。",
+    "collectorDesc": "ノードがテレメトリを送信する OTLP 取り込みエンドポイント。閲覧可能な UI ではありません。"
   },
   "explorer": {
     "title": "API エクスプローラー",

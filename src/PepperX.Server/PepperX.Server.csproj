@@ -8,6 +8,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="Radiant" Version="0.1.2" />
     <PackageReference Include="RedisRespServer" Version="0.1.1" />
     <PackageReference Include="S3Server" Version="7.3.2" />
     <PackageReference Include="SyslogLogging" Version="2.2.1" />

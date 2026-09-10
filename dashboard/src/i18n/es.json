@@ -27,6 +27,7 @@
     "search": "Búsqueda",
     "capacity": "Capacidad",
     "requests": "Historial de solicitudes",
+    "observability": "Observabilidad",
     "explorer": "Explorador de API",
     "settings": "Configuración",
     "collapse": "Contraer barra lateral",
@@ -381,6 +382,23 @@
     "empty": "Todavía no se ha capturado ninguna solicitud.",
     "noMatches": "Ninguna solicitud coincide con estos filtros.",
     "disabled": "La captura de solicitudes está desactivada en este nodo, por lo que no se conserva ningún historial."
+  },
+  "observability": {
+    "title": "Observabilidad",
+    "subtitle": "Métricas, trazas y registros de este despliegue.",
+    "intro": "La telemetría está desactivada de forma predeterminada. Actívala con el stack de docker compose y luego abre Grafana, el punto de entrada principal para paneles, métricas, trazas y registros. Las credenciales que aparecen abajo son las predeterminadas del stack; cámbialas para cualquier uso que no sea local. Consulta TELEMETRY.md para los detalles de configuración.",
+    "primaryTag": "Empieza aquí",
+    "credentials": "Credenciales predeterminadas",
+    "noAuth": "Ninguna (sin autenticación)",
+    "url": "URL",
+    "urlHttp": "URL (HTTP)",
+    "urlGrpc": "URL (gRPC)",
+    "open": "Abrir",
+    "grafanaDesc": "Paneles, métricas, trazas y registros. La interfaz principal de observabilidad.",
+    "prometheusDesc": "Almacén de métricas e interfaz de consultas.",
+    "tempoDesc": "Backend de trazado distribuido. Consulta las trazas a través de Grafana en lugar de aquí.",
+    "lokiDesc": "Backend de agregación de registros. Consulta los registros a través de Grafana en lugar de aquí.",
+    "collectorDesc": "Endpoint de ingesta OTLP al que los nodos envían la telemetría. No es una interfaz navegable."
   },
   "explorer": {
     "title": "Explorador de API",

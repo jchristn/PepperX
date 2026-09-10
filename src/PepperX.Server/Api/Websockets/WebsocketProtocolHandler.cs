@@ -2,6 +2,7 @@ namespace PepperX.Server.Api.Websockets
 {
     using System;
     using System.Collections.Generic;
+    using System.Diagnostics;
     using System.IO;
     using System.Net;
     using System.Net.WebSockets;
@@ -19,6 +20,7 @@ namespace PepperX.Server.Api.Websockets
     using PepperX.Core.Serialization;
     using PepperX.Core.Services;
     using PepperX.Core.Settings;
+    using PepperX.Core.Telemetry;
     using SyslogLogging;
     using WatsonWebsocket;
     using WebsocketSettings = PepperX.Core.Settings.WebsocketSettings;
@@ -119,6 +121,8 @@ namespace PepperX.Server.Api.Websockets
         {
             _Server = new WatsonWsServer(hosts, _Settings.Port, false);
             _Server.MessageReceived += OnMessageReceived;
+            _Server.ClientConnected += (_, _) => PepperXTelemetry.WsConnectionOpened();
+            _Server.ClientDisconnected += (_, _) => PepperXTelemetry.WsConnectionClosed();
             _Server.Start();
         }
 
@@ -140,6 +144,7 @@ namespace PepperX.Server.Api.Websockets
         {
             Guid clientGuid = e.Client.Guid;
             byte[] data = e.Data.ToArray();
+            PepperXTelemetry.WsMessageReceived();
 
             _ = Task.Run(async () =>
             {
@@ -166,8 +171,16 @@ namespace PepperX.Server.Api.Websockets
             }
             catch (Exception ex)
             {
+                PepperXTelemetry.RecordWs("malformed", 0.0, false);
                 return Malformed("Unparseable request: " + ex.Message);
             }
+
+            string operation = request.Operation.ToString();
+            long startTs = Stopwatch.GetTimestamp();
+            Activity? activity = PepperXTelemetry.StartActivity("ws " + operation, ActivityKind.Server);
+            activity?.SetTag("pepperx.protocol", "ws");
+            activity?.SetTag("pepperx.operation", operation);
+            bool ok = true;
 
             try
             {
@@ -175,15 +188,25 @@ namespace PepperX.Server.Api.Websockets
             }
             catch (PepperXException ex)
             {
+                ok = false;
+                if (ex.StatusCode >= 500) PepperXTelemetry.RecordException(activity, ex);
                 return Fail(request.RequestId, ex.ErrorType, ex.StatusCode, ex.Message);
             }
             catch (ArgumentException ex)
             {
+                ok = false;
                 return Fail(request.RequestId, ApiErrorEnum.BadRequest, 400, ex.Message);
             }
             catch (Exception ex)
             {
+                ok = false;
+                PepperXTelemetry.RecordException(activity, ex);
                 return Fail(request.RequestId, ApiErrorEnum.InternalError, 500, ex.Message);
+            }
+            finally
+            {
+                activity?.Dispose();
+                PepperXTelemetry.RecordWs(operation, Stopwatch.GetElapsedTime(startTs).TotalSeconds, ok);
             }
         }
 

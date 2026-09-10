@@ -1,11 +1,13 @@
 namespace PepperX.Core.Services
 {
     using System;
+    using System.Diagnostics;
     using System.Threading;
     using System.Threading.Tasks;
     using PepperX.Core.Database;
     using PepperX.Core.Models;
     using PepperX.Core.Settings;
+    using PepperX.Core.Telemetry;
     using SyslogLogging;
 
     /// <summary>
@@ -99,8 +101,19 @@ namespace PepperX.Core.Services
 
         private async Task BeatAsync(CancellationToken token)
         {
-            _Node.LastHeartbeatUtc = DateTime.UtcNow;
-            await _Db.Nodes.UpsertHeartbeatAsync(_Node, token).ConfigureAwait(false);
+            using Activity? __act = PepperXTelemetry.StartActivity("heartbeat.beat", ActivityKind.Internal);
+            try
+            {
+                _Node.LastHeartbeatUtc = DateTime.UtcNow;
+                await _Db.Nodes.UpsertHeartbeatAsync(_Node, token).ConfigureAwait(false);
+                PepperXTelemetry.RecordHeartbeat(true);
+            }
+            catch (Exception __ex)
+            {
+                PepperXTelemetry.RecordHeartbeat(false);
+                PepperXTelemetry.RecordException(__act, __ex);
+                throw;
+            }
         }
 
         #endregion

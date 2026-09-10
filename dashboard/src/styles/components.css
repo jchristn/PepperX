@@ -1416,6 +1416,52 @@
   font-size: var(--font-size-sm);
 }
 
+/* Observability ---------------------------------------------------------- */
+
+.observability-intro {
+  max-width: 80ch;
+  color: var(--color-text-secondary);
+}
+
+.observability-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: var(--spacing-lg);
+}
+
+/* The card body carries its own padding and pins the action to the bottom, so cards of differing
+   description length still line their Open buttons up across a row. */
+.observability-card {
+  display: flex;
+  flex-direction: column;
+}
+
+.observability-card-body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--spacing-md);
+  padding: var(--spacing-lg);
+}
+
+.observability-card-body .detail-grid {
+  flex: 1;
+}
+
+/* The base button box only targets <button>; the Open control is an anchor so it opens in a new tab,
+   so it needs the layout spelled out here. */
+a.observability-open {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  min-height: var(--control-height);
+  padding: 0 var(--spacing-md);
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+}
+
 /* Empty, banners, toasts ------------------------------------------------- */
 
 .empty-state {

@@ -27,6 +27,7 @@
     "search": "Recherche",
     "capacity": "Capacité",
     "requests": "Historique des requêtes",
+    "observability": "Observabilité",
     "explorer": "Explorateur d'API",
     "settings": "Paramètres",
     "collapse": "Réduire la barre latérale",
@@ -381,6 +382,23 @@
     "empty": "Aucune requête n'a encore été capturée.",
     "noMatches": "Aucune requête ne correspond à ces filtres.",
     "disabled": "La capture des requêtes est désactivée sur ce nœud ; aucun historique n'est donc conservé."
+  },
+  "observability": {
+    "title": "Observabilité",
+    "subtitle": "Métriques, traces et journaux de ce déploiement.",
+    "intro": "La télémétrie est désactivée par défaut. Activez-la avec la stack docker compose, puis ouvrez Grafana, le point d'entrée principal pour les tableaux de bord, les métriques, les traces et les journaux. Les identifiants ci-dessous sont ceux par défaut de la stack ; changez-les pour tout usage autre que local. Consultez TELEMETRY.md pour les détails de configuration.",
+    "primaryTag": "Commencez ici",
+    "credentials": "Identifiants par défaut",
+    "noAuth": "Aucun (pas d'authentification)",
+    "url": "URL",
+    "urlHttp": "URL (HTTP)",
+    "urlGrpc": "URL (gRPC)",
+    "open": "Ouvrir",
+    "grafanaDesc": "Tableaux de bord, métriques, traces et journaux. L'interface d'observabilité principale.",
+    "prometheusDesc": "Magasin de métriques et interface de requêtes.",
+    "tempoDesc": "Backend de traçage distribué. Interrogez les traces via Grafana plutôt qu'ici.",
+    "lokiDesc": "Backend d'agrégation de journaux. Interrogez les journaux via Grafana plutôt qu'ici.",
+    "collectorDesc": "Point d'ingestion OTLP vers lequel les nœuds envoient la télémétrie. Ce n'est pas une interface navigable."
   },
   "explorer": {
     "title": "Explorateur d'API",

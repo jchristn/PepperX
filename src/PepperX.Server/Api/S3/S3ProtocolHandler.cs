@@ -2,6 +2,7 @@ namespace PepperX.Server.Api.S3
 {
     using System;
     using System.Collections.Generic;
+    using System.Diagnostics;
     using System.IO;
     using System.Threading;
     using System.Threading.Tasks;
@@ -13,6 +14,7 @@ namespace PepperX.Server.Api.S3
     using PepperX.Core.Responses;
     using PepperX.Core.Services;
     using PepperX.Core.Settings;
+    using PepperX.Core.Telemetry;
     using S3ServerLibrary;
     using S3ServerLibrary.S3Objects;
     using SyslogLogging;
@@ -86,35 +88,35 @@ namespace PepperX.Server.Api.S3
 
             _Server.Service.IsAnonymousRequestAllowed = _ => Task.FromResult(_Settings.AllowAnonymous);
             _Server.Service.GetSecretKey = _ => _Settings.StaticSecretKey;
-            _Server.Service.ListBuckets = ListBucketsAsync;
+            _Server.Service.ListBuckets = InstrumentResult("ListBuckets", ListBucketsAsync);
 
-            _Server.Bucket.Exists = BucketExistsAsync;
-            _Server.Bucket.Write = BucketWriteAsync;
-            _Server.Bucket.Delete = BucketDeleteAsync;
-            _Server.Bucket.Read = BucketReadAsync;
-            _Server.Bucket.ReadTagging = BucketReadTaggingAsync;
-            _Server.Bucket.WriteTagging = BucketWriteTaggingAsync;
-            _Server.Bucket.DeleteTagging = BucketDeleteTaggingAsync;
-            _Server.Bucket.ReadLocation = BucketReadLocationAsync;
+            _Server.Bucket.Exists = InstrumentResult("BucketExists", BucketExistsAsync);
+            _Server.Bucket.Write = InstrumentVoid("BucketWrite", BucketWriteAsync);
+            _Server.Bucket.Delete = InstrumentVoid("BucketDelete", BucketDeleteAsync);
+            _Server.Bucket.Read = InstrumentResult("BucketRead", BucketReadAsync);
+            _Server.Bucket.ReadTagging = InstrumentResult("BucketReadTagging", BucketReadTaggingAsync);
+            _Server.Bucket.WriteTagging = InstrumentVoid<Tagging>("BucketWriteTagging", BucketWriteTaggingAsync);
+            _Server.Bucket.DeleteTagging = InstrumentVoid("BucketDeleteTagging", BucketDeleteTaggingAsync);
+            _Server.Bucket.ReadLocation = InstrumentResult("BucketReadLocation", BucketReadLocationAsync);
 
-            _Server.Object.Write = ObjectWriteAsync;
-            _Server.Object.Read = ObjectReadAsync;
-            _Server.Object.ReadRange = ObjectReadRangeAsync;
-            _Server.Object.Exists = ObjectExistsAsync;
-            _Server.Object.Delete = ObjectDeleteAsync;
-            _Server.Object.DeleteMultiple = ObjectDeleteMultipleAsync;
-            _Server.Object.ReadTagging = ObjectReadTaggingAsync;
-            _Server.Object.WriteTagging = ObjectWriteTaggingAsync;
-            _Server.Object.DeleteTagging = ObjectDeleteTaggingAsync;
+            _Server.Object.Write = InstrumentVoid("ObjectWrite", ObjectWriteAsync);
+            _Server.Object.Read = InstrumentResult("ObjectRead", ObjectReadAsync);
+            _Server.Object.ReadRange = InstrumentResult("ObjectReadRange", ObjectReadRangeAsync);
+            _Server.Object.Exists = InstrumentResult("ObjectExists", ObjectExistsAsync);
+            _Server.Object.Delete = InstrumentVoid("ObjectDelete", ObjectDeleteAsync);
+            _Server.Object.DeleteMultiple = InstrumentResult<DeleteMultiple, DeleteResult>("ObjectDeleteMultiple", ObjectDeleteMultipleAsync);
+            _Server.Object.ReadTagging = InstrumentResult("ObjectReadTagging", ObjectReadTaggingAsync);
+            _Server.Object.WriteTagging = InstrumentVoid<Tagging>("ObjectWriteTagging", ObjectWriteTaggingAsync);
+            _Server.Object.DeleteTagging = InstrumentVoid("ObjectDeleteTagging", ObjectDeleteTaggingAsync);
 
             if (_Settings.MultipartEnabled)
             {
-                _Server.Object.CreateMultipartUpload = CreateMultipartUploadAsync;
-                _Server.Object.UploadPart = UploadPartAsync;
-                _Server.Object.CompleteMultipartUpload = CompleteMultipartUploadAsync;
-                _Server.Object.AbortMultipartUpload = AbortMultipartUploadAsync;
-                _Server.Object.ReadParts = ReadPartsAsync;
-                _Server.Bucket.ReadMultipartUploads = ReadMultipartUploadsAsync;
+                _Server.Object.CreateMultipartUpload = InstrumentResult("CreateMultipartUpload", CreateMultipartUploadAsync);
+                _Server.Object.UploadPart = InstrumentVoid("UploadPart", UploadPartAsync);
+                _Server.Object.CompleteMultipartUpload = InstrumentResult<CompleteMultipartUpload, CompleteMultipartUploadResult>("CompleteMultipartUpload", CompleteMultipartUploadAsync);
+                _Server.Object.AbortMultipartUpload = InstrumentVoid("AbortMultipartUpload", AbortMultipartUploadAsync);
+                _Server.Object.ReadParts = InstrumentResult("ReadParts", ReadPartsAsync);
+                _Server.Bucket.ReadMultipartUploads = InstrumentResult("ReadMultipartUploads", ReadMultipartUploadsAsync);
             }
 
             _Server.Start();
@@ -128,6 +130,118 @@ namespace PepperX.Server.Api.S3
             try { _Server?.Stop(); } catch (Exception) { }
             _Server?.Dispose();
             _Server = null;
+        }
+
+        #endregion
+
+        #region Private-Methods-Telemetry
+
+        private Func<S3Context, Task<T>> InstrumentResult<T>(string operation, Func<S3Context, Task<T>> handler)
+        {
+            return async ctx =>
+            {
+                long startTs = Stopwatch.GetTimestamp();
+                Activity? activity = PepperXTelemetry.StartActivity("s3 " + operation, ActivityKind.Server);
+                activity?.SetTag("pepperx.protocol", "s3");
+                activity?.SetTag("pepperx.operation", operation);
+                bool ok = true;
+                try
+                {
+                    return await handler(ctx).ConfigureAwait(false);
+                }
+                catch (Exception ex)
+                {
+                    ok = false;
+                    PepperXTelemetry.RecordException(activity, ex);
+                    throw;
+                }
+                finally
+                {
+                    activity?.Dispose();
+                    PepperXTelemetry.RecordS3(operation, Stopwatch.GetElapsedTime(startTs).TotalSeconds, ok);
+                }
+            };
+        }
+
+        private Func<S3Context, Task> InstrumentVoid(string operation, Func<S3Context, Task> handler)
+        {
+            return async ctx =>
+            {
+                long startTs = Stopwatch.GetTimestamp();
+                Activity? activity = PepperXTelemetry.StartActivity("s3 " + operation, ActivityKind.Server);
+                activity?.SetTag("pepperx.protocol", "s3");
+                activity?.SetTag("pepperx.operation", operation);
+                bool ok = true;
+                try
+                {
+                    await handler(ctx).ConfigureAwait(false);
+                }
+                catch (Exception ex)
+                {
+                    ok = false;
+                    PepperXTelemetry.RecordException(activity, ex);
+                    throw;
+                }
+                finally
+                {
+                    activity?.Dispose();
+                    PepperXTelemetry.RecordS3(operation, Stopwatch.GetElapsedTime(startTs).TotalSeconds, ok);
+                }
+            };
+        }
+
+        private Func<S3Context, TArg, Task<T>> InstrumentResult<TArg, T>(string operation, Func<S3Context, TArg, Task<T>> handler)
+        {
+            return async (ctx, arg) =>
+            {
+                long startTs = Stopwatch.GetTimestamp();
+                Activity? activity = PepperXTelemetry.StartActivity("s3 " + operation, ActivityKind.Server);
+                activity?.SetTag("pepperx.protocol", "s3");
+                activity?.SetTag("pepperx.operation", operation);
+                bool ok = true;
+                try
+                {
+                    return await handler(ctx, arg).ConfigureAwait(false);
+                }
+                catch (Exception ex)
+                {
+                    ok = false;
+                    PepperXTelemetry.RecordException(activity, ex);
+                    throw;
+                }
+                finally
+                {
+                    activity?.Dispose();
+                    PepperXTelemetry.RecordS3(operation, Stopwatch.GetElapsedTime(startTs).TotalSeconds, ok);
+                }
+            };
+        }
+
+        private Func<S3Context, TArg, Task> InstrumentVoid<TArg>(string operation, Func<S3Context, TArg, Task> handler)
+        {
+            return async (ctx, arg) =>
+            {
+                long startTs = Stopwatch.GetTimestamp();
+                Activity? activity = PepperXTelemetry.StartActivity("s3 " + operation, ActivityKind.Server);
+                activity?.SetTag("pepperx.protocol", "s3");
+                activity?.SetTag("pepperx.operation", operation);
+                bool ok = true;
+                try
+                {
+                    await handler(ctx, arg).ConfigureAwait(false);
+                }
+                catch (Exception ex)
+                {
+                    ok = false;
+                    PepperXTelemetry.RecordException(activity, ex);
+                    throw;
+                }
+                finally
+                {
+                    activity?.Dispose();
+                    PepperXTelemetry.RecordS3(operation, Stopwatch.GetElapsedTime(startTs).TotalSeconds, ok);
+                }
+            };
         }
 
         #endregion

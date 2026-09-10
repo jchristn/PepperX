@@ -18,6 +18,7 @@ import ConnectView from '@views/ConnectView.jsx';
 import ContainersView from '@views/ContainersView.jsx';
 import HomeView from '@views/HomeView.jsx';
 import ObjectsView from '@views/ObjectsView.jsx';
+import ObservabilityView from '@views/ObservabilityView.jsx';
 import RequestHistoryView from '@views/RequestHistoryView.jsx';
 import SearchView from '@views/SearchView.jsx';
 import SettingsView from '@views/SettingsView.jsx';
@@ -37,6 +38,7 @@ export default function App() {
           <Route path="search" element={<SearchView />} />
           <Route path="capacity" element={<CapacityView />} />
           <Route path="requests" element={<RequestHistoryView />} />
+          <Route path="observability" element={<ObservabilityView />} />
           <Route path="explorer" element={<ApiExplorerView />} />
           <Route path="settings" element={<SettingsView />} />
         </Route>

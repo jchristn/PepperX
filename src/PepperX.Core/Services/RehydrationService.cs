@@ -12,6 +12,7 @@ namespace PepperX.Core.Services
     using PepperX.Core.Responses;
     using PepperX.Core.Storage;
     using PepperX.Core.Storage.Format;
+    using PepperX.Core.Telemetry;
     using SyslogLogging;
 
     /// <summary>
@@ -58,65 +59,82 @@ namespace PepperX.Core.Services
         /// <returns>A report describing what was found and changed.</returns>
         public async Task<RehydrationReport> RehydrateAsync(RehydrationModeEnum mode, CancellationToken token = default)
         {
-            Stopwatch stopwatch = Stopwatch.StartNew();
-            RehydrationReport report = new RehydrationReport { Mode = mode };
-            bool mutate = mode != RehydrationModeEnum.Verify;
-
-            Dictionary<string, long> targetCount = new Dictionary<string, long>();
-            Dictionary<string, long> targetBytes = new Dictionary<string, long>();
-
-            IReadOnlyList<ContainerManifest> manifests = await _Storage.ReadAllContainerManifestsAsync(token).ConfigureAwait(false);
-            report.ContainersDiscovered = manifests.Count;
-            foreach (ContainerManifest manifest in manifests)
+            long __ts = Stopwatch.GetTimestamp();
+            using Activity? __act = PepperXTelemetry.StartActivity("rehydration.run", ActivityKind.Internal);
+            __act?.SetTag("pepperx.mode", mode.ToString());
+            bool __ok = true;
+            try
             {
-                await EnsureContainerAsync(manifest.Id, manifest.Name, manifest.Tags, manifest.Cache, manifest.RespDatabaseIndex, manifest.MultipartUploadExpiryDays, mutate, report, token).ConfigureAwait(false);
-                if (!targetCount.ContainsKey(manifest.Id)) { targetCount[manifest.Id] = 0; targetBytes[manifest.Id] = 0; }
-            }
+                Stopwatch stopwatch = Stopwatch.StartNew();
+                RehydrationReport report = new RehydrationReport { Mode = mode };
+                bool mutate = mode != RehydrationModeEnum.Verify;
 
-            await foreach (string location in _Storage.EnumerateExtentLocationsAsync(token).ConfigureAwait(false))
+                Dictionary<string, long> targetCount = new Dictionary<string, long>();
+                Dictionary<string, long> targetBytes = new Dictionary<string, long>();
+
+                IReadOnlyList<ContainerManifest> manifests = await _Storage.ReadAllContainerManifestsAsync(token).ConfigureAwait(false);
+                report.ContainersDiscovered = manifests.Count;
+                foreach (ContainerManifest manifest in manifests)
+                {
+                    await EnsureContainerAsync(manifest.Id, manifest.Name, manifest.Tags, manifest.Cache, manifest.RespDatabaseIndex, manifest.MultipartUploadExpiryDays, mutate, report, token).ConfigureAwait(false);
+                    if (!targetCount.ContainsKey(manifest.Id)) { targetCount[manifest.Id] = 0; targetBytes[manifest.Id] = 0; }
+                }
+
+                await foreach (string location in _Storage.EnumerateExtentLocationsAsync(token).ConfigureAwait(false))
+                {
+                    token.ThrowIfCancellationRequested();
+                    ExtentHeader header;
+                    try
+                    {
+                        header = await _Storage.ReadHeaderAsync(location, token).ConfigureAwait(false);
+                    }
+                    catch (Exception ex)
+                    {
+                        report.Drift.Add("Unreadable extent at " + location + ": " + ex.Message);
+                        continue;
+                    }
+
+                    report.ExtentsDiscovered++;
+                    await EnsureContainerAsync(header.ContainerId, header.ContainerName, null, null, null, null, mutate, report, token).ConfigureAwait(false);
+
+                    if (!targetCount.ContainsKey(header.ContainerId)) { targetCount[header.ContainerId] = 0; targetBytes[header.ContainerId] = 0; }
+                    targetCount[header.ContainerId] += 1;
+                    targetBytes[header.ContainerId] += header.SizeBytes;
+
+                    Extent? existing = await _Db.Extents.ReadByIdAsync(header.ExtentId, token).ConfigureAwait(false);
+                    if (existing == null)
+                    {
+                        if (mutate)
+                        {
+                            await _Db.Extents.CreateAsync(BuildExtent(header, location), token).ConfigureAwait(false);
+                            report.RowsAdded++;
+                        }
+                        else
+                        {
+                            report.Drift.Add("Extent " + header.ExtentId + " (" + header.Key + ") present in storage but missing from database.");
+                        }
+                    }
+                }
+
+                await RemoveOrphansAsync(mutate, report, token).ConfigureAwait(false);
+                await ReconcileCountersAsync(targetCount, targetBytes, mutate, report, token).ConfigureAwait(false);
+
+                stopwatch.Stop();
+                report.DurationMs = stopwatch.Elapsed.TotalMilliseconds;
+                report.Success = true;
+                _Logging?.Info(_Header + "rehydration (" + mode + ") complete: +" + report.RowsAdded + " -" + report.RowsRemoved + " in " + report.DurationMs.ToString("F0") + "ms");
+                return report;
+            }
+            catch (Exception __ex)
             {
-                token.ThrowIfCancellationRequested();
-                ExtentHeader header;
-                try
-                {
-                    header = await _Storage.ReadHeaderAsync(location, token).ConfigureAwait(false);
-                }
-                catch (Exception ex)
-                {
-                    report.Drift.Add("Unreadable extent at " + location + ": " + ex.Message);
-                    continue;
-                }
-
-                report.ExtentsDiscovered++;
-                await EnsureContainerAsync(header.ContainerId, header.ContainerName, null, null, null, null, mutate, report, token).ConfigureAwait(false);
-
-                if (!targetCount.ContainsKey(header.ContainerId)) { targetCount[header.ContainerId] = 0; targetBytes[header.ContainerId] = 0; }
-                targetCount[header.ContainerId] += 1;
-                targetBytes[header.ContainerId] += header.SizeBytes;
-
-                Extent? existing = await _Db.Extents.ReadByIdAsync(header.ExtentId, token).ConfigureAwait(false);
-                if (existing == null)
-                {
-                    if (mutate)
-                    {
-                        await _Db.Extents.CreateAsync(BuildExtent(header, location), token).ConfigureAwait(false);
-                        report.RowsAdded++;
-                    }
-                    else
-                    {
-                        report.Drift.Add("Extent " + header.ExtentId + " (" + header.Key + ") present in storage but missing from database.");
-                    }
-                }
+                __ok = false;
+                PepperXTelemetry.RecordException(__act, __ex);
+                throw;
             }
-
-            await RemoveOrphansAsync(mutate, report, token).ConfigureAwait(false);
-            await ReconcileCountersAsync(targetCount, targetBytes, mutate, report, token).ConfigureAwait(false);
-
-            stopwatch.Stop();
-            report.DurationMs = stopwatch.Elapsed.TotalMilliseconds;
-            report.Success = true;
-            _Logging?.Info(_Header + "rehydration (" + mode + ") complete: +" + report.RowsAdded + " -" + report.RowsRemoved + " in " + report.DurationMs.ToString("F0") + "ms");
-            return report;
+            finally
+            {
+                PepperXTelemetry.RecordRehydration(mode.ToString(), Stopwatch.GetElapsedTime(__ts).TotalSeconds, __ok);
+            }
         }
 
         #endregion

@@ -50,6 +50,13 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+    environment:
+      # Telemetry is off in the committed node config; the stack turns it on here and points every node
+      # at the collector. Metrics, traces, and logs are pushed over OTLP/gRPC to otel-collector:4317,
+      # which fans them out to Prometheus, Tempo, and Loki. See TELEMETRY.md.
+      PEPPERX_TELEMETRY_ENABLED: "true"
+      PEPPERX_TELEMETRY_OTLP_ENDPOINT: "http://otel-collector:4317"
+      PEPPERX_TELEMETRY_OTLP_PROTOCOL: "grpc"
     ports:
       - "8000:8000"   # REST
       - "8001:8001"   # S3
@@ -85,6 +92,10 @@ services:
         # Not a runtime dependency -- only so one node creates the schema before the other starts,
         # which keeps the first run's logs free of harmless migration races.
         condition: service_started
+    environment:
+      PEPPERX_TELEMETRY_ENABLED: "true"
+      PEPPERX_TELEMETRY_OTLP_ENDPOINT: "http://otel-collector:4317"
+      PEPPERX_TELEMETRY_OTLP_PROTOCOL: "grpc"
     ports:
       - "8010:8000"
       - "8011:8001"
@@ -126,9 +137,109 @@ services:
     networks:
       - pepperx
 
+  # ---------------------------------------------------------------------------------------------------
+  # Observability stack (LGTM): the nodes push OTLP to the collector, which fans metrics out to
+  # Prometheus, traces to Tempo, and logs to Loki. Grafana reads all three. See TELEMETRY.md.
+  #
+  # Port map (host side), chosen to avoid every port the data plane already uses (5442, 8000-8004,
+  # 8010-8014, 6379, 6380, 3000):
+  #   4317  otel-collector OTLP/gRPC        4318  otel-collector OTLP/HTTP
+  #   9090  prometheus                      3001  grafana (NOT 3000 -- the dashboard owns that)
+  #   3100  loki                            3200  tempo
+  # ---------------------------------------------------------------------------------------------------
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.115.1
+    container_name: pepperx-otel-collector
+    restart: unless-stopped
+    command: ["--config=/etc/otelcol/config.yaml"]
+    volumes:
+      - ./otel-collector/config.yaml:/etc/otelcol/config.yaml:ro
+    ports:
+      - "4317:4317"   # OTLP gRPC (also reachable in-network as otel-collector:4317)
+      - "4318:4318"   # OTLP HTTP
+    depends_on:
+      - prometheus
+      - tempo
+      - loki
+    networks:
+      - pepperx
+
+  prometheus:
+    image: prom/prometheus:v3.1.0
+    container_name: pepperx-prometheus
+    restart: unless-stopped
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.retention.time=15d"
+      - "--web.enable-lifecycle"
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    ports:
+      - "9090:9090"
+    networks:
+      - pepperx
+
+  tempo:
+    image: grafana/tempo:2.7.0
+    container_name: pepperx-tempo
+    restart: unless-stopped
+    command: ["-config.file=/etc/tempo/tempo.yaml"]
+    volumes:
+      - ./tempo/tempo.yaml:/etc/tempo/tempo.yaml:ro
+      - tempo-data:/var/tempo
+    ports:
+      - "3200:3200"   # Tempo query API (Grafana reads this in-network as tempo:3200)
+    networks:
+      - pepperx
+
+  loki:
+    image: grafana/loki:3.3.2
+    container_name: pepperx-loki
+    restart: unless-stopped
+    command: ["-config.file=/etc/loki/loki.yaml"]
+    volumes:
+      - ./loki/loki.yaml:/etc/loki/loki.yaml:ro
+      - loki-data:/loki
+    ports:
+      - "3100:3100"
+    networks:
+      - pepperx
+
+  grafana:
+    image: grafana/grafana:11.4.0
+    container_name: pepperx-grafana
+    restart: unless-stopped
+    environment:
+      # Default credentials shown on the dashboard's Observability page. Change them for anything but a
+      # local stack.
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_USERS_DEFAULT_THEME: dark
+      # The datasources and the PepperX dashboard folder are provisioned from files below; no manual
+      # setup is needed on first boot.
+      GF_INSTALL_PLUGINS: ""
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    ports:
+      - "3001:3000"   # 3001 on the host: the PepperX dashboard already owns 3000.
+    depends_on:
+      - prometheus
+      - tempo
+      - loki
+    networks:
+      - pepperx
+
 volumes:
   postgres-data:
   extent-data:
+  prometheus-data:
+  tempo-data:
+  loki-data:
+  grafana-data:
 
 networks:
   pepperx:

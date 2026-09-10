@@ -230,6 +230,12 @@ export const PlayIcon = (props) => (
   </Icon>
 );
 
+export const ActivityIcon = (props) => (
+  <Icon {...props}>
+    <path d="M3 12h4l3 8 4-16 3 8h4" />
+  </Icon>
+);
+
 /**
  * Discord wordmark glyph. Unlike the stroked line icons above it is a solid shape, so it draws with
  * `fill` from `currentColor` and no stroke.

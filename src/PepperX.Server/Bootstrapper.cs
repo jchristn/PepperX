@@ -12,6 +12,7 @@ namespace PepperX.Server
     using PepperX.Core.Services;
     using PepperX.Core.Settings;
     using PepperX.Core.Storage.Disk;
+    using PepperX.Server.Services;
     using SyslogLogging;
 
     /// <summary>
@@ -40,6 +41,11 @@ namespace PepperX.Server
             Console.WriteLine(Constants.Logo);
             Console.WriteLine(Constants.ProductName + " v" + Constants.ProductVersion);
 
+            string serviceInstanceId = String.IsNullOrEmpty(settings.Cluster.NodeId)
+                ? Environment.MachineName
+                : settings.Cluster.NodeId;
+            TelemetryModule telemetry = TelemetryModule.Start(settings.Telemetry, serviceInstanceId, logging);
+
             using (CancellationTokenSource cts = new CancellationTokenSource())
             {
                 Console.CancelKeyPress += (sender, e) =>
@@ -58,6 +64,11 @@ namespace PepperX.Server
                 {
                     logging.Error("[Bootstrapper] fatal error: " + ex.ToString());
                     return 1;
+                }
+                finally
+                {
+                    telemetry.ForceFlush();
+                    telemetry.Dispose();
                 }
             }
         }

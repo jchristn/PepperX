@@ -2,6 +2,7 @@ namespace PepperX.Core.Storage.Disk
 {
     using System;
     using System.Collections.Generic;
+    using System.Diagnostics;
     using System.IO;
     using System.Runtime.CompilerServices;
     using System.Threading;
@@ -11,6 +12,7 @@ namespace PepperX.Core.Storage.Disk
     using PepperX.Core.Serialization;
     using PepperX.Core.Settings;
     using PepperX.Core.Storage.Format;
+    using PepperX.Core.Telemetry;
 
     /// <summary>
     /// Local filesystem extent storage driver. Writes are made durable via a temp-file-then-atomic-move
@@ -82,6 +84,25 @@ namespace PepperX.Core.Storage.Disk
             Directory.CreateDirectory(_Root);
             Directory.CreateDirectory(_TempDir);
             Directory.CreateDirectory(_MultipartDir);
+
+            // Wire the storage-capacity gauge to a synchronous, non-throwing snapshot of the volume hosting
+            // the storage root. The metrics collector calls this periodically on its own thread.
+            string root = _Root;
+            PepperXTelemetry.SetStorageCapacityProvider(() =>
+            {
+                try
+                {
+                    string? pathRoot = Path.GetPathRoot(root);
+                    if (String.IsNullOrEmpty(pathRoot)) return null;
+                    DriveInfo drive = new DriveInfo(pathRoot);
+                    return new StorageCapacitySnapshot(drive.TotalSize, drive.AvailableFreeSpace);
+                }
+                catch
+                {
+                    return null;
+                }
+            });
+
             return Task.CompletedTask;
         }
 
@@ -95,44 +116,61 @@ namespace PepperX.Core.Storage.Disk
         /// <exception cref="ArgumentNullException">A required argument is null.</exception>
         public async Task<ExtentWriteResult> WriteAsync(ExtentHeader header, Stream payload, CancellationToken token = default)
         {
-            if (header == null) throw new ArgumentNullException(nameof(header));
-            if (payload == null) throw new ArgumentNullException(nameof(payload));
-
-            string location = BuildLocation(header.ContainerId, header.ExtentId);
-            string finalPath = Resolve(location);
-            Directory.CreateDirectory(Path.GetDirectoryName(finalPath)!);
-            Directory.CreateDirectory(_TempDir);
-
-            string payloadTemp = Path.Combine(_TempDir, header.ExtentId + ".payload.tmp");
-            string extentTemp = Path.Combine(_TempDir, header.ExtentId + _ExtentExtension + ".tmp");
-
+            long __ts = Stopwatch.GetTimestamp();
+            using Activity? __act = PepperXTelemetry.StartActivity("storage.write", ActivityKind.Internal);
+            bool __ok = true;
             try
             {
-                HashResult hash;
-                using (FileStream payloadOut = new FileStream(payloadTemp, FileMode.Create, FileAccess.Write, FileShare.None, _CopyBufferBytes, FileOptions.Asynchronous))
+                if (header == null) throw new ArgumentNullException(nameof(header));
+                if (payload == null) throw new ArgumentNullException(nameof(payload));
+
+                string location = BuildLocation(header.ContainerId, header.ExtentId);
+                string finalPath = Resolve(location);
+                Directory.CreateDirectory(Path.GetDirectoryName(finalPath)!);
+                Directory.CreateDirectory(_TempDir);
+
+                string payloadTemp = Path.Combine(_TempDir, header.ExtentId + ".payload.tmp");
+                string extentTemp = Path.Combine(_TempDir, header.ExtentId + _ExtentExtension + ".tmp");
+
+                try
                 {
-                    hash = await HashHelper.CopyAndHashAsync(payload, payloadOut, token).ConfigureAwait(false);
+                    HashResult hash;
+                    using (FileStream payloadOut = new FileStream(payloadTemp, FileMode.Create, FileAccess.Write, FileShare.None, _CopyBufferBytes, FileOptions.Asynchronous))
+                    {
+                        hash = await HashHelper.CopyAndHashAsync(payload, payloadOut, token).ConfigureAwait(false);
+                    }
+
+                    header.SizeBytes = hash.SizeBytes;
+                    header.Sha256 = hash.Sha256;
+                    header.Md5 = hash.Md5;
+
+                    using (FileStream payloadIn = new FileStream(payloadTemp, FileMode.Open, FileAccess.Read, FileShare.Read, _CopyBufferBytes, FileOptions.Asynchronous))
+                    using (FileStream extentOut = new FileStream(extentTemp, FileMode.Create, FileAccess.Write, FileShare.None, _CopyBufferBytes, FileOptions.Asynchronous))
+                    {
+                        await ExtentFormatWriter.WriteAsync(extentOut, header, payloadIn, token).ConfigureAwait(false);
+                        await extentOut.FlushAsync(token).ConfigureAwait(false);
+                        extentOut.Flush(true);
+                    }
+
+                    File.Move(extentTemp, finalPath, true);
+                    PepperXTelemetry.AddStorageBytesWritten(hash.SizeBytes);
+                    return new ExtentWriteResult(hash.SizeBytes, hash.Sha256, hash.Md5, location);
                 }
-
-                header.SizeBytes = hash.SizeBytes;
-                header.Sha256 = hash.Sha256;
-                header.Md5 = hash.Md5;
-
-                using (FileStream payloadIn = new FileStream(payloadTemp, FileMode.Open, FileAccess.Read, FileShare.Read, _CopyBufferBytes, FileOptions.Asynchronous))
-                using (FileStream extentOut = new FileStream(extentTemp, FileMode.Create, FileAccess.Write, FileShare.None, _CopyBufferBytes, FileOptions.Asynchronous))
+                finally
                 {
-                    await ExtentFormatWriter.WriteAsync(extentOut, header, payloadIn, token).ConfigureAwait(false);
-                    await extentOut.FlushAsync(token).ConfigureAwait(false);
-                    extentOut.Flush(true);
+                    TryDelete(payloadTemp);
+                    TryDelete(extentTemp);
                 }
-
-                File.Move(extentTemp, finalPath, true);
-                return new ExtentWriteResult(hash.SizeBytes, hash.Sha256, hash.Md5, location);
+            }
+            catch (Exception __ex)
+            {
+                __ok = false;
+                PepperXTelemetry.RecordException(__act, __ex);
+                throw;
             }
             finally
             {
-                TryDelete(payloadTemp);
-                TryDelete(extentTemp);
+                PepperXTelemetry.RecordStorage("write", Stopwatch.GetElapsedTime(__ts).TotalSeconds, __ok);
             }
         }
 
@@ -142,9 +180,25 @@ namespace PepperX.Core.Storage.Disk
         /// <param name="location">Driver-relative location.</param>
         /// <param name="token">Cancellation token.</param>
         /// <returns>The parsed header.</returns>
-        public Task<ExtentHeader> ReadHeaderAsync(string location, CancellationToken token = default)
+        public async Task<ExtentHeader> ReadHeaderAsync(string location, CancellationToken token = default)
         {
-            return ExtentFormatReader.ReadHeaderOnlyAsync(Resolve(location), token);
+            long __ts = Stopwatch.GetTimestamp();
+            using Activity? __act = PepperXTelemetry.StartActivity("storage.read_header", ActivityKind.Internal);
+            bool __ok = true;
+            try
+            {
+                return await ExtentFormatReader.ReadHeaderOnlyAsync(Resolve(location), token).ConfigureAwait(false);
+            }
+            catch (Exception __ex)
+            {
+                __ok = false;
+                PepperXTelemetry.RecordException(__act, __ex);
+                throw;
+            }
+            finally
+            {
+                PepperXTelemetry.RecordStorage("read_header", Stopwatch.GetElapsedTime(__ts).TotalSeconds, __ok);
+            }
         }
 
         /// <summary>
@@ -154,9 +208,25 @@ namespace PepperX.Core.Storage.Disk
         /// <param name="verifyChecksum">Whether to verify the checksum before returning.</param>
         /// <param name="token">Cancellation token.</param>
         /// <returns>A payload stream; the caller disposes it.</returns>
-        public Task<ExtentPayloadStream> OpenReadAsync(string location, bool verifyChecksum, CancellationToken token = default)
+        public async Task<ExtentPayloadStream> OpenReadAsync(string location, bool verifyChecksum, CancellationToken token = default)
         {
-            return ExtentFormatReader.OpenPayloadAsync(Resolve(location), verifyChecksum, token);
+            long __ts = Stopwatch.GetTimestamp();
+            using Activity? __act = PepperXTelemetry.StartActivity("storage.read", ActivityKind.Internal);
+            bool __ok = true;
+            try
+            {
+                return await ExtentFormatReader.OpenPayloadAsync(Resolve(location), verifyChecksum, token).ConfigureAwait(false);
+            }
+            catch (Exception __ex)
+            {
+                __ok = false;
+                PepperXTelemetry.RecordException(__act, __ex);
+                throw;
+            }
+            finally
+            {
+                PepperXTelemetry.RecordStorage("read", Stopwatch.GetElapsedTime(__ts).TotalSeconds, __ok);
+            }
         }
 
         /// <summary>
@@ -167,9 +237,27 @@ namespace PepperX.Core.Storage.Disk
         /// <param name="count">Number of bytes to expose.</param>
         /// <param name="token">Cancellation token.</param>
         /// <returns>A windowed payload stream; the caller disposes it.</returns>
-        public Task<ExtentPayloadStream> OpenReadRangeAsync(string location, long offset, long count, CancellationToken token = default)
+        public async Task<ExtentPayloadStream> OpenReadRangeAsync(string location, long offset, long count, CancellationToken token = default)
         {
-            return ExtentFormatReader.OpenRangeAsync(Resolve(location), offset, count, token);
+            long __ts = Stopwatch.GetTimestamp();
+            using Activity? __act = PepperXTelemetry.StartActivity("storage.read_range", ActivityKind.Internal);
+            bool __ok = true;
+            try
+            {
+                ExtentPayloadStream __stream = await ExtentFormatReader.OpenRangeAsync(Resolve(location), offset, count, token).ConfigureAwait(false);
+                PepperXTelemetry.AddStorageBytesRead(count);
+                return __stream;
+            }
+            catch (Exception __ex)
+            {
+                __ok = false;
+                PepperXTelemetry.RecordException(__act, __ex);
+                throw;
+            }
+            finally
+            {
+                PepperXTelemetry.RecordStorage("read_range", Stopwatch.GetElapsedTime(__ts).TotalSeconds, __ok);
+            }
         }
 
         /// <summary>
@@ -180,23 +268,39 @@ namespace PepperX.Core.Storage.Disk
         /// <returns>True if a file was deleted.</returns>
         public async Task<bool> DeleteAsync(string location, CancellationToken token = default)
         {
-            string path = Resolve(location);
-            if (!File.Exists(path)) return false;
-
-            // On Windows a file whose handle is still closing — a just-finished read, or an antivirus or
-            // indexer scan of a freshly written extent — can briefly reject deletion with a sharing
-            // violation. A short bounded retry absorbs that transient; on POSIX the first attempt succeeds.
-            for (int attempt = 0; ; attempt++)
+            long __ts = Stopwatch.GetTimestamp();
+            using Activity? __act = PepperXTelemetry.StartActivity("storage.delete", ActivityKind.Internal);
+            bool __ok = true;
+            try
             {
-                try
+                string path = Resolve(location);
+                if (!File.Exists(path)) return false;
+
+                // On Windows a file whose handle is still closing — a just-finished read, or an antivirus or
+                // indexer scan of a freshly written extent — can briefly reject deletion with a sharing
+                // violation. A short bounded retry absorbs that transient; on POSIX the first attempt succeeds.
+                for (int attempt = 0; ; attempt++)
                 {
-                    File.Delete(path);
-                    return true;
+                    try
+                    {
+                        File.Delete(path);
+                        return true;
+                    }
+                    catch (Exception ex) when ((ex is IOException || ex is UnauthorizedAccessException) && attempt < _DeleteRetryCount)
+                    {
+                        await Task.Delay(_DeleteRetryDelayMs, token).ConfigureAwait(false);
+                    }
                 }
-                catch (Exception ex) when ((ex is IOException || ex is UnauthorizedAccessException) && attempt < _DeleteRetryCount)
-                {
-                    await Task.Delay(_DeleteRetryDelayMs, token).ConfigureAwait(false);
-                }
+            }
+            catch (Exception __ex)
+            {
+                __ok = false;
+                PepperXTelemetry.RecordException(__act, __ex);
+                throw;
+            }
+            finally
+            {
+                PepperXTelemetry.RecordStorage("delete", Stopwatch.GetElapsedTime(__ts).TotalSeconds, __ok);
             }
         }
 
@@ -208,7 +312,23 @@ namespace PepperX.Core.Storage.Disk
         /// <returns>True if the file exists.</returns>
         public Task<bool> ExistsAsync(string location, CancellationToken token = default)
         {
-            return Task.FromResult(File.Exists(Resolve(location)));
+            long __ts = Stopwatch.GetTimestamp();
+            using Activity? __act = PepperXTelemetry.StartActivity("storage.exists", ActivityKind.Internal);
+            bool __ok = true;
+            try
+            {
+                return Task.FromResult(File.Exists(Resolve(location)));
+            }
+            catch (Exception __ex)
+            {
+                __ok = false;
+                PepperXTelemetry.RecordException(__act, __ex);
+                throw;
+            }
+            finally
+            {
+                PepperXTelemetry.RecordStorage("exists", Stopwatch.GetElapsedTime(__ts).TotalSeconds, __ok);
+            }
         }
 
         /// <summary>
@@ -332,16 +452,32 @@ namespace PepperX.Core.Storage.Disk
         /// <returns>Capacity report; zeros when the volume cannot be inspected.</returns>
         public Task<StorageCapacity> GetCapacityAsync(CancellationToken token = default)
         {
+            long __ts = Stopwatch.GetTimestamp();
+            using Activity? __act = PepperXTelemetry.StartActivity("storage.get_capacity", ActivityKind.Internal);
+            bool __ok = true;
             try
             {
-                string? root = Path.GetPathRoot(_Root);
-                if (String.IsNullOrEmpty(root)) return Task.FromResult(new StorageCapacity(0, 0));
-                DriveInfo drive = new DriveInfo(root);
-                return Task.FromResult(new StorageCapacity(drive.TotalSize, drive.AvailableFreeSpace));
+                try
+                {
+                    string? root = Path.GetPathRoot(_Root);
+                    if (String.IsNullOrEmpty(root)) return Task.FromResult(new StorageCapacity(0, 0));
+                    DriveInfo drive = new DriveInfo(root);
+                    return Task.FromResult(new StorageCapacity(drive.TotalSize, drive.AvailableFreeSpace));
+                }
+                catch (Exception)
+                {
+                    return Task.FromResult(new StorageCapacity(0, 0));
+                }
             }
-            catch (Exception)
+            catch (Exception __ex)
             {
-                return Task.FromResult(new StorageCapacity(0, 0));
+                __ok = false;
+                PepperXTelemetry.RecordException(__act, __ex);
+                throw;
+            }
+            finally
+            {
+                PepperXTelemetry.RecordStorage("get_capacity", Stopwatch.GetElapsedTime(__ts).TotalSeconds, __ok);
             }
         }
 
@@ -388,49 +524,66 @@ namespace PepperX.Core.Storage.Disk
         /// <exception cref="ArgumentNullException">A required argument is null.</exception>
         public async Task<MultipartStageResult> WritePartAsync(string uploadId, int partNumber, Stream payload, CancellationToken token = default)
         {
-            if (String.IsNullOrEmpty(uploadId)) throw new ArgumentNullException(nameof(uploadId));
-            if (payload == null) throw new ArgumentNullException(nameof(payload));
-
-            string location = BuildPartLocation(uploadId, partNumber);
-            string finalPath = Resolve(location);
-            Directory.CreateDirectory(Path.GetDirectoryName(finalPath)!);
-            Directory.CreateDirectory(_TempDir);
-
-            // A unique temp name per attempt so concurrent re-uploads of the same part number do not
-            // collide on the temp file (the final path is deterministic and the last mover wins).
-            string partTemp = Path.Combine(_TempDir, uploadId + "." + partNumber + "." + Guid.NewGuid().ToString("N") + _PartExtension + ".tmp");
-
+            long __ts = Stopwatch.GetTimestamp();
+            using Activity? __act = PepperXTelemetry.StartActivity("storage.write_part", ActivityKind.Internal);
+            bool __ok = true;
             try
             {
-                HashResult hash;
-                using (FileStream partOut = new FileStream(partTemp, FileMode.Create, FileAccess.Write, FileShare.None, _CopyBufferBytes, FileOptions.Asynchronous))
-                {
-                    hash = await HashHelper.CopyAndHashAsync(payload, partOut, token).ConfigureAwait(false);
-                    await partOut.FlushAsync(token).ConfigureAwait(false);
-                    partOut.Flush(true);
-                }
+                if (String.IsNullOrEmpty(uploadId)) throw new ArgumentNullException(nameof(uploadId));
+                if (payload == null) throw new ArgumentNullException(nameof(payload));
 
-                // Concurrent re-uploads of the same part number target the same final path; on Windows a
-                // simultaneous move/open can raise a transient sharing or access violation. A bounded retry
-                // absorbs it — last-writer-wins is the expected semantic for a re-uploaded part.
-                for (int attempt = 0; ; attempt++)
-                {
-                    try
-                    {
-                        File.Move(partTemp, finalPath, true);
-                        break;
-                    }
-                    catch (Exception ex) when ((ex is IOException || ex is UnauthorizedAccessException) && attempt < _DeleteRetryCount)
-                    {
-                        await Task.Delay(_DeleteRetryDelayMs, token).ConfigureAwait(false);
-                    }
-                }
+                string location = BuildPartLocation(uploadId, partNumber);
+                string finalPath = Resolve(location);
+                Directory.CreateDirectory(Path.GetDirectoryName(finalPath)!);
+                Directory.CreateDirectory(_TempDir);
 
-                return new MultipartStageResult(hash.SizeBytes, hash.Md5, hash.Sha256, location);
+                // A unique temp name per attempt so concurrent re-uploads of the same part number do not
+                // collide on the temp file (the final path is deterministic and the last mover wins).
+                string partTemp = Path.Combine(_TempDir, uploadId + "." + partNumber + "." + Guid.NewGuid().ToString("N") + _PartExtension + ".tmp");
+
+                try
+                {
+                    HashResult hash;
+                    using (FileStream partOut = new FileStream(partTemp, FileMode.Create, FileAccess.Write, FileShare.None, _CopyBufferBytes, FileOptions.Asynchronous))
+                    {
+                        hash = await HashHelper.CopyAndHashAsync(payload, partOut, token).ConfigureAwait(false);
+                        await partOut.FlushAsync(token).ConfigureAwait(false);
+                        partOut.Flush(true);
+                    }
+
+                    // Concurrent re-uploads of the same part number target the same final path; on Windows a
+                    // simultaneous move/open can raise a transient sharing or access violation. A bounded retry
+                    // absorbs it — last-writer-wins is the expected semantic for a re-uploaded part.
+                    for (int attempt = 0; ; attempt++)
+                    {
+                        try
+                        {
+                            File.Move(partTemp, finalPath, true);
+                            break;
+                        }
+                        catch (Exception ex) when ((ex is IOException || ex is UnauthorizedAccessException) && attempt < _DeleteRetryCount)
+                        {
+                            await Task.Delay(_DeleteRetryDelayMs, token).ConfigureAwait(false);
+                        }
+                    }
+
+                    PepperXTelemetry.AddStorageBytesWritten(hash.SizeBytes);
+                    return new MultipartStageResult(hash.SizeBytes, hash.Md5, hash.Sha256, location);
+                }
+                finally
+                {
+                    TryDelete(partTemp);
+                }
+            }
+            catch (Exception __ex)
+            {
+                __ok = false;
+                PepperXTelemetry.RecordException(__act, __ex);
+                throw;
             }
             finally
             {
-                TryDelete(partTemp);
+                PepperXTelemetry.RecordStorage("write_part", Stopwatch.GetElapsedTime(__ts).TotalSeconds, __ok);
             }
         }
 
@@ -442,9 +595,25 @@ namespace PepperX.Core.Storage.Disk
         /// <returns>A readable stream over the staged part.</returns>
         public Task<Stream> OpenPartAsync(string location, CancellationToken token = default)
         {
-            string path = Resolve(location);
-            Stream stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, _CopyBufferBytes, FileOptions.Asynchronous);
-            return Task.FromResult(stream);
+            long __ts = Stopwatch.GetTimestamp();
+            using Activity? __act = PepperXTelemetry.StartActivity("storage.open_part", ActivityKind.Internal);
+            bool __ok = true;
+            try
+            {
+                string path = Resolve(location);
+                Stream stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, _CopyBufferBytes, FileOptions.Asynchronous);
+                return Task.FromResult(stream);
+            }
+            catch (Exception __ex)
+            {
+                __ok = false;
+                PepperXTelemetry.RecordException(__act, __ex);
+                throw;
+            }
+            finally
+            {
+                PepperXTelemetry.RecordStorage("open_part", Stopwatch.GetElapsedTime(__ts).TotalSeconds, __ok);
+            }
         }
 
         /// <summary>
@@ -455,16 +624,32 @@ namespace PepperX.Core.Storage.Disk
         /// <returns>True if a file was deleted.</returns>
         public Task<bool> DeletePartAsync(string location, CancellationToken token = default)
         {
-            string path = Resolve(location);
-            if (!File.Exists(path)) return Task.FromResult(false);
+            long __ts = Stopwatch.GetTimestamp();
+            using Activity? __act = PepperXTelemetry.StartActivity("storage.delete_part", ActivityKind.Internal);
+            bool __ok = true;
             try
             {
-                File.Delete(path);
-                return Task.FromResult(true);
+                string path = Resolve(location);
+                if (!File.Exists(path)) return Task.FromResult(false);
+                try
+                {
+                    File.Delete(path);
+                    return Task.FromResult(true);
+                }
+                catch (IOException)
+                {
+                    return Task.FromResult(false);
+                }
             }
-            catch (IOException)
+            catch (Exception __ex)
             {
-                return Task.FromResult(false);
+                __ok = false;
+                PepperXTelemetry.RecordException(__act, __ex);
+                throw;
+            }
+            finally
+            {
+                PepperXTelemetry.RecordStorage("delete_part", Stopwatch.GetElapsedTime(__ts).TotalSeconds, __ok);
             }
         }
 

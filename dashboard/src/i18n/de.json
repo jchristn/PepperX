@@ -27,6 +27,7 @@
     "search": "Suche",
     "capacity": "Kapazität",
     "requests": "Anfrageverlauf",
+    "observability": "Observability",
     "explorer": "API-Explorer",
     "settings": "Einstellungen",
     "collapse": "Seitenleiste einklappen",
@@ -381,6 +382,23 @@
     "empty": "Es wurden noch keine Anfragen erfasst.",
     "noMatches": "Keine Anfragen entsprechen diesen Filtern.",
     "disabled": "Die Anfrageerfassung ist auf diesem Knoten deaktiviert, daher wird kein Verlauf gespeichert."
+  },
+  "observability": {
+    "title": "Observability",
+    "subtitle": "Metriken, Traces und Logs für diese Bereitstellung.",
+    "intro": "Telemetrie ist standardmäßig deaktiviert. Starten Sie sie mit dem docker-compose-Stack und öffnen Sie dann Grafana – den zentralen Einstiegspunkt für Dashboards, Metriken, Traces und Logs. Die unten angezeigten Anmeldedaten sind die Standardwerte des Stacks; ändern Sie sie für alles, was über den lokalen Einsatz hinausgeht. Details zur Einrichtung finden Sie in TELEMETRY.md.",
+    "primaryTag": "Hier starten",
+    "credentials": "Standard-Anmeldedaten",
+    "noAuth": "Keine (keine Authentifizierung)",
+    "url": "URL",
+    "urlHttp": "URL (HTTP)",
+    "urlGrpc": "URL (gRPC)",
+    "open": "Öffnen",
+    "grafanaDesc": "Dashboards, Metriken, Traces und Logs. Die primäre Observability-Oberfläche.",
+    "prometheusDesc": "Metrikspeicher und Abfrageoberfläche.",
+    "tempoDesc": "Backend für verteiltes Tracing. Fragen Sie Traces über Grafana statt hier ab.",
+    "lokiDesc": "Backend für Log-Aggregation. Fragen Sie Logs über Grafana statt hier ab.",
+    "collectorDesc": "OTLP-Ingest-Endpunkt, an den die Knoten Telemetrie senden. Keine navigierbare Oberfläche."
   },
   "explorer": {
     "title": "API-Explorer",

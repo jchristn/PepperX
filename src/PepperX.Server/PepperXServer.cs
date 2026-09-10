@@ -10,6 +10,7 @@ namespace PepperX.Server
     using PepperX.Core.Services;
     using PepperX.Core.Settings;
     using PepperX.Core.Storage.Disk;
+    using PepperX.Core.Telemetry;
     using PepperX.Server.Api.Mcp;
     using PepperX.Server.Api.Resp;
     using PepperX.Server.Api.Rest;
@@ -254,6 +255,7 @@ namespace PepperX.Server
             context.Timestamp.Start = DateTime.UtcNow;
             context.Response.ContentType = Constants.JsonContentType;
             AddCors(context);
+            PepperXTelemetry.HttpRequestStarted();
             await Task.CompletedTask.ConfigureAwait(false);
         }
 
@@ -268,12 +270,49 @@ namespace PepperX.Server
                 context.Response.StatusCode + " (" +
                 (context.Timestamp.TotalMs.HasValue ? context.Timestamp.TotalMs.Value.ToString("F2") : "?") + "ms)");
 
+            RecordHttpMetrics(context);
+
             if (_Settings.RequestHistory.Enabled && context.Request.Method != WatsonWebserver.Core.HttpMethod.OPTIONS)
             {
                 _Capture?.Capture(context);
             }
 
             await Task.CompletedTask.ConfigureAwait(false);
+        }
+
+        private static void RecordHttpMetrics(HttpContextBase context)
+        {
+            PepperXTelemetry.HttpRequestEnded();
+
+            double seconds = context.Timestamp.TotalMs.HasValue ? context.Timestamp.TotalMs.Value / 1000.0 : 0.0;
+            string method = context.Request.Method.ToString();
+            string route = NormalizeRoute(context.Request.Url.RawWithoutQuery ?? String.Empty);
+            long requestBytes = context.Request.ContentLength >= 0 ? context.Request.ContentLength : -1;
+
+            PepperXTelemetry.RecordHttp(method, route, context.Response.StatusCode, seconds, requestBytes, -1);
+        }
+
+        /// <summary>
+        /// Collapse the value-bearing segments of a REST path (container names, keys, upload and part ids) to
+        /// template placeholders so the <c>http.route</c> metric label stays low-cardinality.
+        /// </summary>
+        /// <param name="path">Raw path without query string.</param>
+        /// <returns>A normalized route template.</returns>
+        private static string NormalizeRoute(string path)
+        {
+            if (String.IsNullOrEmpty(path)) return "/";
+
+            string[] parts = path.Split('/', StringSplitOptions.RemoveEmptyEntries);
+            for (int i = 1; i < parts.Length; i++)
+            {
+                string previous = parts[i - 1];
+                if (previous == "containers") parts[i] = "{container}";
+                else if (previous == "multipart-uploads") parts[i] = "{uploadId}";
+                else if (previous == "parts") parts[i] = "{partNumber}";
+                else if (previous == "request-history" && parts[i] != "summary") parts[i] = "{id}";
+            }
+
+            return "/" + String.Join("/", parts);
         }
 
         private static async Task DefaultRouteAsync(HttpContextBase context)

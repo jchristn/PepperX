@@ -2,6 +2,7 @@ namespace PepperX.Core.Services
 {
     using System;
     using System.Collections.Generic;
+    using System.Diagnostics;
     using System.IO;
     using System.Security.Cryptography;
     using System.Threading;
@@ -13,6 +14,7 @@ namespace PepperX.Core.Services
     using PepperX.Core.Responses;
     using PepperX.Core.Settings;
     using PepperX.Core.Storage;
+    using PepperX.Core.Telemetry;
     using SyslogLogging;
 
     /// <summary>
@@ -73,29 +75,45 @@ namespace PepperX.Core.Services
         /// <exception cref="ContainerNotFoundException">The container does not exist.</exception>
         public async Task<MultipartUpload> InitiateAsync(string containerName, string key, string? contentType, Dictionary<string, string>? tags, CancellationToken token = default)
         {
-            if (String.IsNullOrEmpty(key)) throw new ArgumentException("Object key must not be empty.", nameof(key));
-
-            Container container = await RequireContainerAsync(containerName, token).ConfigureAwait(false);
-
-            // The expiry window is the container's own override when set, otherwise the system-wide default.
-            // It is stamped onto the upload here at initiate time; the janitor later purges by ExpiresUtc, so
-            // changing a container's setting affects only uploads started after the change.
-            int expiryDays = container.MultipartUploadExpiryDays ?? _Settings.MultipartUploadExpiryDays;
-
-            DateTime now = DateTime.UtcNow;
-            MultipartUpload upload = new MultipartUpload
+            long __ts = Stopwatch.GetTimestamp();
+            using Activity? __act = PepperXTelemetry.StartActivity("multipart.initiate", ActivityKind.Internal);
+            bool __ok = true;
+            try
             {
-                ContainerId = container.Id,
-                Key = key,
-                ContentType = contentType,
-                Tags = tags ?? new Dictionary<string, string>(),
-                InitiatedUtc = now,
-                ExpiresUtc = now.AddDays(expiryDays)
-            };
+                if (String.IsNullOrEmpty(key)) throw new ArgumentException("Object key must not be empty.", nameof(key));
 
-            await _Db.MultipartUploads.CreateUploadAsync(upload, token).ConfigureAwait(false);
-            _Logging?.Debug(_Header + "initiated upload " + upload.Id + " for " + containerName + "/" + key);
-            return upload;
+                Container container = await RequireContainerAsync(containerName, token).ConfigureAwait(false);
+
+                // The expiry window is the container's own override when set, otherwise the system-wide default.
+                // It is stamped onto the upload here at initiate time; the janitor later purges by ExpiresUtc, so
+                // changing a container's setting affects only uploads started after the change.
+                int expiryDays = container.MultipartUploadExpiryDays ?? _Settings.MultipartUploadExpiryDays;
+
+                DateTime now = DateTime.UtcNow;
+                MultipartUpload upload = new MultipartUpload
+                {
+                    ContainerId = container.Id,
+                    Key = key,
+                    ContentType = contentType,
+                    Tags = tags ?? new Dictionary<string, string>(),
+                    InitiatedUtc = now,
+                    ExpiresUtc = now.AddDays(expiryDays)
+                };
+
+                await _Db.MultipartUploads.CreateUploadAsync(upload, token).ConfigureAwait(false);
+                _Logging?.Debug(_Header + "initiated upload " + upload.Id + " for " + containerName + "/" + key);
+                return upload;
+            }
+            catch (Exception __ex)
+            {
+                __ok = false;
+                PepperXTelemetry.RecordException(__act, __ex);
+                throw;
+            }
+            finally
+            {
+                PepperXTelemetry.RecordMultipart("initiate", Stopwatch.GetElapsedTime(__ts).TotalSeconds, __ok);
+            }
         }
 
         /// <summary>
@@ -111,12 +129,30 @@ namespace PepperX.Core.Services
         /// <exception cref="NoSuchUploadException">The upload does not exist or belongs to another container.</exception>
         public async Task<MultipartPart> UploadPartAsync(string containerName, string uploadId, int partNumber, Stream payload, CancellationToken token = default)
         {
-            if (payload == null) throw new ArgumentNullException(nameof(payload));
-            MultipartUpload upload = await RequireUploadAsync(containerName, uploadId, token).ConfigureAwait(false);
-            ValidatePartNumber(partNumber);
+            long __ts = Stopwatch.GetTimestamp();
+            using Activity? __act = PepperXTelemetry.StartActivity("multipart.upload_part", ActivityKind.Internal);
+            bool __ok = true;
+            try
+            {
+                if (payload == null) throw new ArgumentNullException(nameof(payload));
+                MultipartUpload upload = await RequireUploadAsync(containerName, uploadId, token).ConfigureAwait(false);
+                ValidatePartNumber(partNumber);
 
-            MultipartStageResult stage = await _Storage.WritePartAsync(uploadId, partNumber, payload, token).ConfigureAwait(false);
-            return await UpsertStagedPartAsync(upload.Id, partNumber, stage, token).ConfigureAwait(false);
+                MultipartStageResult stage = await _Storage.WritePartAsync(uploadId, partNumber, payload, token).ConfigureAwait(false);
+                MultipartPart __part = await UpsertStagedPartAsync(upload.Id, partNumber, stage, token).ConfigureAwait(false);
+                PepperXTelemetry.AddMultipartBytes(__part.SizeBytes);
+                return __part;
+            }
+            catch (Exception __ex)
+            {
+                __ok = false;
+                PepperXTelemetry.RecordException(__act, __ex);
+                throw;
+            }
+            finally
+            {
+                PepperXTelemetry.RecordMultipart("upload_part", Stopwatch.GetElapsedTime(__ts).TotalSeconds, __ok);
+            }
         }
 
         /// <summary>
@@ -135,14 +171,32 @@ namespace PepperX.Core.Services
         /// <exception cref="ObjectNotFoundException">The source object does not exist.</exception>
         public async Task<MultipartPart> UploadPartCopyAsync(string containerName, string uploadId, int partNumber, string sourceContainer, string sourceKey, long? rangeStart, long? rangeCount, CancellationToken token = default)
         {
-            MultipartUpload upload = await RequireUploadAsync(containerName, uploadId, token).ConfigureAwait(false);
-            ValidatePartNumber(partNumber);
-
-            await using (ObjectReadHandle? handle = await _Reads.ReadAsync(sourceContainer, sourceKey, rangeStart, rangeCount, token).ConfigureAwait(false))
+            long __ts = Stopwatch.GetTimestamp();
+            using Activity? __act = PepperXTelemetry.StartActivity("multipart.upload_part_copy", ActivityKind.Internal);
+            bool __ok = true;
+            try
             {
-                if (handle == null) throw new ObjectNotFoundException(sourceContainer, sourceKey);
-                MultipartStageResult stage = await _Storage.WritePartAsync(uploadId, partNumber, handle.Payload, token).ConfigureAwait(false);
-                return await UpsertStagedPartAsync(upload.Id, partNumber, stage, token).ConfigureAwait(false);
+                MultipartUpload upload = await RequireUploadAsync(containerName, uploadId, token).ConfigureAwait(false);
+                ValidatePartNumber(partNumber);
+
+                await using (ObjectReadHandle? handle = await _Reads.ReadAsync(sourceContainer, sourceKey, rangeStart, rangeCount, token).ConfigureAwait(false))
+                {
+                    if (handle == null) throw new ObjectNotFoundException(sourceContainer, sourceKey);
+                    MultipartStageResult stage = await _Storage.WritePartAsync(uploadId, partNumber, handle.Payload, token).ConfigureAwait(false);
+                    MultipartPart __part = await UpsertStagedPartAsync(upload.Id, partNumber, stage, token).ConfigureAwait(false);
+                    PepperXTelemetry.AddMultipartBytes(__part.SizeBytes);
+                    return __part;
+                }
+            }
+            catch (Exception __ex)
+            {
+                __ok = false;
+                PepperXTelemetry.RecordException(__act, __ex);
+                throw;
+            }
+            finally
+            {
+                PepperXTelemetry.RecordMultipart("upload_part_copy", Stopwatch.GetElapsedTime(__ts).TotalSeconds, __ok);
             }
         }
 
@@ -162,72 +216,88 @@ namespace PepperX.Core.Services
         /// <exception cref="EntityTooSmallException">A non-final part is below the minimum part size.</exception>
         public async Task<CompleteMultipartUploadResponse> CompleteAsync(string containerName, string uploadId, CompleteMultipartUploadRequest request, CancellationToken token = default)
         {
-            if (request == null) throw new ArgumentNullException(nameof(request));
-            MultipartUpload upload = await RequireUploadAsync(containerName, uploadId, token).ConfigureAwait(false);
-
-            IReadOnlyList<MultipartPart> staged = await _Db.MultipartUploads.ListAllPartsAsync(uploadId, token).ConfigureAwait(false);
-            List<MultipartPart> ordered;
+            long __ts = Stopwatch.GetTimestamp();
+            using Activity? __act = PepperXTelemetry.StartActivity("multipart.complete", ActivityKind.Internal);
+            bool __ok = true;
             try
             {
-                ordered = ValidateAndOrder(request, staged);
+                if (request == null) throw new ArgumentNullException(nameof(request));
+                MultipartUpload upload = await RequireUploadAsync(containerName, uploadId, token).ConfigureAwait(false);
+
+                IReadOnlyList<MultipartPart> staged = await _Db.MultipartUploads.ListAllPartsAsync(uploadId, token).ConfigureAwait(false);
+                List<MultipartPart> ordered;
+                try
+                {
+                    ordered = ValidateAndOrder(request, staged);
+                }
+                catch (InvalidPartException)
+                {
+                    // A concurrent completion of the same id may have won and deleted the upload row between our
+                    // upload read and our parts read; the delete cascades the part rows, so our staged list comes
+                    // back empty and validation reports a missing part. That is a lost race, not a bad request:
+                    // if the upload is gone, surface NoSuchUpload like the claim below would. A genuinely wrong
+                    // part list (the upload still exists) keeps its InvalidPart error, so the client can retry.
+                    if (await _Db.MultipartUploads.ReadUploadAsync(uploadId, token).ConfigureAwait(false) == null)
+                        throw new NoSuchUploadException(uploadId);
+                    throw;
+                }
+
+                // Claim the upload so a concurrent completion of the same id loses the race and gets NoSuchUpload.
+                // Deleting the row cascades the part rows, but the staged blobs on disk survive until we remove
+                // them below (their locations are captured in 'ordered'); a crash after the claim leaves orphaned
+                // staged blobs that the janitor reclaims.
+                bool claimed = await _Db.MultipartUploads.DeleteUploadAsync(uploadId, token).ConfigureAwait(false);
+                if (!claimed) throw new NoSuchUploadException(uploadId);
+
+                string etag = ComputeMultipartEtag(ordered);
+
+                List<Func<CancellationToken, Task<Stream>>> openers = new List<Func<CancellationToken, Task<Stream>>>();
+                long totalLength = 0;
+                foreach (MultipartPart part in ordered)
+                {
+                    string location = part.StorageLocation;
+                    openers.Add(ct => _Storage.OpenPartAsync(location, ct));
+                    totalLength += part.SizeBytes;
+                }
+
+                ObjectWriteResponse write;
+                using (ConcatReadStream concat = new ConcatReadStream(openers, totalLength))
+                {
+                    write = await _Writes.WriteAsync(
+                        containerName,
+                        upload.Key,
+                        concat,
+                        upload.ContentType,
+                        null,
+                        upload.Tags,
+                        null,
+                        false,
+                        token,
+                        etag).ConfigureAwait(false);
+                }
+
+                await _Storage.DeletePartsAsync(uploadId, token).ConfigureAwait(false);
+                _Logging?.Debug(_Header + "completed upload " + uploadId + " -> " + containerName + "/" + upload.Key + " etag=" + etag);
+
+                return new CompleteMultipartUploadResponse
+                {
+                    ContainerName = containerName,
+                    Key = upload.Key,
+                    ETag = etag,
+                    ExtentId = write.ExtentId,
+                    SizeBytes = write.SizeBytes
+                };
             }
-            catch (InvalidPartException)
+            catch (Exception __ex)
             {
-                // A concurrent completion of the same id may have won and deleted the upload row between our
-                // upload read and our parts read; the delete cascades the part rows, so our staged list comes
-                // back empty and validation reports a missing part. That is a lost race, not a bad request:
-                // if the upload is gone, surface NoSuchUpload like the claim below would. A genuinely wrong
-                // part list (the upload still exists) keeps its InvalidPart error, so the client can retry.
-                if (await _Db.MultipartUploads.ReadUploadAsync(uploadId, token).ConfigureAwait(false) == null)
-                    throw new NoSuchUploadException(uploadId);
+                __ok = false;
+                PepperXTelemetry.RecordException(__act, __ex);
                 throw;
             }
-
-            // Claim the upload so a concurrent completion of the same id loses the race and gets NoSuchUpload.
-            // Deleting the row cascades the part rows, but the staged blobs on disk survive until we remove
-            // them below (their locations are captured in 'ordered'); a crash after the claim leaves orphaned
-            // staged blobs that the janitor reclaims.
-            bool claimed = await _Db.MultipartUploads.DeleteUploadAsync(uploadId, token).ConfigureAwait(false);
-            if (!claimed) throw new NoSuchUploadException(uploadId);
-
-            string etag = ComputeMultipartEtag(ordered);
-
-            List<Func<CancellationToken, Task<Stream>>> openers = new List<Func<CancellationToken, Task<Stream>>>();
-            long totalLength = 0;
-            foreach (MultipartPart part in ordered)
+            finally
             {
-                string location = part.StorageLocation;
-                openers.Add(ct => _Storage.OpenPartAsync(location, ct));
-                totalLength += part.SizeBytes;
+                PepperXTelemetry.RecordMultipart("complete", Stopwatch.GetElapsedTime(__ts).TotalSeconds, __ok);
             }
-
-            ObjectWriteResponse write;
-            using (ConcatReadStream concat = new ConcatReadStream(openers, totalLength))
-            {
-                write = await _Writes.WriteAsync(
-                    containerName,
-                    upload.Key,
-                    concat,
-                    upload.ContentType,
-                    null,
-                    upload.Tags,
-                    null,
-                    false,
-                    token,
-                    etag).ConfigureAwait(false);
-            }
-
-            await _Storage.DeletePartsAsync(uploadId, token).ConfigureAwait(false);
-            _Logging?.Debug(_Header + "completed upload " + uploadId + " -> " + containerName + "/" + upload.Key + " etag=" + etag);
-
-            return new CompleteMultipartUploadResponse
-            {
-                ContainerName = containerName,
-                Key = upload.Key,
-                ETag = etag,
-                ExtentId = write.ExtentId,
-                SizeBytes = write.SizeBytes
-            };
         }
 
         /// <summary>
@@ -241,10 +311,26 @@ namespace PepperX.Core.Services
         /// <exception cref="ContainerNotFoundException">The container does not exist.</exception>
         public async Task AbortAsync(string containerName, string uploadId, CancellationToken token = default)
         {
-            await RequireContainerAsync(containerName, token).ConfigureAwait(false);
-            await _Db.MultipartUploads.DeleteUploadAsync(uploadId, token).ConfigureAwait(false);
-            await _Storage.DeletePartsAsync(uploadId, token).ConfigureAwait(false);
-            _Logging?.Debug(_Header + "aborted upload " + uploadId);
+            long __ts = Stopwatch.GetTimestamp();
+            using Activity? __act = PepperXTelemetry.StartActivity("multipart.abort", ActivityKind.Internal);
+            bool __ok = true;
+            try
+            {
+                await RequireContainerAsync(containerName, token).ConfigureAwait(false);
+                await _Db.MultipartUploads.DeleteUploadAsync(uploadId, token).ConfigureAwait(false);
+                await _Storage.DeletePartsAsync(uploadId, token).ConfigureAwait(false);
+                _Logging?.Debug(_Header + "aborted upload " + uploadId);
+            }
+            catch (Exception __ex)
+            {
+                __ok = false;
+                PepperXTelemetry.RecordException(__act, __ex);
+                throw;
+            }
+            finally
+            {
+                PepperXTelemetry.RecordMultipart("abort", Stopwatch.GetElapsedTime(__ts).TotalSeconds, __ok);
+            }
         }
 
         /// <summary>
@@ -259,8 +345,24 @@ namespace PepperX.Core.Services
         /// <exception cref="NoSuchUploadException">The upload does not exist.</exception>
         public async Task<MultipartPartListResult> ListPartsAsync(string containerName, string uploadId, int partNumberMarker, int maxParts, CancellationToken token = default)
         {
-            await RequireUploadAsync(containerName, uploadId, token).ConfigureAwait(false);
-            return await _Db.MultipartUploads.ListPartsAsync(uploadId, partNumberMarker, maxParts, token).ConfigureAwait(false);
+            long __ts = Stopwatch.GetTimestamp();
+            using Activity? __act = PepperXTelemetry.StartActivity("multipart.list_parts", ActivityKind.Internal);
+            bool __ok = true;
+            try
+            {
+                await RequireUploadAsync(containerName, uploadId, token).ConfigureAwait(false);
+                return await _Db.MultipartUploads.ListPartsAsync(uploadId, partNumberMarker, maxParts, token).ConfigureAwait(false);
+            }
+            catch (Exception __ex)
+            {
+                __ok = false;
+                PepperXTelemetry.RecordException(__act, __ex);
+                throw;
+            }
+            finally
+            {
+                PepperXTelemetry.RecordMultipart("list_parts", Stopwatch.GetElapsedTime(__ts).TotalSeconds, __ok);
+            }
         }
 
         /// <summary>
@@ -274,8 +376,24 @@ namespace PepperX.Core.Services
         /// <exception cref="NoSuchUploadException">The upload does not exist or belongs to another container.</exception>
         public async Task<MultipartPart?> GetPartAsync(string containerName, string uploadId, int partNumber, CancellationToken token = default)
         {
-            await RequireUploadAsync(containerName, uploadId, token).ConfigureAwait(false);
-            return await _Db.MultipartUploads.ReadPartAsync(uploadId, partNumber, token).ConfigureAwait(false);
+            long __ts = Stopwatch.GetTimestamp();
+            using Activity? __act = PepperXTelemetry.StartActivity("multipart.get_part", ActivityKind.Internal);
+            bool __ok = true;
+            try
+            {
+                await RequireUploadAsync(containerName, uploadId, token).ConfigureAwait(false);
+                return await _Db.MultipartUploads.ReadPartAsync(uploadId, partNumber, token).ConfigureAwait(false);
+            }
+            catch (Exception __ex)
+            {
+                __ok = false;
+                PepperXTelemetry.RecordException(__act, __ex);
+                throw;
+            }
+            finally
+            {
+                PepperXTelemetry.RecordMultipart("get_part", Stopwatch.GetElapsedTime(__ts).TotalSeconds, __ok);
+            }
         }
 
         /// <summary>
@@ -290,20 +408,36 @@ namespace PepperX.Core.Services
         /// <exception cref="NoSuchUploadException">The upload does not exist or belongs to another container.</exception>
         public async Task<bool> DeletePartAsync(string containerName, string uploadId, int partNumber, CancellationToken token = default)
         {
-            await RequireUploadAsync(containerName, uploadId, token).ConfigureAwait(false);
-            string? location = await _Db.MultipartUploads.DeletePartAsync(uploadId, partNumber, token).ConfigureAwait(false);
-            if (location == null) return false;
-
+            long __ts = Stopwatch.GetTimestamp();
+            using Activity? __act = PepperXTelemetry.StartActivity("multipart.delete_part", ActivityKind.Internal);
+            bool __ok = true;
             try
             {
-                await _Storage.DeletePartAsync(location, token).ConfigureAwait(false);
-            }
-            catch (Exception ex)
-            {
-                _Logging?.Debug(_Header + "failed to delete staged part blob " + location + ": " + ex.Message);
-            }
+                await RequireUploadAsync(containerName, uploadId, token).ConfigureAwait(false);
+                string? location = await _Db.MultipartUploads.DeletePartAsync(uploadId, partNumber, token).ConfigureAwait(false);
+                if (location == null) return false;
 
-            return true;
+                try
+                {
+                    await _Storage.DeletePartAsync(location, token).ConfigureAwait(false);
+                }
+                catch (Exception ex)
+                {
+                    _Logging?.Debug(_Header + "failed to delete staged part blob " + location + ": " + ex.Message);
+                }
+
+                return true;
+            }
+            catch (Exception __ex)
+            {
+                __ok = false;
+                PepperXTelemetry.RecordException(__act, __ex);
+                throw;
+            }
+            finally
+            {
+                PepperXTelemetry.RecordMultipart("delete_part", Stopwatch.GetElapsedTime(__ts).TotalSeconds, __ok);
+            }
         }
 
         /// <summary>
@@ -318,8 +452,24 @@ namespace PepperX.Core.Services
         /// <exception cref="ContainerNotFoundException">The container does not exist.</exception>
         public async Task<MultipartUploadListResult> ListUploadsAsync(string containerName, string? keyMarker, string? uploadIdMarker, int maxUploads, CancellationToken token = default)
         {
-            Container container = await RequireContainerAsync(containerName, token).ConfigureAwait(false);
-            return await _Db.MultipartUploads.ListUploadsAsync(container.Id, keyMarker, uploadIdMarker, maxUploads, token).ConfigureAwait(false);
+            long __ts = Stopwatch.GetTimestamp();
+            using Activity? __act = PepperXTelemetry.StartActivity("multipart.list_uploads", ActivityKind.Internal);
+            bool __ok = true;
+            try
+            {
+                Container container = await RequireContainerAsync(containerName, token).ConfigureAwait(false);
+                return await _Db.MultipartUploads.ListUploadsAsync(container.Id, keyMarker, uploadIdMarker, maxUploads, token).ConfigureAwait(false);
+            }
+            catch (Exception __ex)
+            {
+                __ok = false;
+                PepperXTelemetry.RecordException(__act, __ex);
+                throw;
+            }
+            finally
+            {
+                PepperXTelemetry.RecordMultipart("list_uploads", Stopwatch.GetElapsedTime(__ts).TotalSeconds, __ok);
+            }
         }
 
         #endregion

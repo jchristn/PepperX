@@ -2,6 +2,7 @@ namespace PepperX.Core.Services
 {
     using System;
     using System.Collections.Generic;
+    using System.Diagnostics;
     using System.IO;
     using System.Text;
     using System.Threading;
@@ -16,6 +17,7 @@ namespace PepperX.Core.Services
     using PepperX.Core.Settings;
     using PepperX.Core.Storage;
     using PepperX.Core.Storage.Format;
+    using PepperX.Core.Telemetry;
     using SyslogLogging;
 
     /// <summary>
@@ -100,69 +102,87 @@ namespace PepperX.Core.Services
             CancellationToken token = default,
             string? etagOverride = null)
         {
-            if (payload == null) throw new ArgumentNullException(nameof(payload));
-
-            Container container = await RequireContainerAsync(containerName, token).ConfigureAwait(false);
-            ValidateKey(key);
-            List<string> normalizedLabels = NormalizeLabels(labels);
-            Dictionary<string, string> normalizedTags = tags ?? new Dictionary<string, string>();
-            ValidateMetadata(normalizedLabels, normalizedTags, metadataObject);
-
-            ExtentHeader header = BuildHeader(container, key, contentType, normalizedLabels, normalizedTags, metadataObject, etagOverride);
-
-            // Write-through capture (D-goal): tee the payload into memory as it streams to storage, bounded
-            // by the container's per-object ceiling, so a within-ceiling write can populate the cache in one
-            // pass. A 0 ceiling (no per-object limit) skips capture to bound write-time memory; such objects
-            // are cached lazily on first read instead.
-            long ceiling = container.Cache.MaxCacheableObjectBytes;
-            bool tryCapture = container.Cache.Enabled && ceiling > 0;
-            BoundedCaptureStream? capture = tryCapture ? new BoundedCaptureStream(payload, ceiling) : null;
-
-            Extent extent;
-            bool replaced;
-            byte[]? capturedPayload = null;
+            long __ts = Stopwatch.GetTimestamp();
+            using Activity? __act = PepperXTelemetry.StartActivity("object.write", ActivityKind.Internal);
+            bool __ok = true;
             try
             {
-                ExtentWriteResult result = await _Storage.WriteAsync(header, capture ?? payload, token).ConfigureAwait(false);
+                if (payload == null) throw new ArgumentNullException(nameof(payload));
 
-                if (result.SizeBytes > _StorageSettings.MaxObjectBytes)
-                {
-                    await _Storage.DeleteAsync(result.Location, token).ConfigureAwait(false);
-                    throw new ObjectTooLargeException("Payload exceeds the maximum object size of " + _StorageSettings.MaxObjectBytes + " bytes.");
-                }
+                Container container = await RequireContainerAsync(containerName, token).ConfigureAwait(false);
+                ValidateKey(key);
+                List<string> normalizedLabels = NormalizeLabels(labels);
+                Dictionary<string, string> normalizedTags = tags ?? new Dictionary<string, string>();
+                ValidateMetadata(normalizedLabels, normalizedTags, metadataObject);
 
-                extent = BuildExtent(container, key, contentType, result, metadataObject != null, normalizedLabels, normalizedTags, header);
-                extent.Etag = etagOverride;
+                ExtentHeader header = BuildHeader(container, key, contentType, normalizedLabels, normalizedTags, metadataObject, etagOverride);
 
+                // Write-through capture (D-goal): tee the payload into memory as it streams to storage, bounded
+                // by the container's per-object ceiling, so a within-ceiling write can populate the cache in one
+                // pass. A 0 ceiling (no per-object limit) skips capture to bound write-time memory; such objects
+                // are cached lazily on first read instead.
+                long ceiling = container.Cache.MaxCacheableObjectBytes;
+                bool tryCapture = container.Cache.Enabled && ceiling > 0;
+                BoundedCaptureStream? capture = tryCapture ? new BoundedCaptureStream(payload, ceiling) : null;
+
+                Extent extent;
+                bool replaced;
+                byte[]? capturedPayload = null;
                 try
                 {
-                    if (noOverwrite)
+                    ExtentWriteResult result = await _Storage.WriteAsync(header, capture ?? payload, token).ConfigureAwait(false);
+
+                    if (result.SizeBytes > _StorageSettings.MaxObjectBytes)
                     {
-                        await _Db.Extents.CreateAsync(extent, token).ConfigureAwait(false);
-                        replaced = false;
+                        await _Storage.DeleteAsync(result.Location, token).ConfigureAwait(false);
+                        throw new ObjectTooLargeException("Payload exceeds the maximum object size of " + _StorageSettings.MaxObjectBytes + " bytes.");
                     }
-                    else
+
+                    extent = BuildExtent(container, key, contentType, result, metadataObject != null, normalizedLabels, normalizedTags, header);
+                    extent.Etag = etagOverride;
+
+                    try
                     {
-                        string? oldId = await ReplaceWithRetryAsync(extent, token).ConfigureAwait(false);
-                        replaced = oldId != null;
-                        if (oldId != null) FinishOldExtent(oldId);
+                        if (noOverwrite)
+                        {
+                            await _Db.Extents.CreateAsync(extent, token).ConfigureAwait(false);
+                            replaced = false;
+                        }
+                        else
+                        {
+                            string? oldId = await ReplaceWithRetryAsync(extent, token).ConfigureAwait(false);
+                            replaced = oldId != null;
+                            if (oldId != null) FinishOldExtent(oldId);
+                        }
                     }
+                    catch (Exception)
+                    {
+                        await SafeDeleteAsync(result.Location).ConfigureAwait(false);
+                        throw;
+                    }
+
+                    if (capture != null && !capture.TryGetCapturedPayload(out capturedPayload)) capturedPayload = null;
                 }
-                catch (Exception)
+                finally
                 {
-                    await SafeDeleteAsync(result.Location).ConfigureAwait(false);
-                    throw;
+                    capture?.Dispose();
                 }
 
-                if (capture != null && !capture.TryGetCapturedPayload(out capturedPayload)) capturedPayload = null;
+                PopulateCacheOnWrite(container, key, extent, capturedPayload, metadataObject);
+                ObjectWriteResponse __response = BuildResponse(extent, replaced);
+                PepperXTelemetry.AddObjectBytesWritten(__response.SizeBytes);
+                return __response;
+            }
+            catch (Exception __ex)
+            {
+                __ok = false;
+                PepperXTelemetry.RecordException(__act, __ex);
+                throw;
             }
             finally
             {
-                capture?.Dispose();
+                PepperXTelemetry.RecordObject("write", Stopwatch.GetElapsedTime(__ts).TotalSeconds, __ok);
             }
-
-            PopulateCacheOnWrite(container, key, extent, capturedPayload, metadataObject);
-            return BuildResponse(extent, replaced);
         }
 
         /// <summary>
@@ -177,65 +197,81 @@ namespace PepperX.Core.Services
         /// <exception cref="ObjectNotFoundException">The object does not exist.</exception>
         public async Task<ObjectWriteResponse> UpdateMetadataAsync(string containerName, string key, UpdateMetadataRequest request, CancellationToken token = default)
         {
-            if (request == null) throw new ArgumentNullException(nameof(request));
-
-            Container container = await RequireContainerAsync(containerName, token).ConfigureAwait(false);
-            Extent? existing = await _Db.Extents.ReadActiveAsync(container.Id, key, token).ConfigureAwait(false);
-            if (existing == null) throw new ObjectNotFoundException(containerName, key);
-
-            object? existingObject = null;
-            if (existing.HasMetadataObject)
+            long __ts = Stopwatch.GetTimestamp();
+            using Activity? __act = PepperXTelemetry.StartActivity("object.update_metadata", ActivityKind.Internal);
+            bool __ok = true;
+            try
             {
-                ExtentHeader oldHeader = await _Storage.ReadHeaderAsync(existing.StorageLocation, token).ConfigureAwait(false);
-                existingObject = oldHeader.Object;
-            }
+                if (request == null) throw new ArgumentNullException(nameof(request));
 
-            List<string> labels = NormalizeLabels(request.Labels ?? existing.Labels);
-            Dictionary<string, string> tags = request.Tags ?? existing.Tags;
-            object? metadataObject = request.ClearObject ? null : (request.Object ?? existingObject);
-            ValidateMetadata(labels, tags, metadataObject);
+                Container container = await RequireContainerAsync(containerName, token).ConfigureAwait(false);
+                Extent? existing = await _Db.Extents.ReadActiveAsync(container.Id, key, token).ConfigureAwait(false);
+                if (existing == null) throw new ObjectNotFoundException(containerName, key);
 
-            await using (ObjectReadHandle? handle = await _ReadService.ReadAsync(containerName, key, null, null, token).ConfigureAwait(false))
-            {
-                if (handle == null) throw new ObjectNotFoundException(containerName, key);
-
-                ExtentHeader header = BuildHeader(container, key, existing.ContentType, labels, tags, metadataObject, existing.Etag);
-
-                long ceiling = container.Cache.MaxCacheableObjectBytes;
-                bool tryCapture = container.Cache.Enabled && ceiling > 0;
-                BoundedCaptureStream? capture = tryCapture ? new BoundedCaptureStream(handle.Payload, ceiling) : null;
-
-                Extent newExtent;
-                byte[]? capturedPayload = null;
-                try
+                object? existingObject = null;
+                if (existing.HasMetadataObject)
                 {
-                    ExtentWriteResult result = await _Storage.WriteAsync(header, (Stream?)capture ?? handle.Payload, token).ConfigureAwait(false);
-                    newExtent = BuildExtent(container, key, existing.ContentType, result, metadataObject != null, labels, tags, header);
-                    newExtent.Etag = existing.Etag;
+                    ExtentHeader oldHeader = await _Storage.ReadHeaderAsync(existing.StorageLocation, token).ConfigureAwait(false);
+                    existingObject = oldHeader.Object;
+                }
 
-                    await handle.DisposeAsync().ConfigureAwait(false);
+                List<string> labels = NormalizeLabels(request.Labels ?? existing.Labels);
+                Dictionary<string, string> tags = request.Tags ?? existing.Tags;
+                object? metadataObject = request.ClearObject ? null : (request.Object ?? existingObject);
+                ValidateMetadata(labels, tags, metadataObject);
 
-                    string? oldId;
+                await using (ObjectReadHandle? handle = await _ReadService.ReadAsync(containerName, key, null, null, token).ConfigureAwait(false))
+                {
+                    if (handle == null) throw new ObjectNotFoundException(containerName, key);
+
+                    ExtentHeader header = BuildHeader(container, key, existing.ContentType, labels, tags, metadataObject, existing.Etag);
+
+                    long ceiling = container.Cache.MaxCacheableObjectBytes;
+                    bool tryCapture = container.Cache.Enabled && ceiling > 0;
+                    BoundedCaptureStream? capture = tryCapture ? new BoundedCaptureStream(handle.Payload, ceiling) : null;
+
+                    Extent newExtent;
+                    byte[]? capturedPayload = null;
                     try
                     {
-                        oldId = await ReplaceWithRetryAsync(newExtent, token).ConfigureAwait(false);
+                        ExtentWriteResult result = await _Storage.WriteAsync(header, (Stream?)capture ?? handle.Payload, token).ConfigureAwait(false);
+                        newExtent = BuildExtent(container, key, existing.ContentType, result, metadataObject != null, labels, tags, header);
+                        newExtent.Etag = existing.Etag;
+
+                        await handle.DisposeAsync().ConfigureAwait(false);
+
+                        string? oldId;
+                        try
+                        {
+                            oldId = await ReplaceWithRetryAsync(newExtent, token).ConfigureAwait(false);
+                        }
+                        catch (Exception)
+                        {
+                            await SafeDeleteAsync(result.Location).ConfigureAwait(false);
+                            throw;
+                        }
+
+                        if (oldId != null) FinishOldExtent(oldId);
+                        if (capture != null && !capture.TryGetCapturedPayload(out capturedPayload)) capturedPayload = null;
                     }
-                    catch (Exception)
+                    finally
                     {
-                        await SafeDeleteAsync(result.Location).ConfigureAwait(false);
-                        throw;
+                        capture?.Dispose();
                     }
 
-                    if (oldId != null) FinishOldExtent(oldId);
-                    if (capture != null && !capture.TryGetCapturedPayload(out capturedPayload)) capturedPayload = null;
+                    PopulateCacheOnWrite(container, key, newExtent, capturedPayload, metadataObject);
+                    return BuildResponse(newExtent, true);
                 }
-                finally
-                {
-                    capture?.Dispose();
-                }
-
-                PopulateCacheOnWrite(container, key, newExtent, capturedPayload, metadataObject);
-                return BuildResponse(newExtent, true);
+            }
+            catch (Exception __ex)
+            {
+                __ok = false;
+                PepperXTelemetry.RecordException(__act, __ex);
+                throw;
+            }
+            finally
+            {
+                PepperXTelemetry.RecordObject("update_metadata", Stopwatch.GetElapsedTime(__ts).TotalSeconds, __ok);
             }
         }
 

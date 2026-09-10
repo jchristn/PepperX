@@ -1,0 +1,65 @@
+# OpenTelemetry Collector configuration for the PepperX observability stack.
+#
+# The PepperX nodes push OTLP (gRPC on 4317, HTTP on 4318) here. This collector is the single point
+# that fans the three signals out to their stores:
+#   metrics -> Prometheus (scraped from the exporter's /metrics endpoint on :8889)
+#   traces  -> Tempo (OTLP)
+#   logs    -> Loki (OTLP/HTTP)
+#
+# Metric names: add_metric_suffixes is false, so the Prometheus names are just the OpenTelemetry
+# instrument names with dots turned into underscores (pepperx_http_server_requests, not
+# ..._requests_total). Histograms still expose _bucket / _sum / _count. This keeps the names stable and
+# predictable for the provisioned dashboards. See TELEMETRY.md.
+
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  memory_limiter:
+    check_interval: 5s
+    limit_percentage: 80
+    spike_limit_percentage: 25
+  batch:
+    timeout: 5s
+
+exporters:
+  # Exposes a Prometheus scrape endpoint on :8889 that the Prometheus service scrapes.
+  prometheus:
+    endpoint: 0.0.0.0:8889
+    add_metric_suffixes: false
+    resource_to_telemetry_conversion:
+      enabled: true
+
+  otlp/tempo:
+    endpoint: tempo:4317
+    tls:
+      insecure: true
+
+  otlphttp/loki:
+    endpoint: http://loki:3100/otlp
+
+  debug:
+    verbosity: basic
+
+service:
+  telemetry:
+    logs:
+      level: info
+  pipelines:
+    metrics:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [prometheus]
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [otlp/tempo]
+    logs:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [otlphttp/loki]

@@ -2,6 +2,7 @@ namespace PepperX.Server.Api.Rest
 {
     using System;
     using System.Collections.Generic;
+    using System.Diagnostics;
     using System.Threading.Tasks;
     using System.Web;
     using PepperX.Core;
@@ -9,6 +10,7 @@ namespace PepperX.Server.Api.Rest
     using PepperX.Core.Exceptions;
     using PepperX.Core.Responses;
     using PepperX.Core.Serialization;
+    using PepperX.Core.Telemetry;
     using WatsonWebserver.Core;
     using ApiErrorResponse = PepperX.Core.Responses.ApiErrorResponse;
 
@@ -34,29 +36,50 @@ namespace PepperX.Server.Api.Rest
         /// <returns>The handler result or an error response.</returns>
         public static async Task<object> HandleAsync(ApiRequest request, Func<Task<object>> body)
         {
+            string method = request.Http.Request.Method.ToString();
+            Activity? activity = PepperXTelemetry.StartActivity("rest " + method, ActivityKind.Server);
+            if (activity != null)
+            {
+                activity.SetTag("pepperx.protocol", "rest");
+                activity.SetTag("http.request.method", method);
+                activity.SetTag("http.route", request.Http.Request.Url.RawWithoutQuery);
+            }
+
             try
             {
-                return await body().ConfigureAwait(false);
+                object result = await body().ConfigureAwait(false);
+                activity?.SetTag("http.response.status_code", request.Http.Response.StatusCode);
+                return result;
             }
             catch (PepperXException ex)
             {
                 request.Http.Response.StatusCode = ex.StatusCode;
+                activity?.SetTag("http.response.status_code", ex.StatusCode);
+                if (ex.StatusCode >= 500) PepperXTelemetry.RecordException(activity, ex);
                 return new ApiErrorResponse(ex.ErrorType, ex.Message, ex.StatusCode);
             }
             catch (ArgumentException ex)
             {
                 request.Http.Response.StatusCode = 400;
+                activity?.SetTag("http.response.status_code", 400);
                 return new ApiErrorResponse(ApiErrorEnum.BadRequest, ex.Message, 400);
             }
             catch (OperationCanceledException)
             {
                 request.Http.Response.StatusCode = 499;
+                activity?.SetTag("http.response.status_code", 499);
                 return new ApiErrorResponse(ApiErrorEnum.BadRequest, "The request was cancelled.", 499);
             }
             catch (Exception ex)
             {
                 request.Http.Response.StatusCode = 500;
+                activity?.SetTag("http.response.status_code", 500);
+                PepperXTelemetry.RecordException(activity, ex);
                 return new ApiErrorResponse(ApiErrorEnum.InternalError, ex.Message, 500);
+            }
+            finally
+            {
+                activity?.Dispose();
             }
         }
 

@@ -1,0 +1,20 @@
+# Grafana dashboard provisioning for the PepperX observability stack.
+#
+# Every JSON dashboard under /var/lib/grafana/dashboards is loaded into a single top-level folder named
+# "PepperX". There are no subfolders; dashboards are separated by domain via their titles
+# ("PepperX - HTTP", "PepperX - S3", and so on). foldersFromFilesStructure is false so the flat file
+# layout does not create subfolders.
+
+apiVersion: 1
+
+providers:
+  - name: PepperX
+    orgId: 1
+    folder: PepperX
+    type: file
+    disableDeletion: false
+    allowUiUpdates: true
+    updateIntervalSeconds: 30
+    options:
+      path: /var/lib/grafana/dashboards
+      foldersFromFilesStructure: false

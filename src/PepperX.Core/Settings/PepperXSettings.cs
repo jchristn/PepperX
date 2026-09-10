@@ -164,6 +164,21 @@ namespace PepperX.Core.Settings
             }
         }
 
+        /// <summary>
+        /// Telemetry (OpenTelemetry metrics, traces, logs) settings. Never null.
+        /// </summary>
+        public TelemetrySettings Telemetry
+        {
+            get
+            {
+                return _Telemetry;
+            }
+            set
+            {
+                _Telemetry = value ?? new TelemetrySettings();
+            }
+        }
+
         #endregion
 
         #region Private-Members
@@ -178,6 +193,7 @@ namespace PepperX.Core.Settings
         private WebsocketSettings _Websocket = new WebsocketSettings();
         private McpSettings _Mcp = new McpSettings();
         private RequestHistorySettings _RequestHistory = new RequestHistorySettings();
+        private TelemetrySettings _Telemetry = new TelemetrySettings();
 
         #endregion
 

@@ -10,6 +10,7 @@ import { NavLink } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 
 import {
+  ActivityIcon,
   CapacityIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
@@ -39,6 +40,7 @@ const GROUPS = [
     items: [
       { to: '/capacity', labelKey: 'nav.capacity', Icon: CapacityIcon },
       { to: '/requests', labelKey: 'nav.requests', Icon: HistoryIcon },
+      { to: '/observability', labelKey: 'nav.observability', Icon: ActivityIcon },
     ],
   },
   {

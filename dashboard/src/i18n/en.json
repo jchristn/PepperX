@@ -27,6 +27,7 @@
     "search": "Search",
     "capacity": "Capacity",
     "requests": "Request History",
+    "observability": "Observability",
     "explorer": "API Explorer",
     "settings": "Settings",
     "collapse": "Collapse sidebar",
@@ -381,6 +382,23 @@
     "empty": "No requests have been captured yet.",
     "noMatches": "No requests match these filters.",
     "disabled": "Request capture is disabled on this node, so no history is retained."
+  },
+  "observability": {
+    "title": "Observability",
+    "subtitle": "Metrics, traces, and logs for this deployment.",
+    "intro": "Telemetry is off by default. Bring it up with the docker compose stack, then open Grafana — the main entry point for dashboards, metrics, traces, and logs. The credentials below are the stack defaults; change them for anything beyond local use. See TELEMETRY.md for setup details.",
+    "primaryTag": "Start here",
+    "credentials": "Default credentials",
+    "noAuth": "None (no authentication)",
+    "url": "URL",
+    "urlHttp": "URL (HTTP)",
+    "urlGrpc": "URL (gRPC)",
+    "open": "Open",
+    "grafanaDesc": "Dashboards, metrics, traces, and logs. The primary observability UI.",
+    "prometheusDesc": "Metrics store and query UI.",
+    "tempoDesc": "Distributed tracing backend. Query traces through Grafana rather than here.",
+    "lokiDesc": "Log aggregation backend. Query logs through Grafana rather than here.",
+    "collectorDesc": "OTLP ingest endpoint the nodes push telemetry to. Not a browsable UI."
   },
   "explorer": {
     "title": "API Explorer",

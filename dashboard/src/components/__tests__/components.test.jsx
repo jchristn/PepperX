@@ -9,9 +9,12 @@
 import React from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
 import '@testing-library/jest-dom/vitest';
 
 import '../../i18n/index.js';
+import { AppProvider } from '../../context/AppContext.jsx';
+import ObservabilityView from '../../views/ObservabilityView.jsx';
 import DataTable from '../DataTable.jsx';
 import TablePagination from '../TablePagination.jsx';
 import { StatusBadge, toneForStatus } from '../Badges.jsx';
@@ -256,6 +259,37 @@ describe('body formatting', () => {
   it('leaves plain text and invalid payloads untouched', () => {
     expect(formatBody('just text')).toBe('just text');
     expect(formatBody('{not valid json}')).toBe('{not valid json}');
+  });
+});
+
+describe('ObservabilityView', () => {
+  const renderView = () =>
+    render(
+      <MemoryRouter>
+        <AppProvider>
+          <ObservabilityView />
+        </AppProvider>
+      </MemoryRouter>,
+    );
+
+  it('renders a card for every observability service', () => {
+    renderView();
+    for (const name of ['Grafana', 'Prometheus', 'Tempo', 'Loki', 'OpenTelemetry Collector']) {
+      expect(screen.getByText(name)).toBeInTheDocument();
+    }
+  });
+
+  it('opens every service link in a new tab without leaking the opener', () => {
+    renderView();
+    // Grafana appears twice (the URL link and the Open button); both must be safe outbound links.
+    const links = screen.getAllByRole('link', { name: /localhost/ });
+    expect(links.length).toBeGreaterThan(0);
+    for (const link of links) {
+      expect(link).toHaveAttribute('target', '_blank');
+      expect(link).toHaveAttribute('rel', 'noopener noreferrer');
+    }
+    // With no endpoint stored the host falls back to localhost and the ports are the compose defaults.
+    expect(screen.getByRole('link', { name: 'http://localhost:3001' })).toBeInTheDocument();
   });
 });
 

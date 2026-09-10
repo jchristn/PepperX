@@ -27,6 +27,7 @@
     "search": "搜索",
     "capacity": "容量",
     "requests": "请求历史",
+    "observability": "可观测性",
     "explorer": "API 浏览器",
     "settings": "设置",
     "collapse": "收起侧边栏",
@@ -381,6 +382,23 @@
     "empty": "尚未捕获任何请求。",
     "noMatches": "没有请求符合这些筛选条件。",
     "disabled": "此节点已禁用请求捕获，因此不会保留任何历史记录。"
+  },
+  "observability": {
+    "title": "可观测性",
+    "subtitle": "此部署的指标、追踪和日志。",
+    "intro": "遥测默认处于关闭状态。请使用 docker compose 堆栈启动它，然后打开 Grafana——仪表板、指标、追踪和日志的主要入口。下面显示的是堆栈的默认凭据；在非本地部署中请务必更改。有关设置详情，请参阅 TELEMETRY.md。",
+    "primaryTag": "从这里开始",
+    "credentials": "默认凭据",
+    "noAuth": "无（无需身份验证）",
+    "url": "URL",
+    "urlHttp": "URL (HTTP)",
+    "urlGrpc": "URL (gRPC)",
+    "open": "打开",
+    "grafanaDesc": "仪表板、指标、追踪和日志。主要的可观测性界面。",
+    "prometheusDesc": "指标存储和查询界面。",
+    "tempoDesc": "分布式追踪后端。请通过 Grafana 查询追踪，而不是在此处。",
+    "lokiDesc": "日志聚合后端。请通过 Grafana 查询日志，而不是在此处。",
+    "collectorDesc": "节点推送遥测数据的 OTLP 接收端点。不是可浏览的界面。"
   },
   "explorer": {
     "title": "API 浏览器",

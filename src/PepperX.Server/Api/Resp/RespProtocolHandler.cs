@@ -3,6 +3,7 @@ namespace PepperX.Server.Api.Resp
     using System;
     using System.Collections.Concurrent;
     using System.Collections.Generic;
+    using System.Diagnostics;
     using System.Globalization;
     using System.IO;
     using System.Net.Sockets;
@@ -18,6 +19,7 @@ namespace PepperX.Server.Api.Resp
     using PepperX.Core.Requests;
     using PepperX.Core.Services;
     using PepperX.Core.Settings;
+    using PepperX.Core.Telemetry;
     using RedisResp;
     using SyslogLogging;
 
@@ -90,12 +92,14 @@ namespace PepperX.Server.Api.Resp
             {
                 _States[args.GUID] = new RespConnectionState();
                 StartQueue(args.GUID);
+                PepperXTelemetry.RespConnectionOpened();
             };
 
             _Interface.ClientDisconnectedAction = args =>
             {
                 _States.TryRemove(args.GUID, out _);
                 if (_Queues.TryRemove(args.GUID, out Channel<List<string>>? queue)) queue.Writer.TryComplete();
+                PepperXTelemetry.RespConnectionClosed();
             };
 
             _Interface.ArrayHandler = e =>
@@ -157,18 +161,34 @@ namespace PepperX.Server.Api.Resp
                 {
                     RespConnectionState state = _States.GetOrAdd(clientGuid, _ => new RespConnectionState());
 
+                    string command = args.Count > 0 ? args[0].ToUpperInvariant() : "(empty)";
+                    long startTs = Stopwatch.GetTimestamp();
+                    Activity? activity = PepperXTelemetry.StartActivity("resp " + command, ActivityKind.Server);
+                    activity?.SetTag("pepperx.protocol", "resp");
+                    activity?.SetTag("pepperx.operation", command);
+
                     byte[] response;
+                    bool ok = true;
                     try
                     {
                         response = await DispatchAsync(args, state).ConfigureAwait(false);
                     }
                     catch (PepperXException ex)
                     {
+                        ok = false;
+                        PepperXTelemetry.RecordException(activity, ex);
                         response = RespWire.Error("ERR " + ex.Message);
                     }
                     catch (Exception ex)
                     {
+                        ok = false;
+                        PepperXTelemetry.RecordException(activity, ex);
                         response = RespWire.Error("ERR " + ex.Message);
+                    }
+                    finally
+                    {
+                        activity?.Dispose();
+                        PepperXTelemetry.RecordResp(command, Stopwatch.GetElapsedTime(startTs).TotalSeconds, ok);
                     }
 
                     SendToClient(clientGuid, response);

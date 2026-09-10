@@ -9,6 +9,7 @@ namespace PepperX.Server.Services
     using PepperX.Core.Database;
     using PepperX.Core.Models;
     using PepperX.Core.Settings;
+    using PepperX.Core.Telemetry;
     using SyslogLogging;
     using WatsonWebserver.Core;
 
@@ -75,15 +76,18 @@ namespace PepperX.Server.Services
                     try
                     {
                         await _Db.RequestHistory.CreateAsync(entry, CancellationToken.None).ConfigureAwait(false);
+                        PepperXTelemetry.RequestHistoryCaptured();
                     }
                     catch (Exception ex)
                     {
+                        PepperXTelemetry.RequestHistoryDropped();
                         _Logging?.Debug(_Header + "failed to persist request history: " + ex.Message);
                     }
                 });
             }
             catch (Exception ex)
             {
+                PepperXTelemetry.RequestHistoryDropped();
                 _Logging?.Debug(_Header + "failed to build request history entry: " + ex.Message);
             }
         }

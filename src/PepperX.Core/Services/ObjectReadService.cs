@@ -1,6 +1,7 @@
 namespace PepperX.Core.Services
 {
     using System;
+    using System.Diagnostics;
     using System.IO;
     using System.Threading;
     using System.Threading.Tasks;
@@ -12,6 +13,7 @@ namespace PepperX.Core.Services
     using PepperX.Core.Settings;
     using PepperX.Core.Storage;
     using PepperX.Core.Storage.Format;
+    using PepperX.Core.Telemetry;
     using SyslogLogging;
 
     /// <summary>
@@ -80,14 +82,30 @@ namespace PepperX.Core.Services
         /// <exception cref="ContainerNotFoundException">The container does not exist.</exception>
         public async Task<ObjectReadHandle?> ReadAsync(string containerName, string key, long? offset, long? count, CancellationToken token = default)
         {
-            Container container = await RequireContainerAsync(containerName, token).ConfigureAwait(false);
-
-            if (container.Cache.Enabled)
+            long __ts = Stopwatch.GetTimestamp();
+            using Activity? __act = PepperXTelemetry.StartActivity("object.read", ActivityKind.Internal);
+            bool __ok = true;
+            try
             {
-                return await ReadWithCacheAsync(container, key, offset, count, token).ConfigureAwait(false);
-            }
+                Container container = await RequireContainerAsync(containerName, token).ConfigureAwait(false);
 
-            return await ReadUncachedAsync(container.Id, key, offset, count, token).ConfigureAwait(false);
+                ObjectReadHandle? __handle = container.Cache.Enabled
+                    ? await ReadWithCacheAsync(container, key, offset, count, token).ConfigureAwait(false)
+                    : await ReadUncachedAsync(container.Id, key, offset, count, token).ConfigureAwait(false);
+
+                if (__handle != null) PepperXTelemetry.AddObjectBytesRead(count ?? __handle.Extent.SizeBytes);
+                return __handle;
+            }
+            catch (Exception __ex)
+            {
+                __ok = false;
+                PepperXTelemetry.RecordException(__act, __ex);
+                throw;
+            }
+            finally
+            {
+                PepperXTelemetry.RecordObject("read", Stopwatch.GetElapsedTime(__ts).TotalSeconds, __ok);
+            }
         }
 
         /// <summary>
@@ -101,50 +119,66 @@ namespace PepperX.Core.Services
         /// <exception cref="ContainerNotFoundException">The container does not exist.</exception>
         public async Task<ObjectMetadata?> ReadMetadataAsync(string containerName, string key, CancellationToken token = default)
         {
-            Container container = await RequireContainerAsync(containerName, token).ConfigureAwait(false);
-
-            Extent? extent = await _Db.Extents.ReadActiveAsync(container.Id, key, token).ConfigureAwait(false);
-
-            // Cache path (D1/D4): a validated hit serves metadata (including the freeform object) from
-            // memory without touching storage. A metadata-only miss does not hydrate the payload cache.
-            if (container.Cache.Enabled)
+            long __ts = Stopwatch.GetTimestamp();
+            using Activity? __act = PepperXTelemetry.StartActivity("object.read_metadata", ActivityKind.Internal);
+            bool __ok = true;
+            try
             {
-                ContainerCache? cache = _Cache.Get(container.Id, container.Cache);
-                if (extent == null)
+                Container container = await RequireContainerAsync(containerName, token).ConfigureAwait(false);
+
+                Extent? extent = await _Db.Extents.ReadActiveAsync(container.Id, key, token).ConfigureAwait(false);
+
+                // Cache path (D1/D4): a validated hit serves metadata (including the freeform object) from
+                // memory without touching storage. A metadata-only miss does not hydrate the payload cache.
+                if (container.Cache.Enabled)
                 {
+                    ContainerCache? cache = _Cache.Get(container.Id, container.Cache);
+                    if (extent == null)
+                    {
+                        cache?.Remove(key);
+                        return null;
+                    }
+                    if (cache != null && cache.TryGet(key, out CachedObject? entry) && entry != null
+                        && String.Equals(entry.ExtentId, extent.Id, StringComparison.Ordinal))
+                    {
+                        return CloneMetadata(entry.Metadata);
+                    }
                     cache?.Remove(key);
-                    return null;
                 }
-                if (cache != null && cache.TryGet(key, out CachedObject? entry) && entry != null
-                    && String.Equals(entry.ExtentId, extent.Id, StringComparison.Ordinal))
+
+                if (extent == null) return null;
+
+                ObjectMetadata metadata = ToMetadata(extent, container.Name);
+
+                if (extent.HasMetadataObject)
                 {
-                    return CloneMetadata(entry.Metadata);
+                    try
+                    {
+                        ExtentHeader header = await _Storage.ReadHeaderAsync(extent.StorageLocation, token).ConfigureAwait(false);
+                        metadata.Object = header.Object;
+                    }
+                    catch (ExtentCorruptException)
+                    {
+                        return null;
+                    }
+                    catch (System.IO.FileNotFoundException)
+                    {
+                        return null;
+                    }
                 }
-                cache?.Remove(key);
+
+                return metadata;
             }
-
-            if (extent == null) return null;
-
-            ObjectMetadata metadata = ToMetadata(extent, container.Name);
-
-            if (extent.HasMetadataObject)
+            catch (Exception __ex)
             {
-                try
-                {
-                    ExtentHeader header = await _Storage.ReadHeaderAsync(extent.StorageLocation, token).ConfigureAwait(false);
-                    metadata.Object = header.Object;
-                }
-                catch (ExtentCorruptException)
-                {
-                    return null;
-                }
-                catch (System.IO.FileNotFoundException)
-                {
-                    return null;
-                }
+                __ok = false;
+                PepperXTelemetry.RecordException(__act, __ex);
+                throw;
             }
-
-            return metadata;
+            finally
+            {
+                PepperXTelemetry.RecordObject("read_metadata", Stopwatch.GetElapsedTime(__ts).TotalSeconds, __ok);
+            }
         }
 
         /// <summary>
@@ -156,9 +190,25 @@ namespace PepperX.Core.Services
         /// <returns>True if it exists.</returns>
         public async Task<bool> ExistsAsync(string containerName, string key, CancellationToken token = default)
         {
-            Container? container = await _Db.Containers.ReadByNameAsync(containerName, token).ConfigureAwait(false);
-            if (container == null) return false;
-            return await _Db.Extents.ExistsActiveAsync(container.Id, key, token).ConfigureAwait(false);
+            long __ts = Stopwatch.GetTimestamp();
+            using Activity? __act = PepperXTelemetry.StartActivity("object.exists", ActivityKind.Internal);
+            bool __ok = true;
+            try
+            {
+                Container? container = await _Db.Containers.ReadByNameAsync(containerName, token).ConfigureAwait(false);
+                if (container == null) return false;
+                return await _Db.Extents.ExistsActiveAsync(container.Id, key, token).ConfigureAwait(false);
+            }
+            catch (Exception __ex)
+            {
+                __ok = false;
+                PepperXTelemetry.RecordException(__act, __ex);
+                throw;
+            }
+            finally
+            {
+                PepperXTelemetry.RecordObject("exists", Stopwatch.GetElapsedTime(__ts).TotalSeconds, __ok);
+            }
         }
 
         #endregion
@@ -206,12 +256,14 @@ namespace PepperX.Core.Services
             if (cache.TryGet(key, out CachedObject? entry) && entry != null
                 && String.Equals(entry.ExtentId, active.Id, StringComparison.Ordinal))
             {
+                PepperXTelemetry.ObjectCacheHit();
                 byte[] slice = SlicePayload(entry.Payload, offset, count);
                 ExtentPayloadStream hitStream = ExtentPayloadStream.FromMemory(slice, BuildHeader(active, container.Name, entry.Metadata));
                 return new ObjectReadHandle(active, hitStream, static () => ValueTask.CompletedTask);
             }
 
             // MISS or stale: drop any stale entry, then take the normal lease-guarded path.
+            PepperXTelemetry.ObjectCacheMiss();
             cache.Remove(key);
             ObjectReadHandle? handle = await ReadUncachedAsync(container.Id, key, offset, count, token).ConfigureAwait(false);
             if (handle == null) return null;

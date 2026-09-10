@@ -13,6 +13,7 @@ namespace PepperX.Core.Services
     using PepperX.Core.Models;
     using PepperX.Core.Settings;
     using PepperX.Core.Storage;
+    using PepperX.Core.Telemetry;
     using SyslogLogging;
 
     /// <summary>
@@ -72,10 +73,26 @@ namespace PepperX.Core.Services
         /// <exception cref="ContainerNotFoundException">The container does not exist.</exception>
         public async Task<bool> DeleteAsync(string containerName, string key, CancellationToken token = default)
         {
-            Container? container = await _Db.Containers.ReadByNameAsync(containerName, token).ConfigureAwait(false);
-            if (container == null) throw new ContainerNotFoundException(containerName);
+            long __ts = Stopwatch.GetTimestamp();
+            using Activity? __act = PepperXTelemetry.StartActivity("object.delete", ActivityKind.Internal);
+            bool __ok = true;
+            try
+            {
+                Container? container = await _Db.Containers.ReadByNameAsync(containerName, token).ConfigureAwait(false);
+                if (container == null) throw new ContainerNotFoundException(containerName);
 
-            return await DeleteByContainerIdAsync(container.Id, key, token).ConfigureAwait(false);
+                return await DeleteByContainerIdAsync(container.Id, key, token).ConfigureAwait(false);
+            }
+            catch (Exception __ex)
+            {
+                __ok = false;
+                PepperXTelemetry.RecordException(__act, __ex);
+                throw;
+            }
+            finally
+            {
+                PepperXTelemetry.RecordObject("delete", Stopwatch.GetElapsedTime(__ts).TotalSeconds, __ok);
+            }
         }
 
         /// <summary>
@@ -155,26 +172,42 @@ namespace PepperX.Core.Services
         /// <returns>The number of objects deleted.</returns>
         public async Task<int> BulkDeleteContainerAsync(string containerId, CancellationToken token = default)
         {
-            if (String.IsNullOrEmpty(containerId)) throw new ArgumentNullException(nameof(containerId));
-
-            // Clear the whole container cache up front; per-key deletes below also evict individually.
-            _Cache.Get(containerId)?.Clear();
-
-            int deleted = 0;
-            while (true)
+            long __ts = Stopwatch.GetTimestamp();
+            using Activity? __act = PepperXTelemetry.StartActivity("object.bulk_delete", ActivityKind.Internal);
+            bool __ok = true;
+            try
             {
-                token.ThrowIfCancellationRequested();
-                EnumerationQuery query = new EnumerationQuery { MaxResults = 100 };
-                EnumerationResult<Extent> page = await _Db.Extents.EnumerateAsync(containerId, query, token).ConfigureAwait(false);
-                if (page.Objects.Count == 0) break;
+                if (String.IsNullOrEmpty(containerId)) throw new ArgumentNullException(nameof(containerId));
 
-                foreach (Extent extent in page.Objects)
+                // Clear the whole container cache up front; per-key deletes below also evict individually.
+                _Cache.Get(containerId)?.Clear();
+
+                int deleted = 0;
+                while (true)
                 {
-                    if (await DeleteByContainerIdAsync(containerId, extent.Key, token).ConfigureAwait(false)) deleted++;
-                }
-            }
+                    token.ThrowIfCancellationRequested();
+                    EnumerationQuery query = new EnumerationQuery { MaxResults = 100 };
+                    EnumerationResult<Extent> page = await _Db.Extents.EnumerateAsync(containerId, query, token).ConfigureAwait(false);
+                    if (page.Objects.Count == 0) break;
 
-            return deleted;
+                    foreach (Extent extent in page.Objects)
+                    {
+                        if (await DeleteByContainerIdAsync(containerId, extent.Key, token).ConfigureAwait(false)) deleted++;
+                    }
+                }
+
+                return deleted;
+            }
+            catch (Exception __ex)
+            {
+                __ok = false;
+                PepperXTelemetry.RecordException(__act, __ex);
+                throw;
+            }
+            finally
+            {
+                PepperXTelemetry.RecordObject("bulk_delete", Stopwatch.GetElapsedTime(__ts).TotalSeconds, __ok);
+            }
         }
 
         #endregion

@@ -1,6 +1,7 @@
 namespace PepperX.Server.Api.Mcp
 {
     using System;
+    using System.Diagnostics;
     using System.IO;
     using System.Net;
     using System.Text.Json;
@@ -13,6 +14,7 @@ namespace PepperX.Server.Api.Mcp
     using PepperX.Core.Serialization;
     using PepperX.Core.Services;
     using PepperX.Core.Settings;
+    using PepperX.Core.Telemetry;
     using SyslogLogging;
     using Voltaic.Core;
     using Voltaic.Mcp;
@@ -375,8 +377,20 @@ namespace PepperX.Server.Api.Mcp
 
         private void Reg(string name, string description, object schema, Func<McpToolArgs, CancellationToken, Task<McpToolCallResult>> handler)
         {
-            Func<RpcParameters?, CancellationToken, Task<object>> wrapped = async (RpcParameters? input, CancellationToken ct) =>
+            _Http?.RegisterTool(name, description, schema, Wrap(name, "http", handler));
+            _Tcp?.RegisterTool(name, description, schema, Wrap(name, "tcp", handler));
+        }
+
+        private Func<RpcParameters?, CancellationToken, Task<object>> Wrap(string name, string transport, Func<McpToolArgs, CancellationToken, Task<McpToolCallResult>> handler)
+        {
+            return async (RpcParameters? input, CancellationToken ct) =>
             {
+                long startTs = Stopwatch.GetTimestamp();
+                Activity? activity = PepperXTelemetry.StartActivity("mcp " + name, ActivityKind.Server);
+                activity?.SetTag("pepperx.protocol", "mcp");
+                activity?.SetTag("pepperx.operation", name);
+                activity?.SetTag("pepperx.transport", transport);
+                bool ok = true;
                 try
                 {
                     McpToolArgs args = Parse(input);
@@ -384,12 +398,16 @@ namespace PepperX.Server.Api.Mcp
                 }
                 catch (Exception ex)
                 {
+                    ok = false;
+                    PepperXTelemetry.RecordException(activity, ex);
                     return Err(ex.Message);
                 }
+                finally
+                {
+                    activity?.Dispose();
+                    PepperXTelemetry.RecordMcp(name, transport, Stopwatch.GetElapsedTime(startTs).TotalSeconds, ok);
+                }
             };
-
-            _Http?.RegisterTool(name, description, schema, wrapped);
-            _Tcp?.RegisterTool(name, description, schema, wrapped);
         }
 
         /// <summary>

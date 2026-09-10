@@ -102,6 +102,15 @@ namespace PepperX.Core.Settings
             settings.Websocket.Port = OverridePort("PEPPERX_WS_PORT", settings.Websocket.Port);
             settings.Mcp.HttpPort = OverridePort("PEPPERX_MCP_HTTP_PORT", settings.Mcp.HttpPort);
             settings.Mcp.TcpPort = OverridePort("PEPPERX_MCP_TCP_PORT", settings.Mcp.TcpPort);
+
+            string? telemetryEnabled = Environment.GetEnvironmentVariable("PEPPERX_TELEMETRY_ENABLED");
+            if (!String.IsNullOrEmpty(telemetryEnabled)) settings.Telemetry.Enabled = IsTruthy(telemetryEnabled);
+
+            string? otlpEndpoint = Environment.GetEnvironmentVariable("PEPPERX_TELEMETRY_OTLP_ENDPOINT");
+            if (!String.IsNullOrEmpty(otlpEndpoint)) settings.Telemetry.OtlpEndpoint = otlpEndpoint;
+
+            string? otlpProtocol = Environment.GetEnvironmentVariable("PEPPERX_TELEMETRY_OTLP_PROTOCOL");
+            if (!String.IsNullOrEmpty(otlpProtocol)) settings.Telemetry.OtlpProtocol = otlpProtocol;
         }
 
         #endregion
@@ -138,6 +147,14 @@ namespace PepperX.Core.Settings
             if (String.IsNullOrEmpty(value)) return current;
             if (Int32.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out int parsed)) return parsed;
             return current;
+        }
+
+        private static bool IsTruthy(string value)
+        {
+            return value == "1"
+                || String.Equals(value, "true", StringComparison.OrdinalIgnoreCase)
+                || String.Equals(value, "yes", StringComparison.OrdinalIgnoreCase)
+                || String.Equals(value, "on", StringComparison.OrdinalIgnoreCase);
         }
 
         #endregion

@@ -2,12 +2,14 @@ namespace PepperX.Core.Services
 {
     using System;
     using System.Collections.Generic;
+    using System.Diagnostics;
     using System.Threading;
     using System.Threading.Tasks;
     using PepperX.Core.Database;
     using PepperX.Core.Models;
     using PepperX.Core.Settings;
     using PepperX.Core.Storage;
+    using PepperX.Core.Telemetry;
     using SyslogLogging;
 
     /// <summary>
@@ -75,12 +77,36 @@ namespace PepperX.Core.Services
         /// <returns>Task.</returns>
         public async Task RunOnceAsync(CancellationToken token = default)
         {
-            await FinishTombstonedAsync(token).ConfigureAwait(false);
-            await _Db.ReadLeases.PurgeExpiredAsync(token).ConfigureAwait(false);
-            await PurgeDeadNodesAsync(token).ConfigureAwait(false);
-            await _Storage.CleanupTempFilesAsync(TimeSpan.FromHours(1), token).ConfigureAwait(false);
-            await _Db.RequestHistory.PruneAsync(DateTime.UtcNow.AddDays(-_RequestHistory.RetentionDays), token).ConfigureAwait(false);
-            await PurgeExpiredMultipartUploadsAsync(token).ConfigureAwait(false);
+            long __ts = Stopwatch.GetTimestamp();
+            using Activity? __act = PepperXTelemetry.StartActivity("janitor.run", ActivityKind.Internal);
+            bool __ok = true;
+            try
+            {
+                await FinishTombstonedAsync(token).ConfigureAwait(false);
+
+                int __leases = await _Db.ReadLeases.PurgeExpiredAsync(token).ConfigureAwait(false);
+                PepperXTelemetry.AddJanitorItems("leases", __leases);
+
+                await PurgeDeadNodesAsync(token).ConfigureAwait(false);
+
+                int __tempFiles = await _Storage.CleanupTempFilesAsync(TimeSpan.FromHours(1), token).ConfigureAwait(false);
+                PepperXTelemetry.AddJanitorItems("temp_files", __tempFiles);
+
+                int __history = await _Db.RequestHistory.PruneAsync(DateTime.UtcNow.AddDays(-_RequestHistory.RetentionDays), token).ConfigureAwait(false);
+                PepperXTelemetry.AddJanitorItems("request_history", __history);
+
+                await PurgeExpiredMultipartUploadsAsync(token).ConfigureAwait(false);
+            }
+            catch (Exception __ex)
+            {
+                __ok = false;
+                PepperXTelemetry.RecordException(__act, __ex);
+                throw;
+            }
+            finally
+            {
+                PepperXTelemetry.RecordJanitorRun(Stopwatch.GetElapsedTime(__ts).TotalSeconds, __ok);
+            }
         }
 
         /// <summary>

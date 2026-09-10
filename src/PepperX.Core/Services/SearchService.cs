@@ -2,12 +2,14 @@ namespace PepperX.Core.Services
 {
     using System;
     using System.Collections.Generic;
+    using System.Diagnostics;
     using System.Threading;
     using System.Threading.Tasks;
     using PepperX.Core.Database;
     using PepperX.Core.Enumeration;
     using PepperX.Core.Exceptions;
     using PepperX.Core.Models;
+    using PepperX.Core.Telemetry;
 
     /// <summary>
     /// Enumerates and searches objects by key, labels, and tags, both within a container and across
@@ -48,14 +50,30 @@ namespace PepperX.Core.Services
         /// <exception cref="ContainerNotFoundException">The container does not exist.</exception>
         public async Task<EnumerationResult<ObjectMetadata>> EnumerateContainerAsync(string containerName, EnumerationQuery query, CancellationToken token = default)
         {
-            if (query == null) throw new ArgumentNullException(nameof(query));
+            long __ts = Stopwatch.GetTimestamp();
+            using Activity? __act = PepperXTelemetry.StartActivity("search.container", ActivityKind.Internal);
+            bool __ok = true;
+            try
+            {
+                if (query == null) throw new ArgumentNullException(nameof(query));
 
-            Container? container = await _Db.Containers.ReadByNameAsync(containerName, token).ConfigureAwait(false);
-            if (container == null) throw new ContainerNotFoundException(containerName);
+                Container? container = await _Db.Containers.ReadByNameAsync(containerName, token).ConfigureAwait(false);
+                if (container == null) throw new ContainerNotFoundException(containerName);
 
-            EnumerationResult<Extent> page = await _Db.Extents.EnumerateAsync(container.Id, query, token).ConfigureAwait(false);
-            Dictionary<string, string> names = new Dictionary<string, string> { { container.Id, container.Name } };
-            return await MapAsync(page, names, token).ConfigureAwait(false);
+                EnumerationResult<Extent> page = await _Db.Extents.EnumerateAsync(container.Id, query, token).ConfigureAwait(false);
+                Dictionary<string, string> names = new Dictionary<string, string> { { container.Id, container.Name } };
+                return await MapAsync(page, names, token).ConfigureAwait(false);
+            }
+            catch (Exception __ex)
+            {
+                __ok = false;
+                PepperXTelemetry.RecordException(__act, __ex);
+                throw;
+            }
+            finally
+            {
+                PepperXTelemetry.RecordSearch("container", Stopwatch.GetElapsedTime(__ts).TotalSeconds, __ok);
+            }
         }
 
         /// <summary>
@@ -66,10 +84,26 @@ namespace PepperX.Core.Services
         /// <returns>A page of object metadata.</returns>
         public async Task<EnumerationResult<ObjectMetadata>> SearchAllAsync(EnumerationQuery query, CancellationToken token = default)
         {
-            if (query == null) throw new ArgumentNullException(nameof(query));
+            long __ts = Stopwatch.GetTimestamp();
+            using Activity? __act = PepperXTelemetry.StartActivity("search.all", ActivityKind.Internal);
+            bool __ok = true;
+            try
+            {
+                if (query == null) throw new ArgumentNullException(nameof(query));
 
-            EnumerationResult<Extent> page = await _Db.Extents.EnumerateAsync(null, query, token).ConfigureAwait(false);
-            return await MapAsync(page, new Dictionary<string, string>(), token).ConfigureAwait(false);
+                EnumerationResult<Extent> page = await _Db.Extents.EnumerateAsync(null, query, token).ConfigureAwait(false);
+                return await MapAsync(page, new Dictionary<string, string>(), token).ConfigureAwait(false);
+            }
+            catch (Exception __ex)
+            {
+                __ok = false;
+                PepperXTelemetry.RecordException(__act, __ex);
+                throw;
+            }
+            finally
+            {
+                PepperXTelemetry.RecordSearch("all", Stopwatch.GetElapsedTime(__ts).TotalSeconds, __ok);
+            }
         }
 
         #endregion
